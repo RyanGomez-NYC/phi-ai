@@ -13,27 +13,19 @@
       \ \_\   \ \_\ \_\/\_____\   \ \_\ \_\/\_____\
        \/_/    \/_/\/_/\/_____/    \/_/\/_/\/_____/
 
-   THE AI-NATIVE PLATFORM FOR PROTECTED HEALTH DATA
-
-           True AI, securely and compliantly,
-                running in your own cloud.
-
-         Open Source, Free for All · Apache-2.0
-
-                       ── 1.0 ──
+                        1 . 0
+   The AI-native platform for protected health data
 ```
 
-**Our mission is to make AI the center of the conversation in health
-care — and to bring the technology closer to the organizations doing
-the work.** PHI AI is not an AI feature bolted onto a records system:
-it is a platform designed from first principles for AI as a governed,
-first-class consumer of the clinical, financial and behavioral-health
-record.
+**Health care runs on the most sensitive data there is — and the AI
+revolution keeps happening somewhere else.** Locked demos, vendor
+clouds, black boxes your compliance officer can't sign off on.
 
-1.0 is the first public release. Deploy it into your own cloud,
-connect it to your own EMR, run it under your own keys — every
-safeguard the HIPAA Security Rule names, enforced in code rather than
-in a policy binder.
+PHI AI 1.0 ends the standoff. It is a platform you deploy into your
+own cloud, connect to your own EMR, and run under your own keys —
+where a frontier model becomes a governed, first-class consumer of the
+clinical record, and every safeguard the HIPAA Security Rule names is
+enforced in code, not in a policy binder.
 
 ```text
 ┌────────────────┬────────────────┬────────────────┬────────────────┐
@@ -42,8 +34,8 @@ in a policy binder.
 └────────────────┴────────────────┴────────────────┴────────────────┘
 ```
 
-**See it running on synthetic data, right now:**
-<https://ryangomez.nyc/phi-ai/>
+**Open Source. Free for All.** See it running on synthetic data right
+now: <https://ryangomez.nyc/phi-ai/>
 
 ### One pipeline, from EMR to governed AI
 
