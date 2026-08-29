@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Ambient consent gate — φ(ai){% endblock %}
+{% block body %}
+<h1>Ambient consent gate</h1>
+<p class="lede">A per-encounter precondition, deny by default, keyed on jurisdiction
+<em>and</em> modality — the modality dependence is real and is what most
+implementations miss. An unresolved jurisdiction refuses capture. The verdict below
+comes from the live gate (<span class="mono">core/governance/consent_gate.py</span>),
+and every evaluation is recorded in the audit trail.</p>
+
+<div class="grid cards" style="margin-top:22px; grid-template-columns:repeat(auto-fit, minmax(220px,1fr))">
+  <div>
+    <div class="kicker">Jurisdiction</div>
+    <form method="get" action="/consent">
+      <input type="hidden" name="m" value="{{ modality }}">
+      <input type="hidden" name="att" value="{{ '1' if attested else '0' }}">
+      <select name="j" style="width:100%">
+        {% for name, code in jurisdictions %}
+        <option value="{{ code }}" {{ 'selected' if code == jurisdiction }}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="bare" style="margin-top:8px">Evaluate</button>
+    </form>
+  </div>
+  <div>
+    <div class="kicker">Modality</div>
+    <div class="seg">
+      <a class="{{ 'on' if modality == 'in_person' }}"
+         href="/consent?j={{ jurisdiction }}&amp;m=in_person&amp;att={{ '1' if attested else '0' }}">In person</a>
+      <a class="{{ 'on' if modality == 'telehealth' }}"
+         href="/consent?j={{ jurisdiction }}&amp;m=telehealth&amp;att={{ '1' if attested else '0' }}">Telehealth</a>
+    </div>
+  </div>
+  <div>
+    <div class="kicker">Visit-level attestation</div>
+    {% if attested %}
+      <a class="btn bare btn-long" style="border-color:var(--good-line); color:var(--good)"
+         href="/consent?j={{ jurisdiction }}&amp;m={{ modality }}&amp;att=0">Captured at the head of the recording</a>
+    {% else %}
+      <a class="btn bare btn-long" href="/consent?j={{ jurisdiction }}&amp;m={{ modality }}&amp;att=1">Not captured — registration packet only</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="verdict {{ 'allow' if decision.allowed }}">
+  <div class="verdict-label">{{ 'Allow' if decision.allowed else 'Deny' }}</div>
+  <div class="verdict-headline">
+    {% if decision.allowed %}Capture permitted — {{ standard }}, {{ modality.replace('_', ' ') }}{% else %}Capture refused{% endif %}
+  </div>
+  <p>{{ decision.reason }}{% if decision.allowed %}. Visit-level attestation
+  {{ 'is on the recording' if attested else 'was not required for this jurisdiction and modality' }},
+  and the structured consent state is recorded discretely — status, timestamp,
+  obtainer, revocation — never as free text. Audio is a first-class PHI store under
+  its own CMK and its own retention schedule, distinct from the note it produces
+  and more sensitive than it.{% endif %}</p>
+  <div class="cite">{{ citation }}</div>
+  <div class="audit-line">{{ audit_line }}</div>
+</div>
+
+<div class="grid cards">
+  {% for l in layers %}
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <span class="card-title">{{ l.t }}</span>
+      <span class="{{ l.cls }}" style="font-size:9.5px; letter-spacing:.06em; text-transform:uppercase">{{ l.strength }}</span>
+    </div>
+    <div class="card-body">{{ l.b }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<details class="fine"><summary>The legal backdrop</summary><p class="disclaimer">{{ footnote }}</p></details>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

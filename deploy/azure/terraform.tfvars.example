@@ -1,0 +1,45 @@
+# Copy to terraform.tfvars and fill in. Defaults throughout this file
+# target dev/free-tier use, per the mission scope - see storage.tf's "On
+# redundancy" section for what's actually confirmed free/near-free vs.
+# what needs re-verifying against current Azure pricing before a real
+# deployment.
+
+azure_location = "eastus"
+environment    = "dev"
+
+# name_prefix defaults to "phiai". It feeds the storage account name, the
+# Key Vault and key names, the resource group, the Flexible Server and
+# the four managed identity names - none of which can be renamed in
+# place, so set it before your first apply if you want something else.
+# LENGTH: Azure storage account names are capped at 24 characters,
+# lowercase alphanumeric only. The account name is name_prefix + "store"
+# + 8 subscription-ID characters, so "phiai" gives 18/24 and a prefix may
+# be at most 11 characters.
+# name_prefix = "phiai"
+
+# --- Retention: RECORDED, NOT ENFORCED ---
+# This stack provisions no immutability policy at either the container or
+# version level (see storage.tf), so neither number below prevents an
+# early delete or causes a later one - they are recorded as blob metadata
+# and drive documented disposition. Both are intentionally dev-unsafe
+# defaults (1 day) and MUST be set explicitly before storing anything
+# real. See each variable's own description in variables.tf for why
+# there's no universal correct number here.
+phi_retention_days   = 1
+audit_retention_days = 1
+
+
+# Key Vault purge protection - disabled by default so a dev stack can
+# actually be torn down and re-applied under the same vault name. Unlike
+# the retention settings above, this one IS irreversible once enabled.
+# See purge_protection_enabled's own description in variables.tf.
+purge_protection_enabled = false
+
+# --- Access ---
+# Your own Azure AD object ID, so local dev/testing can actually run
+# scheduler.py and core/fhir/restore.py end to end - see identities.tf's
+# module comment for why this is necessary (Azure managed identities
+# cannot be assumed from a laptop the way AWS IAM roles can via
+# sts:AssumeRole). Get yours with:
+#   az ad signed-in-user show --query id -o tsv
+trusted_principal_object_ids = []

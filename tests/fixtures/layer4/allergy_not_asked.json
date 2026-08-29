@@ -1,0 +1,25 @@
+{
+  "resourceType": "AllergyIntolerance",
+  "id": "syn-allergy-notasked-1",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "code": {
+    "coding": [
+      {
+        "system": "http://snomed.info/sct",
+        "code": "1631000175102",
+        "display": "Allergy status not asked"
+      }
+    ]
+  },
+  "patient": {
+    "reference": "Patient/syn-derrick-1"
+  }
+}

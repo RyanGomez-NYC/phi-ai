@@ -1,0 +1,15 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "key_ops": [
+        "verify"
+      ],
+      "n": "vhj3tYwCi9GTUYplVubeJXrKCLKly5pmgfNcUF4JR4DUQ7sMjIkKS3oT2HbOIH5AkpYx-tNJz79kZ00XGkHpgIsbp0JIarI3Hqml_pzWWhD04jfqlab_Rw8vT98uvxFejtS2235xNaVSQCmSRztWIqeZQpG9RcWgGzflgKfSCjWRD_kAUZ5Sui2qyBh8k8iTdgAAXi4w5J23Qu13n6w32SEl37_8i9PVnKEoyNcC6dYMBsM8FtD-SRT3Msdw59LATHCqCq2F66Ng0Q_cZCCoRwd73AAu_2T-C9EdyPPITYqrGz67f5GJ7_bCBOzS3DrpQGLdoTSBmw-IY0lhdZ1C0EwJ738CZxnJZR0WuKD1awQO7qHMyv_NjvU-OoNtgerEECEhZEfxTp69Cc5pjV5M8Usjlxf-xWA8ksMu18CrM2YvReqFEduQxUS3hNAlzTU9XfM3XcAnEXnTjBskllUGmJ2-PlZstmq_PFsxb5LG8VepvEZC9y6loYtK0njgZe5kwAuBjSY5MLUa9BPeKw0RjajA3j-9eZ0koY0FUgcbSA4V_tWVJZFJJ6kCA2YaS9yMnMCMvaOdB4uizD3ITkdW0rxNCfpaDqrpJOBYIXw9gGeYg1oxKY5IvHLmYm8pdmDWYpoPvoWQjglO1h0IwH2Rz4NRn76g_Nxeb5yWUnYob9k",
+      "e": "AQAB",
+      "kid": "phi-ai-dev-2026",
+      "use": "sig",
+      "alg": "RS384"
+    }
+  ]
+}

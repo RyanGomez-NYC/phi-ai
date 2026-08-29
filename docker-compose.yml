@@ -1,0 +1,392 @@
+version: "3.9"
+
+# BYOI deployment: this compose file runs the application layer only.
+# Storage, KMS, and IAM are provisioned separately via deploy/<cloud>/
+# Terraform and referenced here via environment variables from .env.
+#
+# Cloud credentials are intentionally NOT baked into the image or this
+# file. Mount them the way your platform recommends:
+#   - AWS: IAM role attached to the host/instance (preferred - EC2/ECS/EKS
+#     instance identity, nothing to mount), or ~/.aws mounted read-only
+#     for local/dev use on a machine with no instance role (e.g. testing
+#     from a laptop).
+#   - GCP: workload identity (preferred), or a service account key file
+#     mounted read-only for local/dev use only.
+#   - Azure: managed identity (preferred), or `az login` token cache
+#     mounted read-only for local/dev use only.
+#
+# IMPORTANT: the container runs as a non-root user `phiai` (see
+# Dockerfile), whose home directory is /home/phiai, NOT /root.
+# Mounting to /root/.aws is silently useless under that user - boto3 looks
+# for ~/.aws/credentials relative to the actual running user's home, and
+# a mount nobody reads produces exactly the confusing failure this comment
+# exists to prevent: "Unable to locate credentials" with no obvious cause,
+# because the mount appears to be there but the running process can't see
+# it. Use /home/phiai/.aws below, not /root/.aws.
+#
+# The Epic private key (see scripts/generate_epic_keypair.sh) is mounted
+# at the SAME absolute path inside the container as outside. That sounds
+# redundant but it means PHI_AI_FHIR_PRIVATE_KEY_PATH is one value
+# that works identically whether core.healthcheck or the scheduler runs
+# directly on the host (see runbooks/RUNBOOK_AWS_SETUP.md) or inside this
+# compose file - no separate host-path/container-path bookkeeping. Must be
+# an absolute path; installer_chatbot.py resolves it as one automatically.
+
+services:
+  # Idle by design - a target for ad-hoc, human-run commands
+  # (docker compose exec app python -m core.fhir.restore ..., or
+  # core.fhir.psychotherapy_restore, or
+  # core.config.retention_rules_check, etc. - see the various runbooks),
+  # not a service that does anything on its own.
+  #
+  # BUG FIXED HERE: this service previously had no explicit `command:`,
+  # so it silently inherited the Dockerfile's default CMD - which is
+  # `python -m core.fhir.scheduler`, the EXACT SAME command the
+  # dedicated `scheduler` service below runs explicitly. That meant two
+  # scheduler processes running concurrently: duplicate Epic API calls,
+  # duplicate audit log entries for the same ingestion work, and a real
+  # risk of both processes racing to write the SAME scheduler watermark
+  # - whichever finished last would silently clobber the other's
+  # progress, which could mean either duplicated ingestion work or,
+  # worse, a missed incremental sync window. Directly contradicted this
+  # very service's own comment two lines up, which already described it
+  # as meant for "ad-hoc restore/audit commands" separate from the
+  # scheduled loop - the comment was correct, the missing command
+  # override wasn't.
+  #
+  # UPDATED (2026-08-17 audit, H1; implemented 2026-08-18): the
+  # watermark itself moved from an S3 key
+  # (core/fhir/scheduler.py's old WATERMARK_KEY,
+  # deploy/aws/iam.tf's now-removed WriteSchedulerState statement) to a
+  # row in Postgres's index_state table (core/db/index.py's
+  # read_index_state()/write_index_state(), core/db/schema.sql) - see
+  # scheduler.py's own SCHEDULER_WATERMARK_KEY comment for why. The
+  # concurrent-writers race described above is UNCHANGED by that move,
+  # not eliminated by it: two scheduler processes still resolve to
+  # last-write-wins on the same key/row, now in Postgres instead of S3.
+  # This service's explicit `command: ["sleep", "infinity"]` is what
+  # actually prevents the race (no second scheduler process exists to
+  # race with) - not anything about which backend holds the watermark.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["sleep", "infinity"]
+    env_file:
+      - .env
+    volumes:
+      # Uncomment the line matching your provider ONLY for local/dev use
+      # (e.g. running docker compose directly on a laptop, with no EC2/ECS
+      # instance role available). In production, prefer instance/workload
+      # identity over mounted keys - leave this commented out there.
+      # - ${HOME}/.aws:/home/phiai/.aws:ro
+      # - ${HOME}/.config/gcloud:/home/phiai/.config/gcloud:ro
+      # - ${HOME}/.azure:/home/phiai/.azure:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      # FOUND AND FIXED (2026-08-17 audit, H8): the retention ruleset
+      # file (runbooks/RUNBOOK_RETENTION_RULES.md's Option B,
+      # config/retention_ruleset.yaml) is referenced by
+      # PHI_AI_RETENTION_RULESET_PATH as a path RELATIVE to the
+      # process's working directory - core/config/settings.py's
+      # _resolve_retention() opens it exactly as given, and the
+      # Dockerfile's WORKDIR is /app, so "config/retention_ruleset.yaml"
+      # resolves to /app/config/retention_ruleset.yaml inside the
+      # container. Neither the Dockerfile (which COPYs only core/ and
+      # install/, deliberately - see its own comments: a deployer's real
+      # ruleset carries policy specifics that shouldn't be baked into a
+      # shared image, the same reasoning that keeps the Epic private key
+      # out of the image too) nor this compose file mounted config/ at
+      # all - so that path never existed inside any of these three
+      # containers. Settings.from_env() (called by scheduler.py and
+      # bulk_scheduler.py at startup) raises ConfigError immediately in
+      # that case rather than silently falling back to a default - the
+      # right behavior per this project's no-silent-fallback invariant -
+      # but combined with `restart: unless-stopped` below, that correct
+      # fail-loud behavior became a permanent crash-loop: every recommended
+      # Option B deployment restarted forever without ever storing
+      # anything, with no path to recovery short of noticing the loop and
+      # debugging it. Fixed with a read-only bind mount, the same pattern
+      # already used for the Epic private key above - the deployer's own
+      # config/retention_ruleset.yaml lives on the host (gitignored by
+      # convention alongside .env, never baked into the image), and is
+      # simply not present if Option B isn't in use, which is fine:
+      # PHI_AI_RETENTION_RULESET_PATH being unset skips this path
+      # entirely (core/config/settings.py falls back to the flat
+      # PHI_AI_RETENTION_YEARS variables, Option A).
+      - ./config:/app/config:ro
+      - ./restore-output:/app/restore-output
+      # AI assistant (optional, off by default - see
+      # runbooks/RUNBOOK_AI_ASSISTANT.md). Only needed when
+      # PHI_AI_ASSISTANT_PROVIDER=anthropic, which is the one provider
+      # that uses a credential of its own; bedrock and vertex authenticate
+      # with the same instance/workload identity the platform already uses
+      # for storage and KMS, so they need nothing mounted here. Mounted at
+      # the same absolute path inside and out, like the Epic private key
+      # above, so PHI_AI_ASSISTANT_API_KEY_PATH is one value that
+      # works whether the process runs on the host or in this container.
+      # - ${PHI_AI_ASSISTANT_API_KEY_PATH}:${PHI_AI_ASSISTANT_API_KEY_PATH}:ro
+    restart: unless-stopped
+    # core.healthcheck makes 15+ real AWS API calls per run (bucket
+    # versioning/encryption/object-lock/public-access checks, KMS key
+    # state and rotation, and a DELIBERATE kms:Decrypt probe call meant
+    # to trigger and confirm AccessDenied for role-separation
+    # verification - see core/healthcheck.py). That's a compliance
+    # posture audit, not a lightweight liveness probe, and it was
+    # previously wired to Docker's default healthcheck cadence
+    # (interval: 60s) - roughly 21,600 AWS API calls/day per
+    # environment for checks (bucket config, KMS state) that
+    # essentially never change once correctly set up, plus a recurring
+    # AccessDenied kms:Decrypt event in CloudTrail every single minute,
+    # forever - exactly the kind of routine noise that could bury a
+    # genuinely suspicious decrypt attempt during the CloudTrail
+    # cross-referencing runbooks/RUNBOOK_INCIDENT_RESPONSE.md depends
+    # on. Widened substantially: still runs often enough to catch a
+    # real config drift or credential problem within a reasonable
+    # window (before an operator would actually need to `exec` into
+    # this container for a real restore), without the ongoing cost and
+    # log noise of a 60-second cadence.
+    healthcheck:
+      test: ["CMD", "python", "-m", "core.healthcheck"]
+      interval: 1h
+      timeout: 30s
+      retries: 3
+
+  # Scheduler for periodic/incremental ingestion runs. Split from `app` so
+  # ad-hoc restore/audit commands (see runbooks) don't compete with the
+  # scheduled ingestion loop.
+  # Web interface (core/web/). NOT exposed to a host port by default.
+  #
+  # This application performs NO authentication of its own - it reads an
+  # identity from headers set by an authenticating reverse proxy (see
+  # core/web/auth.py and runbooks/RUNBOOK_WEB_UI.md). Publishing a port
+  # here would make a missing proxy an open PHI endpoint rather than a
+  # misconfiguration, so the port is deliberately left on the internal
+  # network only. Put your proxy in front of it, or - for local
+  # development against synthetic data - uncomment the ports line below
+  # AND set PHI_AI_WEB_DEV_IDENTITY.
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "core.web"]
+    environment:
+      # Bind to all interfaces INSIDE the container so the proxy (or a
+      # published port) can reach it; the container network is the
+      # boundary here, not the loopback interface.
+      PHI_AI_WEB_HOST: "0.0.0.0"
+      PHI_AI_WEB_PORT: "8080"
+      # SMART EHR launch reads config/smart_issuers.yaml, mounted below.
+      # Absent file = launch disabled, which is the safe default for an
+      # allowlist. PHI_AI_WEB_SESSION_SECRET and
+      # PHI_AI_WEB_SMART_REDIRECT_URI come from .env; the app
+      # refuses to start if issuers are registered without them.
+      PHI_AI_SMART_ISSUERS_PATH: "/app/config/smart_issuers.yaml"
+    env_file:
+      - .env
+    # ports:
+    #   - "127.0.0.1:8080:8080"   # local dev only - see the note above
+    volumes:
+      # Uncomment the line matching your provider ONLY for local/dev use
+      # (e.g. running docker compose directly on a laptop, with no EC2/ECS
+      # instance role available). In production, prefer instance/workload
+      # identity over mounted keys - leave this commented out there.
+      # - ${HOME}/.aws:/home/phiai/.aws:ro
+      # - ${HOME}/.config/gcloud:/home/phiai/.config/gcloud:ro
+      # - ${HOME}/.azure:/home/phiai/.azure:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      # FOUND AND FIXED (2026-08-17 audit, H8): the retention ruleset
+      # file (runbooks/RUNBOOK_RETENTION_RULES.md's Option B,
+      # config/retention_ruleset.yaml) is referenced by
+      # PHI_AI_RETENTION_RULESET_PATH as a path RELATIVE to the
+      # process's working directory - core/config/settings.py's
+      # _resolve_retention() opens it exactly as given, and the
+      # Dockerfile's WORKDIR is /app, so "config/retention_ruleset.yaml"
+      # resolves to /app/config/retention_ruleset.yaml inside the
+      # container. Neither the Dockerfile (which COPYs only core/ and
+      # install/, deliberately - see its own comments: a deployer's real
+      # ruleset carries policy specifics that shouldn't be baked into a
+      # shared image, the same reasoning that keeps the Epic private key
+      # out of the image too) nor this compose file mounted config/ at
+      # all - so that path never existed inside any of these three
+      # containers. Settings.from_env() (called by scheduler.py and
+      # bulk_scheduler.py at startup) raises ConfigError immediately in
+      # that case rather than silently falling back to a default - the
+      # right behavior per this project's no-silent-fallback invariant -
+      # but combined with `restart: unless-stopped` below, that correct
+      # fail-loud behavior became a permanent crash-loop: every recommended
+      # Option B deployment restarted forever without ever storing
+      # anything, with no path to recovery short of noticing the loop and
+      # debugging it. Fixed with a read-only bind mount, the same pattern
+      # already used for the Epic private key above - the deployer's own
+      # config/retention_ruleset.yaml lives on the host (gitignored by
+      # convention alongside .env, never baked into the image), and is
+      # simply not present if Option B isn't in use, which is fine:
+      # PHI_AI_RETENTION_RULESET_PATH being unset skips this path
+      # entirely (core/config/settings.py falls back to the flat
+      # PHI_AI_RETENTION_YEARS variables, Option A).
+      - ./config:/app/config:ro
+      - ./restore-output:/app/restore-output
+      # Assistant API key, when PHI_AI_ASSISTANT_PROVIDER=anthropic.
+      # See the same note on the `app` service above - bedrock and vertex
+      # need nothing here, since they use the workload identity this
+      # container already runs as.
+      # - ${PHI_AI_ASSISTANT_API_KEY_PATH}:${PHI_AI_ASSISTANT_API_KEY_PATH}:ro
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # OHIF Viewer - the DICOM image viewer, EMBEDDED AS AN UNMODIFIED
+  # UPSTREAM ARTIFACT.
+  #
+  # This is the published OHIF image at a pinned tag. This repository
+  # contains no OHIF source, no fork and no patches - the entire
+  # integration is config/ohif-app-config.js, mounted over the image's own
+  # config file. Upgrading is a tag change plus a read of OHIF's release
+  # notes, not a merge: there is nothing here for an upstream change to
+  # conflict with.
+  #
+  # PIN THE TAG. `latest` on a viewer that renders clinical images means a
+  # silent change to how a study is displayed, arriving whenever the
+  # container happens to restart. Choose a version, check it against your
+  # own studies, and move deliberately.
+  #
+  # IT LISTENS ON 80, NOT 8080. The image EXPOSEs 8080 but its nginx
+  # config listens on 80 - verified against ohif/app:v3.13.4 directly, not
+  # assumed. Publishing 8080 gets a connection refused that looks like the
+  # container failed to start.
+  #
+  # DO NOT ADD `read_only: true`. It was tried, and it FAILS SILENTLY AND
+  # DANGEROUSLY on this image: with a read-only root filesystem the
+  # app-config.js bind mount below does not appear in the container at
+  # all, nginx serves OHIF's built-in default config instead, and that
+  # default points the viewer at a PUBLIC DEMO DICOMWEB SERVER rather than
+  # at this deployment. The container returns HTTP 200 throughout, so
+  # nothing looks wrong. If you need a read-only root here, verify after
+  # every change that `curl <viewer>/app-config.js` actually returns THIS
+  # file.
+  #
+  # IT STORES NOTHING. Every byte it displays is fetched from this
+  # platform's /dicomweb API, decrypted per request, and never written
+  # here. It holds no credential: the browser's own session cookie
+  # authenticates each DICOMweb call.
+  #
+  # PUT IT BEHIND THE SAME AUTHENTICATING PROXY AS THE WEB SERVICE. It is
+  # the surface a browser loads before any request for a stored study is
+  # made, and it must not be reachable by anyone this platform would not
+  # authenticate.
+  viewer:
+    image: ohif/app:v3.13.4
+    volumes:
+      - ./config/ohif-app-config.js:/usr/share/nginx/html/app-config.js:ro
+    # ports:
+    #   - "127.0.0.1:3000:80"   # local dev only - the proxy fronts this
+    #                            # in any real deployment
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/app-config.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "core.fhir.scheduler"]
+    env_file:
+      - .env
+    volumes:
+      # Same local-dev-only note as the app service above.
+      # - ${HOME}/.aws:/home/phiai/.aws:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      # Same config/ mount as the app service above, and for the same
+      # reason (2026-08-17 audit, H8) - this is the service that
+      # actually runs Settings.from_env() at startup and would actually
+      # crash-loop without it, unlike app (command: sleep infinity).
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    depends_on:
+      - app
+
+  # Integrity verification, on a schedule.
+  #
+  # The reason this service exists: a hash-chained audit log nobody
+  # verifies is just a log. The chain makes tampering DETECTABLE, not
+  # DETECTED - and the same is true of every other check. Capability that
+  # is never exercised is indistinguishable from its absence when
+  # something actually goes wrong.
+  #
+  # This is the detection control that stands in for storage-layer
+  # immutability. This deployment provisions NO Object Lock / WORM on any
+  # cloud (see core/audit/sink.py and deploy/aws/s3_*.tf), so a deleted or
+  # altered audit or PHI object is not PREVENTED - it is caught by this
+  # running on a schedule. Six flows run each pass: object integrity
+  # (ciphertext vs recorded digest), index-vs-storage drift, the audit
+  # hash chain, EMR-to-store completeness, store freshness, and (with an
+  # export dir) export completeness. See core/verify/__main__.py.
+  #
+  # Each run also writes an entry into the hash-chained audit log, so "we
+  # verify our stored data regularly" becomes a claim that can be
+  # substantiated from the evidence store this platform already keeps,
+  # rather than from log lines that can be rotated away.
+  #
+  # OPT-IN via the `verify` compose profile, so a bare `docker compose up`
+  # does not start it unasked. Turn it on for any real deployment - with
+  # no Object Lock behind the data, a store that is never verified has
+  # neither prevention nor detection. Enable with either:
+  #     docker compose --profile verify up -d
+  #     COMPOSE_PROFILES=verify docker compose up -d
+  #
+  # NOTE ON PHI_AI_VERIFY_SKIP_SOURCE: leave it unset while any
+  # source EMR still exists. Comparing what is stored here against the
+  # source is the one check that cannot be run later - once the source is
+  # decommissioned, a record that was never ingested is permanently
+  # missing AND permanently undetectable.
+  verify:
+    profiles: ["verify"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "core.verify.scheduled"]
+    environment:
+      PHI_AI_VERIFY_INTERVAL_SECONDS: "86400"   # daily
+      PHI_AI_VERIFY_DEEP_EVERY: "7"             # deep pass weekly
+    env_file:
+      - .env
+    volumes:
+      # Same local-dev-only note as the app service above.
+      # - ${HOME}/.aws:/home/phiai/.aws:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    depends_on:
+      - app
+
+  # Bulk Data Export scheduler - optional, only relevant if
+  # PHI_AI_FHIR_GROUP_ID is set (see docs/EMR_CONNECTORS.md). Kept
+  # as its own service, separate from `scheduler` above, because bulk
+  # export runs on a fundamentally different cadence: Epic rate-limits
+  # kickoff to once per 24 hours per group+client ID by default, so this
+  # defaults to a 24-hour internal loop, not scheduler's hourly one -
+  # running the two on the same schedule would mean this one mostly
+  # sleeps, or gets rejected by Epic if it didn't. Safe to leave defined
+  # here and simply not start it (`docker compose up -d app scheduler`)
+  # if you're not using bulk export at all.
+  bulk-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "core.fhir.bulk_scheduler"]
+    env_file:
+      - .env
+    volumes:
+      # Same local-dev-only note as the app service above.
+      # - ${HOME}/.aws:/home/phiai/.aws:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      # Same config/ mount as the app service above, and for the same
+      # reason (2026-08-17 audit, H8) - this service also runs
+      # Settings.from_env() at startup and would also crash-loop without it.
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    depends_on:
+      - app
+# Made by Ryan Gomez & Co. Inc.

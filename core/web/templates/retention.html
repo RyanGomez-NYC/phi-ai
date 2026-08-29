@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set active = 'retention' %}
+{% block body %}
+<div class="kicker">Disposition</div>
+<h1>Retention &amp; disposition</h1>
+<p class="lede">Records whose declared retention period ends within {{ within_days }} days.</p>
+
+<div class="status warn">
+  <strong>Retention is recorded, not enforced</strong>
+  This platform applies no storage-level immutability. These dates drive documented disposition;
+  they neither prevent an early deletion nor trigger a later one. Nothing here is deleted
+  automatically — disposal is run deliberately via <code>core.fhir.purge</code>, which re-verifies
+  each record's retention date immediately before deleting it. See docs/COMPLIANCE.md.
+</div>
+
+<div class="card">
+  <form method="get" action="/retention" class="row">
+    <div class="field">
+      <label for="within_days">Window (days)</label>
+      <input type="text" id="within_days" name="within_days" value="{{ within_days }}">
+    </div>
+    <button type="submit" class="quiet">Update</button>
+  </form>
+</div>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Retention ends</th><th>Type</th><th>Resource id</th><th>Patient</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in expiring %}
+    <tr>
+      <td class="mono nowrap">{{ r.retention_until.strftime('%Y-%m-%d') if r.retention_until else '—' }}</td>
+      <td>{{ r.resource_type }}</td>
+      <td class="mono">{{ r.resource_id }}</td>
+      <td class="mono muted">{{ r.patient_reference or '—' }}</td>
+      <td>
+        {% if r.elapsed %}
+          <span class="pill danger">eligible for disposal</span>
+        {% else %}
+          <span class="pill warn">expiring</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">Nothing expiring in this window.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

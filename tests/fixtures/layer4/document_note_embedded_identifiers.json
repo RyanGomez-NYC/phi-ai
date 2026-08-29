@@ -1,0 +1,28 @@
+{
+  "resourceType": "DocumentReference",
+  "id": "syn-note-identifiers",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "status": "current",
+  "docStatus": "final",
+  "type": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "11506-3",
+        "display": "Progress note"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/syn-anna-1"
+  },
+  "description": "Pt Anna Cadence (MRN 000-12-3456, DOB 2/14/1985, ph 555-0142) seen today with spouse Robert Cadence. All identifiers synthetic."
+}

@@ -1,0 +1,16 @@
+# Copy this file to backend.hcl (gitignored) and fill in your real state
+# bucket name - see runbooks/RUNBOOK_AWS_SETUP.md for how that bucket
+# gets created via deploy/aws/bootstrap/.
+#
+# Init with:
+#   terraform init -backend-config=backend.hcl
+#
+# Kept as a separate file, rather than inline in versions.tf, specifically
+# so the bucket name below - which embeds your AWS account ID - never
+# needs to be committed to this public repo.
+
+bucket       = "phi-ai-tfstate-<account-id>"
+key          = "phi-ai/aws/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

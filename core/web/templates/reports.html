@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% set active = 'reports' %}
+{% block body %}
+<div class="kicker">Reporting</div>
+<h1>Reports</h1>
+<p class="lede">Holdings, integrity, retention exposure and disclosure activity. Figures are
+structural — this page reads the index and the audit trail, never clinical content.</p>
+
+{% set intact, checked, problem = chain %}
+<div class="status {{ 'ok' if intact else 'danger' }}">
+  <strong>Integrity — {{ 'chain verified across ' ~ checked ~ ' events' if intact else 'FAILED' }}</strong>
+  {% if intact %}
+    Every audit entry links to its predecessor and matches its recorded hash.
+  {% else %}{{ problem }}{% endif %}
+</div>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(stats.total_resources) }}</div><div class="k">Resources held</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(stats.distinct_patients) }}</div><div class="k">Patients</div></div>
+  <div class="card stat"><div class="n">{{ expiring | length }}</div><div class="k">Expiring in 12 months</div></div>
+  <div class="card stat"><div class="n">{{ disclosures | length }}</div><div class="k">Recent disclosures</div></div>
+</div>
+
+<h2>Holdings by resource type</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Resource type</th><th style="width:140px">Count</th><th style="width:200px">Share</th></tr></thead>
+  <tbody>
+  {% for rtype, n in stats.resource_type_counts | dictsort(by='value', reverse=true) %}
+    <tr>
+      <td>{{ rtype }}</td>
+      <td class="num">{{ "{:,}".format(n) }}</td>
+      <td>
+        <div class="bar"><div class="bar-fill" style="width:{{ (100 * n / stats.total_resources) | round(1) if stats.total_resources else 0 }}%"></div></div>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3" class="empty">Nothing stored.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if disclosures %}
+<h2>Disclosure accounting <span class="muted" style="font-weight:400;font-size:13px">— 45 CFR 164.528</span></h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Released</th><th>Patient</th><th>Requester type</th><th>Purpose</th><th>Resources</th><th>By</th></tr></thead>
+  <tbody>
+  {% for d in disclosures %}
+    <tr>
+      <td class="mono nowrap">{{ d.fulfilled_at.strftime('%Y-%m-%d') if d.fulfilled_at else '—' }}</td>
+      <td class="mono">{{ d.patient_reference }}</td>
+      <td>{{ d.requester_type }}</td>
+      <td class="purpose">{{ d.purpose_of_use }}</td>
+      <td class="num">{{ d.record_count if d.record_count is not none else '—' }}</td>
+      <td class="muted">{{ d.fulfilled_by or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

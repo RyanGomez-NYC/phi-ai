@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Cohort builder — φ(ai){% endblock %}
+{% block body %}
+<h1>Cohort builder</h1>
+<p class="lede">Population counting over the OMOP layer, entirely on the
+de-identified plane. This is a separate surface rather than a wider filter on the
+assistant for an architectural reason: the attribution gate requires every cited
+chunk's subject to match the queried patient, so no generative answer over
+identified data can span patients. Cohort work routes through de-identification by
+construction, not by policy.</p>
+
+<div class="chips">
+  {% for b in badges %}<span class="chip filled">{{ b }}</span>{% endfor %}
+</div>
+
+<form method="post" action="/cohort">
+  <div class="composer" style="margin-top:18px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <textarea name="term" rows="2"
+      placeholder="A condition to count — e.g. diabetes, hypertension, heart failure, or a code prefix like E11 or I50.9">{{ term }}</textarea>
+    <div class="foot">
+      <button type="submit">Build cohort</button>
+      <span class="meta">role: omop_analyst · SELECT only · no write grant · recorded verbatim before it runs</span>
+    </div>
+  </div>
+</form>
+
+{% if shortcuts %}
+<div class="starters">
+  {% for s in shortcuts[:10] %}
+  <form method="post" action="/cohort" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="term" value="{{ s }}">
+    <button type="submit" class="starter">{{ s }}</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if error %}
+<div class="status warn" style="margin-top:22px"><strong>Not answered.</strong> {{ error }}</div>
+{% endif %}
+
+{% if result %}
+<div class="codeblock">
+  <div class="head">Counting basis — recorded in the audit trail before it ran</div>
+  <pre>{{ sql }}</pre>
+</div>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(result.patient_count) }}</div>
+    <div class="k">distinct persons — not diagnosis rows</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(result.total_patients_stored) }}</div>
+    <div class="k">total patients in this deployment — the denominator a zero is read against</div></div>
+  <div class="card stat"><div class="n good">0</div>
+    <div class="k">identifiers returned; this plane holds none</div></div>
+</div>
+
+{% if result.matched_on %}
+<h3 class="kicker" style="margin-top:24px">Matched on</h3>
+<ul style="margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--slate)">
+  {% for m in result.matched_on %}<li>{{ m }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+{% for c in result.caveats %}
+<p class="phi-notice">{{ c }}</p>
+{% endfor %}
+
+<div class="callout">
+  <div><strong>Counting, and what may be published.</strong> A patient diagnosed at
+  four visits is one person, not four — the count is distinct
+  <span class="mono">person_id</span>. Counts are reported exactly here, with no
+  small-cell suppression, which is a deliberate recorded choice; the publication
+  constraint binds any derived table committed to a repository, not this screen.
+  Resolving a cohort to names is a different surface with a different role.</div>
+</div>
+{% endif %}
+
+{% if demographics %}
+<h2>Population on this deployment</h2>
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(demographics.patients) }}</div>
+    <div class="k">persons in the OMOP layer</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(demographics.visits) }}</div>
+    <div class="k">visits{% if demographics.earliest_visit %} · {{ demographics.earliest_visit }} → {{ demographics.latest_visit }}{% endif %}</div></div>
+  {% for g, n in demographics.by_gender.items() %}
+  <div class="card stat"><div class="n">{{ "{:,}".format(n) }}</div>
+    <div class="k">{{ g }}</div></div>
+  {% endfor %}
+  {% if demographics.earliest_birth_year %}
+  <div class="card stat"><div class="n">{{ demographics.earliest_birth_year }}–{{ demographics.latest_birth_year }}</div>
+    <div class="k">birth-year range</div></div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% set active = 'patients' %}
+{% set page_key = 'resource' %}
+{% set assistant_context_key = row.storage_key %}
+{% block body %}
+<div class="kicker">Stored resource</div>
+<h1>{{ resource.resourceType }} <span class="mono muted">{{ resource.id }}</span></h1>
+<p class="lede">
+  {{ row.patient_reference }} · stored {{ row.stored_at.strftime('%Y-%m-%d %H:%M') if row.stored_at else '—' }}
+  {% if resource.docStatus == 'preliminary' %}
+    <span class="pill warn">Preliminary — unverified OCR</span>
+  {% endif %}
+</p>
+
+{% if resource.docStatus == 'preliminary' %}
+<div class="status warn">
+  <strong>This text was extracted at low confidence, or not at all</strong>
+  It is marked <code>docStatus: preliminary</code> and has not been verified against the source
+  scan. Do not rely on it clinically without checking the original document.
+</div>
+{% endif %}
+
+{% if source_key %}
+  <h2>Source document</h2>
+  <div class="card">
+    <p class="hint" style="margin:0 0 10px">The scan is the record of truth. OCR misreads
+      characters — check anything consequential against the original.</p>
+    <form method="post" action="/document/source" target="_blank">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="storage_key" value="{{ source_key }}">
+      <input type="hidden" name="purpose_of_use" value="{{ purpose }}">
+      <button type="submit" class="quiet small">Open the original scan</button>
+    </form>
+  </div>
+{% endif %}
+
+{% if ocr_text %}
+  <h2>Extracted text</h2>
+  <div class="phi-notice">Derived from the source scan by OCR — the scan is the record of truth.
+    OCR misreads characters; verify anything consequential against the original.</div>
+  <pre class="doc">{{ ocr_text }}</pre>
+{% endif %}
+
+<h2>Resource</h2>
+<div class="phi-notice">Contains protected health information. Do not copy outside this system
+  without a documented disclosure.</div>
+<pre class="doc">{{ resource | tojson(indent=2) }}</pre>
+
+<h2>Integrity</h2>
+<div class="tablewrap">
+<table class="keyvalue">
+  <tbody>
+    <tr><td>Storage key</td><td class="mono">{{ row.storage_key }}</td></tr>
+    <tr><td>SHA-256</td><td class="mono">{{ row.sha256_hex }}</td></tr>
+    <tr><td>Version</td><td class="mono">{{ row.storage_version_id or '—' }}</td></tr>
+    <tr><td>Retention until</td><td class="mono">{{ row.retention_until or '—' }}
+      <span class="pill mute">recorded, not enforced</span></td></tr>
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% set active = 'admin' %}
+{% block title %}{{ account.username }} · φ(ai){% endblock %}
+{% block body %}
+<div class="kicker"><a href="/admin/users">Accounts</a> · {{ account.username }}</div>
+<h1>{{ account.display_name or account.username }}</h1>
+<p class="lede">Everything this account is allowed to do, and everything it has done.
+The history below comes from the hash-chained audit log, not from a table anyone here
+can edit.</p>
+
+{% if error %}<div class="status danger"><strong>Could not complete</strong>{{ error }}</div>{% endif %}
+{% if notice %}<div class="status"><strong>Done</strong>{{ notice }}</div>{% endif %}
+
+{% if issued %}
+<div class="card" style="border-color:var(--warn,#a86)">
+  <div class="kicker">Shown once</div>
+  <h2 style="margin-top:4px">Temporary password for {{ issued[0] }}</h2>
+  <div class="mono" style="font-size:20px;user-select:all;word-break:break-all">{{ issued[1] }}</div>
+  <div class="hint" style="margin-top:8px">Hand it over by a channel you trust, after
+    confirming who you are talking to. It cannot be shown again, and it stops working the
+    moment they choose their own.</div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="row">
+    <div class="field"><label>Username</label><div class="mono">{{ account.username }}</div></div>
+    <div class="field"><label>Email</label><div>{{ account.email or '—' }}</div></div>
+    <div class="field"><label>Created</label>
+      <div class="mono muted">{{ account.created_at.strftime('%Y-%m-%d') if account.created_at else '—' }}
+        by {{ account.created_by }}</div></div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <div class="field"><label>Status</label>
+      <div>{% if account.status == 'active' %}<span class="pill ok">active</span>{% else %}<span class="pill danger">disabled</span>{% endif %}
+        {% if locked %}<span class="pill warn">locked out</span>{% endif %}</div></div>
+    <div class="field"><label>Second factor</label>
+      <div>{% if account.mfa_enrolled %}<span class="pill ok">enrolled</span>
+        {% elif mfa_policy == 'required' %}<span class="pill warn">not yet enrolled</span>
+        {% else %}<span class="muted">—</span>{% endif %}</div></div>
+    <div class="field"><label>Active sessions</label><div class="mono">{{ active_sessions }}</div></div>
+    <div class="field"><label>Failed attempts</label><div class="mono">{{ account.failed_attempts }}</div></div>
+  </div>
+</div>
+
+<h2>Roles</h2>
+<div class="card">
+  <form method="post" action="/admin/users/{{ account.username }}/roles">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="hint">Tick exactly what this person should be able to do. Submitting
+      applies the whole set — anything unticked is revoked.</div>
+    <div style="margin-top:10px">
+      {% for role in grantable %}
+      <label style="display:inline-flex;gap:6px;margin-right:16px;font-weight:normal">
+        <input type="checkbox" name="roles" value="{{ role.value }}"
+               {% if role.value in account.roles %}checked{% endif %}> {{ role.value }}
+      </label>
+      {% endfor %}
+    </div>
+    <div style="margin-top:16px"><button type="submit">Apply roles</button></div>
+  </form>
+</div>
+
+<h2>Access</h2>
+<div class="card">
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start">
+    <form method="post" action="/admin/users/{{ account.username }}/status">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="status" value="{{ 'active' if account.status != 'active' else 'disabled' }}">
+      <button type="submit" class="{{ 'quiet' if account.status != 'active' }}">
+        {{ 'Re-enable account' if account.status != 'active' else 'Disable account' }}</button>
+    </form>
+
+    <form method="post" action="/admin/users/{{ account.username }}/sessions">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="quiet">End all sessions</button>
+    </form>
+
+    {% if locked %}
+    <form method="post" action="/admin/users/{{ account.username }}/unlock">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="quiet">Clear lockout</button>
+    </form>
+    {% endif %}
+
+    <form method="post" action="/admin/users/{{ account.username }}/password">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="quiet">Issue temporary password</button>
+    </form>
+
+    {% if account.mfa_enrolled %}
+    <form method="post" action="/admin/users/{{ account.username }}/mfa">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="quiet">Clear second-factor enrolment</button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="hint" style="margin-top:12px">Disabling an account ends its live sessions
+    immediately — it does not merely stop the next sign-in. Confirm who you are speaking
+    to before issuing a password or clearing an enrolment; this page cannot do that for
+    you, and it is the step attackers ask people to skip.</div>
+</div>
+
+<h2>Recent activity</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>When</th><th>Action</th><th>Subject</th><th>Purpose</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td class="mono muted nowrap">{{ e.timestamp }}</td>
+      <td class="mono">{{ e.action }}</td>
+      <td class="mono">{{ e.resource_key }}</td>
+      <td>{{ e.purpose_of_use or '—' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">Nothing recorded for this account yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

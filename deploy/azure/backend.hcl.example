@@ -1,0 +1,17 @@
+# Copy to backend.hcl (gitignored - keeps your Azure subscription ID,
+# embedded in the storage account name, out of the public repo) and fill
+# in the three values below from deploy/azure/bootstrap/'s own outputs:
+#
+#   cd bootstrap
+#   terraform init
+#   terraform apply
+#   terraform output state_resource_group_name
+#   terraform output state_storage_account_name
+#   terraform output state_container_name
+#
+# Then, back in deploy/azure/:
+#   terraform init -backend-config=backend.hcl
+
+resource_group_name = ""
+storage_account_name = ""
+container_name = ""

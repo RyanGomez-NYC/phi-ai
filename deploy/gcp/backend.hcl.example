@@ -1,0 +1,14 @@
+# Copy to backend.hcl and fill in with bootstrap's own `state_bucket_name`
+# output. backend.hcl is gitignored - the bucket name embeds your GCP
+# project ID, which should not reach this public repo.
+#
+# Simpler than deploy/aws/backend.hcl.example (bucket + a DynamoDB table
+# for locking) and deploy/azure/backend.hcl.example (resource_group_name +
+# storage_account_name + container_name, three separate values) - the GCS
+# backend needs only this one value. Locking is handled natively via GCS's
+# own object-generation preconditions, no separate lock resource to name
+# here.
+#
+# Usage: terraform init -backend-config=backend.hcl
+
+bucket = "your-gcp-project-id-tfstate"

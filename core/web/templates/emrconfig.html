@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Source & target EMRs — φ(ai){% endblock %}
+{% block body %}
+<h1>Source &amp; target EMRs</h1>
+<p class="lede">Where records come from and where they deliver to. Each of the
+six supported vendors is shown with its real seams — auth method, bulk
+capability, write surface — so a connection is configured with the vendor's
+actual limits in view. Saving writes <span class="mono">config.changed</span>.</p>
+
+{% if saved %}
+<div class="callout"><div><strong>Saved.</strong> The change was recorded in the
+audit trail.</div></div>
+{% endif %}
+
+<form method="post" action="/integration/emrconfig">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:18px; margin-top:18px">
+    <div style="border:1px solid var(--line); border-radius:10px; padding:16px 18px">
+      <h2 style="margin-top:0">Source EMR — records arrive from</h2>
+      <label class="mono" style="font-size:11px; color:var(--mute)">Vendor<br>
+        <select name="source_vendor" style="width:100%">
+          {% for key, v in vendors.items() %}
+          <option value="{{ key }}" {{ 'selected' if cfg.source_vendor == key }}>{{ v.name }}</option>
+          {% endfor %}
+        </select></label><br><br>
+      <label class="mono" style="font-size:11px; color:var(--mute)">FHIR base URL<br>
+        <input type="text" name="source_base_url" value="{{ cfg.source_base_url }}" maxlength="300" style="width:100%"></label><br><br>
+      <label class="mono" style="font-size:11px; color:var(--mute)">Client ID<br>
+        <input type="text" name="source_client_id" value="{{ cfg.source_client_id }}" maxlength="300" style="width:100%"></label><br><br>
+      <label class="mono" style="font-size:11px; color:var(--mute)">Group FHIR ID (bulk export)<br>
+        <input type="text" name="source_group_id" value="{{ cfg.source_group_id }}" maxlength="300" style="width:100%"></label>
+    </div>
+    <div style="border:1px solid var(--line); border-radius:10px; padding:16px 18px">
+      <h2 style="margin-top:0">Target EMR — signed work delivers to</h2>
+      <label class="mono" style="font-size:11px; color:var(--mute)">Vendor<br>
+        <select name="target_vendor" style="width:100%">
+          {% for key, v in vendors.items() %}
+          <option value="{{ key }}" {{ 'selected' if cfg.target_vendor == key }}>{{ v.name }}</option>
+          {% endfor %}
+        </select></label><br><br>
+      <label class="mono" style="font-size:11px; color:var(--mute)">FHIR base URL<br>
+        <input type="text" name="target_base_url" value="{{ cfg.target_base_url }}" maxlength="300" style="width:100%"></label><br><br>
+      <label class="mono" style="font-size:11px; color:var(--mute)">Client ID (write-back)<br>
+        <input type="text" name="target_client_id" value="{{ cfg.target_client_id }}" maxlength="300" style="width:100%"></label>
+    </div>
+  </div>
+  <div style="margin-top:14px"><button type="submit">Save connections</button></div>
+</form>
+
+<h2>The vendors' real seams</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Vendor</th><th>Auth</th><th>Bulk</th><th>Writes</th></tr></thead>
+  <tbody>
+    {% for key, v in vendors.items() %}
+    <tr>
+      <td>{{ v.name }}</td>
+      <td style="font-size:12px">{{ v.auth }}</td>
+      <td style="font-size:12px">{{ v.bulk }}</td>
+      <td style="font-size:12px">{{ v.writes }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+<p class="hint">These seams are enforced, not decorative: a bulk kickoff against
+a vendor's rate window is refused, and an export aimed at a vendor with no bulk
+write surface refuses with the seam named.</p>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

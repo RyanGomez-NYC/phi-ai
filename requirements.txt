@@ -1,0 +1,92 @@
+PyJWT>=2.8  # Epic backend services: RS384 client assertion signing
+psycopg[binary]>=3.1  # Postgres index on AWS/Azure; IAM auth token generated via boto3/azure-identity, no password dependency
+PyYAML>=6.0  # Retention ruleset files (core/config/retention_rules.py) - human-editable, comment-friendly, unlike raw JSON
+
+# Core
+requests>=2.31
+cryptography>=42.0
+
+# AWS
+boto3>=1.34
+
+# GCP
+google-cloud-storage>=2.16
+google-cloud-kms>=2.21
+# FOUND AND FIXED: this dependency was missing entirely, so the shipped
+# image could not open a single GCP database connection -
+# core/db/connection.py's _connect_gcp() does
+# `from google.cloud.sql.connector import Connector`, which raised
+# ModuleNotFoundError on first use (2026-08-17 audit, C3). The [pg8000]
+# extra pulls the pg8000 driver the connector actually dials with - the
+# connector does not support psycopg's libpq; see connection.py's own
+# module docstring for why GCP connections are pg8000 objects.
+cloud-sql-python-connector[pg8000]>=1.9
+
+# Azure
+azure-storage-blob>=12.19
+azure-identity>=1.15
+azure-keyvault-keys>=4.9
+
+# OCR (core/ocr/) - document ingestion
+#
+# pytesseract is ONLY a wrapper around the `tesseract` binary; installing
+# it via pip does not install Tesseract itself. The Dockerfile installs
+# the tesseract-ocr + tesseract-ocr-eng system packages, and poppler-utils
+# for the PDF rasterisation pdf2image shells out to. A bare virtualenv
+# will import these fine and then fail at first use with
+# OCREngineUnavailable naming the missing package - see
+# core/ocr/tesseract.py.
+pytesseract>=0.3.10
+Pillow>=10.2       # image decoding, incl. multi-page TIFF (faxed records)
+pdf2image>=1.17    # PDF -> page images; needs the poppler-utils binary
+
+# Web interface (core/web/)
+#
+# FastAPI rather than Flask because the interface serves an HTML UI and a
+# JSON API from ONE implementation - every competitor offers programmatic
+# access alongside the UI, and a second code path for it is how the two
+# drift apart. python-multipart is required for form posts and document
+# uploads; without it FastAPI raises at import of the upload route, not
+# at request time.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jinja2>=3.1
+python-multipart>=0.0.18  # form/file upload parsing (/documents); <0.0.18 is subject to a multipart DoS (CVE-2024-53981)
+itsdangerous>=2.1  # signs the session cookie; Starlette's SessionMiddleware (core/web/app.py) imports it but declares it only as an optional extra
+
+# Legal record production (core/fhir/legal_export.py)
+#
+# Pure Python, BSD licensed, no native dependencies - unlike the OCR
+# stack, this adds nothing to the Dockerfile. Used to produce paginated,
+# Bates-numbered record sets for legal review; the machine-readable FHIR
+# Bundle export needs no library and works without it.
+reportlab>=4.1
+
+# AI assistant (core/assistant/) - OPTIONAL, off by default
+#
+# Present in the image but never imported unless
+# PHI_AI_ASSISTANT_ENABLED is set (core/assistant/provider.py imports
+# it lazily), so a deployment that does not want the assistant carries an
+# unused package rather than a startup failure - the same posture the
+# per-cloud database drivers above already have.
+#
+# The [bedrock] and [vertex] extras matter: they pull the clients that let
+# Claude run inside the operator's OWN AWS account or GCP project, under
+# the BAA that already covers their storage and KMS, instead of calling an
+# external API from a system that holds PHI. See
+# runbooks/RUNBOOK_AI_ASSISTANT.md for why that choice is the first
+# decision to make about this feature, not a deployment detail.
+anthropic[bedrock,vertex]>=0.116
+
+# DICOM imaging (core/dicom/) - optional feature, always installed
+#
+# Pure Python, no native dependencies and no image codecs: this platform
+# reads DICOM headers and moves the files, it never decodes pixels. The
+# viewer decodes in the browser, which is also the only place that cannot
+# silently re-encode data this platform exists to preserve. Imported
+# lazily, so a deployment that stores no imaging never loads it.
+pydicom>=3.0
+
+# Dev/test
+pytest>=8.0
+httpx>=0.27  # FastAPI's TestClient transport

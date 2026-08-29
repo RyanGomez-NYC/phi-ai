@@ -1,0 +1,33 @@
+{
+  "resourceType": "Condition",
+  "id": "syn-cond-part2-1",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "clinicalStatus": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "active"
+      }
+    ]
+  },
+  "code": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "code": "F11.20",
+        "display": "Opioid dependence, uncomplicated"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/syn-kyle-1"
+  }
+}

@@ -1,0 +1,41 @@
+# Secrets and deployment-specific configuration. docs/RELEASE_CHECKLIST.md
+# §1 relies on every one of these patterns being here; keep them in sync.
+.env
+*.pem
+*.key
+terraform.tfvars
+backend.hcl
+*.tfstate
+*.tfstate.*
+
+# Deployer-owned config files (templates are committed as *.example.*)
+config/retention_ruleset.yaml
+config/smart_issuers.yaml
+config/assistant_probes.yaml
+
+# Terraform working directories (lock files stay tracked)
+.terraform/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local run output
+restore-output/
+
+# macOS
+.DS_Store
+
+# Generated synthetic corpora (reproducible from generator+version+seed; see docs/TESTDATA.md)
+testdata/
+.cache/
+
+# Terraform saved plans: embed variable values (including generated
+# secrets) - never commit.
+tfplan*
+**/tfplan*
+tfboot
+www-demo/public/cache/
+www-demo/var/

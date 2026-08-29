@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set active = 'audit' %}
+{% block body %}
+<div class="kicker">Governance</div>
+<h1>Audit trail</h1>
+<p class="lede">Every access to clinical content, every disclosure and every refused request.
+Entries are hash-chained: each one commits to its predecessor, so removing or altering any entry
+breaks verification at that point rather than passing unnoticed.</p>
+
+{% if chain %}
+  {% set intact, checked, problem = chain %}
+  <div class="status {{ 'ok' if intact else 'danger' }}">
+    <strong>{{ 'Chain verified — ' ~ checked ~ ' events' if intact else 'INTEGRITY FAILURE' }}</strong>
+    {% if intact %}
+      No entry has been removed, reordered or modified since it was written.
+    {% else %}
+      {{ problem }} — follow RUNBOOK_INCIDENT_RESPONSE.md.
+    {% endif %}
+  </div>
+{% endif %}
+
+<div class="card">
+  <form method="get" action="/audit" class="row">
+    <div class="field">
+      <label for="actor">Filter by user</label>
+      <input type="text" id="actor" name="actor" value="{{ actor or '' }}" placeholder="all users" autocomplete="off">
+    </div>
+    <button type="submit" class="quiet">Filter</button>
+  </form>
+</div>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>When</th><th>User</th><th>Action</th><th>Resource</th><th>Purpose</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td class="mono muted nowrap">{{ e.timestamp[:19].replace('T',' ') }}</td>
+      <td>{{ e.actor }}</td>
+      <td>
+        {% if e.action == 'access.denied' %}<span class="pill danger">denied</span>
+        {% elif 'read' in e.action %}<span class="pill mute">read</span>
+        {% elif 'dispose' in e.action or 'purge' in e.action %}<span class="pill warn">disposal</span>
+        {% else %}<span class="pill mute">{{ e.action.split('.')[-1] }}</span>{% endif %}
+        <span class="mono muted">{{ e.action }}</span>
+      </td>
+      <td class="mono">{{ e.resource_key }}</td>
+      <td class="purpose">{{ e.purpose_of_use or '—' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No audit events.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

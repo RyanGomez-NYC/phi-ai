@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Attribution — φ(ai){% endblock %}
+{% block body %}
+{% include "docs_nav.html" %}
+<div class="doc-prose">
+<h1>Attribution</h1>
+<p class="lede">This platform includes open source software whose licenses
+require attribution — this page is where that obligation is met. Listed
+below is every third-party open source component in the stack, with the
+people and organizations behind it and the license it is distributed
+under. Every runtime asset is vendored
+and served locally — the platform makes no external asset requests — so
+this page is both a thank-you and the complete inventory of third-party
+code and typefaces shipped with the software.</p>
+
+<h2>Languages &amp; core runtime</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://www.python.org/" target="_blank" rel="noopener">Python</a></td><td>Python Software Foundation</td><td>PSF License</td></tr>
+    <tr><td><a href="https://www.postgresql.org/" target="_blank" rel="noopener">PostgreSQL</a></td><td>PostgreSQL Global Development Group</td><td>PostgreSQL License</td></tr>
+    <tr><td><a href="https://www.docker.com/" target="_blank" rel="noopener">Docker &amp; Docker Compose</a></td><td>Docker, Inc. and contributors</td><td>Apache 2.0</td></tr>
+    <tr><td><a href="https://developer.hashicorp.com/terraform" target="_blank" rel="noopener">Terraform</a></td><td>HashiCorp</td><td>Business Source License 1.1 (source-available)</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>Web interface framework</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://fastapi.tiangolo.com/" target="_blank" rel="noopener">FastAPI</a></td><td>Sebastián Ramírez and contributors</td><td>MIT</td></tr>
+    <tr><td><a href="https://www.starlette.io/" target="_blank" rel="noopener">Starlette</a></td><td>Tom Christie / Encode OSS</td><td>BSD-3-Clause</td></tr>
+    <tr><td><a href="https://www.uvicorn.org/" target="_blank" rel="noopener">Uvicorn</a></td><td>Tom Christie / Encode OSS</td><td>BSD-3-Clause</td></tr>
+    <tr><td><a href="https://docs.pydantic.dev/" target="_blank" rel="noopener">Pydantic</a></td><td>Samuel Colvin and the Pydantic team</td><td>MIT</td></tr>
+    <tr><td><a href="https://jinja.palletsprojects.com/" target="_blank" rel="noopener">Jinja</a></td><td>Pallets Projects (originally Armin Ronacher)</td><td>BSD-3-Clause</td></tr>
+    <tr><td><a href="https://itsdangerous.palletsprojects.com/" target="_blank" rel="noopener">ItsDangerous</a></td><td>Pallets Projects</td><td>BSD-3-Clause</td></tr>
+    <tr><td><a href="https://github.com/Kludex/python-multipart" target="_blank" rel="noopener">python-multipart</a></td><td>Andrew Dunham; maintained by Marcelo Trylesinski</td><td>Apache 2.0</td></tr>
+    <tr><td><a href="https://www.python-httpx.org/" target="_blank" rel="noopener">HTTPX</a></td><td>Tom Christie / Encode OSS</td><td>BSD-3-Clause</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>Security, data &amp; interchange</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://cryptography.io/" target="_blank" rel="noopener">cryptography</a></td><td>Python Cryptographic Authority</td><td>Apache 2.0 / BSD-3-Clause</td></tr>
+    <tr><td><a href="https://pyjwt.readthedocs.io/" target="_blank" rel="noopener">PyJWT</a></td><td>José Padilla and maintainers</td><td>MIT</td></tr>
+    <tr><td><a href="https://www.psycopg.org/" target="_blank" rel="noopener">Psycopg 3</a></td><td>Daniele Varrazzo and the Psycopg team</td><td>LGPL-3.0</td></tr>
+    <tr><td><a href="https://github.com/tlocke/pg8000" target="_blank" rel="noopener">pg8000</a></td><td>Tony Locke and contributors</td><td>BSD-3-Clause</td></tr>
+    <tr><td><a href="https://pyyaml.org/" target="_blank" rel="noopener">PyYAML</a></td><td>Kirill Simonov and the YAML community</td><td>MIT</td></tr>
+    <tr><td><a href="https://requests.readthedocs.io/" target="_blank" rel="noopener">Requests</a></td><td>Kenneth Reitz and the Python Software Foundation</td><td>Apache 2.0</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>Cloud SDKs</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://github.com/boto/boto3" target="_blank" rel="noopener">Boto3 (AWS SDK for Python)</a></td><td>Amazon Web Services</td><td>Apache 2.0</td></tr>
+    <tr><td><a href="https://github.com/googleapis/python-storage" target="_blank" rel="noopener">google-cloud-storage</a>, <a href="https://github.com/googleapis/google-cloud-python" target="_blank" rel="noopener">google-cloud-kms</a>, <a href="https://github.com/GoogleCloudPlatform/cloud-sql-python-connector" target="_blank" rel="noopener">Cloud SQL Python Connector</a></td><td>Google LLC</td><td>Apache 2.0</td></tr>
+    <tr><td><a href="https://github.com/Azure/azure-sdk-for-python" target="_blank" rel="noopener">azure-storage-blob, azure-identity, azure-keyvault-keys</a></td><td>Microsoft Corporation</td><td>MIT</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>Documents, OCR &amp; imaging</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://github.com/tesseract-ocr/tesseract" target="_blank" rel="noopener">Tesseract OCR</a></td><td>Originally Hewlett-Packard; developed at Google; community-maintained</td><td>Apache 2.0</td></tr>
+    <tr><td><a href="https://github.com/madmaze/pytesseract" target="_blank" rel="noopener">pytesseract</a></td><td>Matthias A. Lee and contributors</td><td>Apache 2.0</td></tr>
+    <tr><td><a href="https://python-pillow.github.io/" target="_blank" rel="noopener">Pillow</a></td><td>Jeffrey A. Clark and contributors; a fork of PIL by Fredrik Lundh</td><td>MIT-CMU</td></tr>
+    <tr><td><a href="https://github.com/Belval/pdf2image" target="_blank" rel="noopener">pdf2image</a></td><td>Edouard Belval</td><td>MIT</td></tr>
+    <tr><td><a href="https://poppler.freedesktop.org/" target="_blank" rel="noopener">Poppler</a></td><td>The Poppler developers, freedesktop.org</td><td>GPL-2.0</td></tr>
+    <tr><td><a href="https://www.reportlab.com/opensource/" target="_blank" rel="noopener">ReportLab Toolkit</a></td><td>ReportLab Ltd</td><td>BSD-3-Clause</td></tr>
+    <tr><td><a href="https://github.com/pydicom/pydicom" target="_blank" rel="noopener">pydicom</a></td><td>Darcy Mason and the pydicom community</td><td>MIT</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>AI</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://github.com/anthropics/anthropic-sdk-python" target="_blank" rel="noopener">Anthropic Python SDK</a></td><td>Anthropic, PBC</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/SYSTRAN/faster-whisper" target="_blank" rel="noopener">faster-whisper</a></td><td>SYSTRAN and contributors (Guillaume Klein)</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/OpenNMT/CTranslate2" target="_blank" rel="noopener">CTranslate2</a></td><td>OpenNMT / SYSTRAN</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/openai/whisper" target="_blank" rel="noopener">Whisper (model weights)</a></td><td>OpenAI</td><td>MIT</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>Testing &amp; evaluation data</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://pytest.org/" target="_blank" rel="noopener">pytest</a></td><td>Holger Krekel and the pytest-dev team</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/synthetichealth/synthea" target="_blank" rel="noopener">Synthea</a></td><td>The MITRE Corporation</td><td>Apache 2.0</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>Typefaces &amp; visualization (vendored, served locally)</h2>
+<p>All typefaces below are licensed under the
+<a href="https://openfontlicense.org/" target="_blank" rel="noopener">SIL Open Font
+License 1.1</a>, which permits redistribution alongside this software. They
+are shipped as local <span class="mono">woff2</span> subsets; nothing is
+fetched from a font service at runtime.</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>Author / maintainer</th><th>License</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://rsms.me/inter/" target="_blank" rel="noopener">Inter</a></td><td>Rasmus Andersson</td><td>SIL OFL 1.1</td></tr>
+    <tr><td><a href="https://github.com/IBM/plex" target="_blank" rel="noopener">IBM Plex (Mono, Sans, Serif)</a></td><td>Mike Abbink, IBM BX&amp;D, in collaboration with Bold Monday</td><td>SIL OFL 1.1</td></tr>
+    <tr><td><a href="https://github.com/cyrealtype/Lora-Cyrillic" target="_blank" rel="noopener">Lora</a></td><td>Olga Karpushina, Cyreal</td><td>SIL OFL 1.1</td></tr>
+    <tr><td><a href="https://github.com/CatharsisFonts/Cormorant" target="_blank" rel="noopener">Cormorant Garamond</a></td><td>Christian Thalmann, Catharsis Fonts</td><td>SIL OFL 1.1</td></tr>
+    <tr><td><a href="https://d3js.org/" target="_blank" rel="noopener">D3.js</a></td><td>Mike Bostock and contributors</td><td>ISC</td></tr>
+    <tr><td><a href="https://simpleicons.org/" target="_blank" rel="noopener">Simple Icons</a></td><td>The Simple Icons contributors (brand glyphs; trademarks remain their owners')</td><td>CC0 1.0</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<p class="hint">Each project above remains the work and property of its
+authors, under its own license; listing here is attribution, not
+endorsement by those projects. If a component is missing from this page,
+that is a documentation bug — please file it against the repository.</p>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

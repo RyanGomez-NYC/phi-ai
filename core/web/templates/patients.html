@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% set active = 'patients' %}
+{% block body %}
+<div class="kicker">Worklist</div>
+<h1>Patient records</h1>
+<p class="lede">Search by the source EMR's patient identifier. The index holds no names, MRNs or
+dates of birth by design — it stores only opaque EMR references, so it cannot disclose who a
+patient is even if it is exposed.</p>
+
+<div class="card">
+  <form method="post" action="/patients">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="row">
+      <div class="field">
+        <label for="term">Patient identifier</label>
+        <input type="text" id="term" name="term" value="{{ term or '' }}"
+               placeholder="an EMR patient identifier — or “Patient” to list every reference" autofocus autocomplete="off">
+        <div class="hint">Partial matches are supported. Submitted by POST so the identifier
+          never appears in a URL, proxy log or browser history.</div>
+      </div>
+      <button type="submit">Search</button>
+    </div>
+  </form>
+</div>
+
+{% if results is not none %}
+  <h2>{{ results | length }} match{{ '' if results | length == 1 else 'es' }}</h2>
+  {% if results %}
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Patient reference</th><th>Resources</th><th>Last stored</th><th></th></tr></thead>
+      <tbody>
+      {% for r in results %}
+        <tr>
+          <td class="mono">{{ r.patient_reference }}</td>
+          <td class="num">{{ r.resource_count }}</td>
+          <td class="mono muted nowrap">{{ r.last_stored.strftime('%Y-%m-%d %H:%M') if r.last_stored else '—' }}</td>
+          <td>
+            <form method="post" action="/patients/{{ r.patient_reference.split('/')[1] }}/open" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <select name="purpose_of_use" required aria-label="Purpose of use">
+                <option value="">Purpose of use…</option>
+                {# Preselected from the ROLE (role_default_purpose), and
+                   changed here - on the action itself - when the default
+                   is wrong. #}
+                {% for code, label in purposes %}<option value="{{ code }}" {{ 'selected' if code == purpose_current }}>{{ label }}</option>{% endfor %}
+              </select>
+              <button type="submit" class="quiet small">Open</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% else %}
+    <div class="empty">No records for that identifier.</div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

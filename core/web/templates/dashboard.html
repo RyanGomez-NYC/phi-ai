@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="kicker">The platform</div>
+<h1>Platform holdings</h1>
+<p class="lede">What the encrypted store holds, verified against the tamper-evident audit
+chain. The object store is the unconditional system of record — every count below is
+served from the derived index, and every view of clinical content is recorded in the
+audit trail against your username and a stated purpose of use.</p>
+
+{% if chain %}
+  {% set intact, checked, problem = chain %}
+  <div class="status {{ 'ok' if intact else 'danger' }}">
+    <strong>Audit chain {{ 'verified intact' if intact else 'INTEGRITY FAILURE' }}</strong>
+    {% if intact %}
+      {{ checked }} events checked; each links to its predecessor and matches its recorded hash.
+      Removing or altering any entry would break this check.
+    {% else %}
+      {{ problem }} — treat as a suspected security incident and follow
+      RUNBOOK_INCIDENT_RESPONSE.md.
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if stats %}
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(stats.total_resources) }}</div><div class="k">Resources</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(stats.distinct_patients) }}</div><div class="k">Patients</div></div>
+  <div class="card stat"><div class="n">{{ stats.resource_type_counts | length }}</div><div class="k">Resource types</div></div>
+  <div class="card stat"><div class="n">{{ stats.latest_stored_at.strftime('%Y-%m-%d') if stats.latest_stored_at else '—' }}</div><div class="k">Last stored</div></div>
+</div>
+
+<h2>Holdings by resource type</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Resource type</th><th style="width:120px">Count</th></tr></thead>
+  <tbody>
+  {% for rtype, n in stats.resource_type_counts | dictsort(by='value', reverse=true) %}
+    <tr><td>{{ rtype }}</td><td class="num">{{ "{:,}".format(n) }}</td></tr>
+  {% else %}
+    <tr><td colspan="2" class="empty">Nothing stored yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card"><div class="empty">
+  Your role does not include access to platform holdings.
+</div></div>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

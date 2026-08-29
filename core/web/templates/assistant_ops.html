@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% set active = 'assistant' %}
+{% block title %}Assistant operations · φ(ai){% endblock %}
+{% block body %}
+<div class="kicker">AI assistant</div>
+<h1>Assistant operations</h1>
+<p class="lede">Usage, performance and drift for this deployment's assistant —
+counts and rates only. Questions and clinical reads live in the audit trail;
+this page never shows content. Running: {{ model_description }}</p>
+
+{% if ops_error %}
+<div class="status danger"><strong>Telemetry unavailable</strong> {{ ops_error }}</div>
+{% endif %}
+
+{% if summary %}
+{% set t = summary.totals %}
+<h2>Last {{ summary.days }} days</h2>
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(t.questions or 0) }}</div><div class="k">Questions</div></div>
+  <div class="card stat"><div class="n">{{ t.distinct_users or 0 }}</div><div class="k">Distinct users</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format((t.input_tokens or 0) + (t.output_tokens or 0)) }}</div><div class="k">Tokens</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(t.phi_reads or 0) }}</div><div class="k">PHI reads via assistant</div></div>
+  <div class="card stat"><div class="n">{{ t.p50_latency_ms | round | int if t.p50_latency_ms else '—' }}<span class="muted">ms</span></div><div class="k">Median latency</div></div>
+  <div class="card stat"><div class="n">{{ t.p95_latency_ms | round | int if t.p95_latency_ms else '—' }}<span class="muted">ms</span></div><div class="k">p95 latency</div></div>
+  <div class="card stat"><div class="n">{{ t.refusals or 0 }}</div><div class="k">Refusals</div></div>
+  <div class="card stat"><div class="n">{{ t.errors or 0 }}</div><div class="k">Errors</div></div>
+</div>
+
+<h2>By day</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Day</th><th class="num">Questions</th><th class="num">Refusals</th><th class="num">Errors</th></tr></thead>
+  <tbody>
+  {% for row in summary.by_day %}
+    <tr><td>{{ row.day }}</td><td class="num">{{ row.questions }}</td>
+        <td class="num">{{ row.refusals }}</td><td class="num">{{ row.errors }}</td></tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">No assistant activity in this window.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>By role</h2>
+<p class="muted">Which roles use the assistant, and how much of that use reads
+clinical content. A role whose PHI-read share looks wrong for its job is a
+question for the audit trail, where every individual read is recorded.</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Roles held</th><th class="num">Questions</th><th class="num">PHI reads</th></tr></thead>
+  <tbody>
+  {% for row in summary.by_role %}
+    <tr><td>{{ row.roles }}</td><td class="num">{{ row.questions }}</td>
+        <td class="num">{{ row.phi_reads }}</td></tr>
+  {% else %}
+    <tr><td colspan="3" class="empty">Nothing recorded.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Models seen</h2>
+<p class="muted">A model change without a deployment decision behind it is
+itself a finding — the provider resolves the configured id, and this table is
+where an unnoticed change would surface.</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Provider</th><th>Model</th><th class="num">Questions</th><th>First seen</th><th>Last seen</th></tr></thead>
+  <tbody>
+  {% for row in summary.by_model %}
+    <tr><td>{{ row.provider }}</td><td>{{ row.model }}</td><td class="num">{{ row.questions }}</td>
+        <td>{{ row.first_seen }}</td><td>{{ row.last_seen }}</td></tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">Nothing recorded.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if drift is not none %}
+<h2>Drift probes</h2>
+<p class="muted">Fixed questions with fixed expectations, run with
+<code>python -m core.assistant.drift</code> (see
+runbooks/RUNBOOK_AI_ASSISTANT.md). A falling pass rate — or a pass-rate change
+that coincides with a model change above — is drift worth investigating before
+users report it.</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Run</th><th>Model</th><th class="num">Probes</th><th class="num">Passed</th><th>Failed probes</th></tr></thead>
+  <tbody>
+  {% for row in drift %}
+    <tr class="{{ '' if row.passed == row.probes else 'danger' }}">
+      <td>{{ row.run_at }}</td><td>{{ row.model }}</td>
+      <td class="num">{{ row.probes }}</td><td class="num">{{ row.passed }}</td>
+      <td>{{ row.failed_probes or '—' }}</td></tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No drift runs recorded yet. Schedule
+      <code>python -m core.assistant.drift</code> after enabling telemetry.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

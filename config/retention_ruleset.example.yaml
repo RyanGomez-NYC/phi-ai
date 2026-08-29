@@ -1,0 +1,65 @@
+# =============================================================================
+# RETENTION RULESET TEMPLATE - NOT REAL DATA. DO NOT USE AS-IS.
+#
+# Every value below is a placeholder showing the FORMAT this file needs,
+# not a verified retention figure for any real jurisdiction. Copy this
+# file, then replace every field marked REPLACE with information your
+# Health Information Manager (or whoever owns retention schedules at
+# your organization) has actually confirmed - see
+# runbooks/RUNBOOK_RETENTION_RULES.md for the full process.
+#
+# After editing, check your file with:
+#   python -m core.config.retention_rules_check path/to/your-file.yaml
+# =============================================================================
+
+# Two-letter postal code for the state whose law this file's rules are
+# based on (e.g. "FL", "TX", "CA"). One jurisdiction per file - if your
+# organization operates across multiple states, you need a separate
+# file (and likely a separate deployment) per state; this format does
+# not attempt to handle multiple jurisdictions in one file.
+jurisdiction: "XX"   # REPLACE with your actual state's postal code
+
+# Applies to every stored resource type EXCEPT any listed under
+# resource_type_rules below. Required.
+default_rule:
+  # The number of years to retain records under this rule.
+  retention_years: 0   # REPLACE with your state's actual figure
+
+  # The specific statute, administrative code section, or regulation
+  # this figure comes from - specific enough that someone could look it
+  # up and confirm it themselves. "State law" is not a citation;
+  # "Fla. Admin. Code r. 64B8-10.002" is.
+  citation: "REPLACE with the specific statute/regulation citation"
+
+  # Optional free-text context. Many states run TWO separate regimes -
+  # a hospital-licensing rule and a physician-records rule - that often
+  # specify different periods; note which one this figure is, and
+  # anything else useful for whoever reviews this next.
+  source_note: "REPLACE or delete this line if not needed"
+  regime: "REPLACE with 'hospital', 'physician', or delete if not applicable"
+
+  # Who confirmed this figure, and when. Both required - a retention
+  # figure with no reviewer and no date is not something this tool
+  # considers acceptable to run with. Include a credential if relevant
+  # (RHIA, RHIT, JD, etc.).
+  reviewed_by: "REPLACE with the reviewer's name and credential"
+  reviewed_on: "2000-01-01"   # REPLACE with the actual review date, YYYY-MM-DD
+
+# Optional: only include this section if a SPECIFIC FHIR resource type
+# needs a different retention period than the default above - for
+# example, immunization records are commonly retained longer than
+# general clinical records in several states. Delete this whole section
+# if every resource type this deployment stores uses the same period.
+#
+# Each entry needs the exact same fields as default_rule, plus
+# resource_type (the FHIR resourceType this rule applies to, e.g.
+# "Immunization", "DocumentReference" - must match EMRProfile's
+# supported_resources in core/fhir/emr_profiles.py to have any effect).
+resource_type_rules:
+  - resource_type: "REPLACE with a FHIR resource type, e.g. Immunization"
+    retention_years: 0
+    citation: "REPLACE with the specific statute/regulation citation"
+    source_note: "REPLACE or delete this line if not needed"
+    reviewed_by: "REPLACE with the reviewer's name and credential"
+    reviewed_on: "2000-01-01"
+# Made by Ryan Gomez & Co. Inc.

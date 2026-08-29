@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Streaming export — φ(ai){% endblock %}
+{% block body %}
+<h1>Streaming export manager</h1>
+<p class="lede">Data leaving in real time — ADT notifications to community
+providers, results to the patient portal, claims to the clearinghouse, measure
+submissions. Each outbound feed tracks what the destination has acknowledged
+against what has been produced; the difference is held and accounted, never
+dropped, and a feed can be paused by governance without losing its place.</p>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(totals.delivered) }}</div>
+    <div class="k">deliveries today across all feeds</div></div>
+  <div class="card stat"><div class="n {{ 'warn' if totals.held else 'good' }}">{{ "{:,}".format(totals.held) }}</div>
+    <div class="k">held for retry — queued and accounted, not dropped</div></div>
+  <div class="card stat"><div class="n">{{ totals.feeds }}</div>
+    <div class="k">outbound feeds under acknowledgment discipline</div></div>
+</div>
+
+<h2>Outbound feeds</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Feed</th><th>Destination</th><th style="text-align:right">Acknowledged</th>
+    <th style="text-align:right">Produced</th><th style="text-align:right">Held</th>
+    <th style="text-align:right">Today</th><th>Last delivery</th><th>State</th></tr></thead>
+  <tbody>
+    {% for f in feeds %}
+    {% set held = f.latest_seq - f.delivered_seq %}
+    <tr>
+      <td>{{ f.feed }}</td>
+      <td>{{ f.destination }}</td>
+      <td class="num mono">{{ "{:,}".format(f.delivered_seq) }}</td>
+      <td class="num mono">{{ "{:,}".format(f.latest_seq) }}</td>
+      <td class="num mono {{ 'v-warn' if held }}">{{ "{:,}".format(held) }}</td>
+      <td class="num">{{ "{:,}".format(f.delivered_today) }}</td>
+      <td class="mono nowrap" style="color:var(--mute)">{{ f.last_delivery }}</td>
+      <td><span class="{{ {'healthy':'v-good','held':'v-warn','paused':'v-amber'}.get(f.state, 'v-mute') }}">{{ f.state }}</span></td>
+    </tr>
+    {% if f.note %}
+    <tr><td colspan="8" style="color:var(--warn-fg); font-size:12px; background:var(--warn-bg)">{{ f.note }}</td></tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table></div>
+
+<div class="callout">
+  <div><strong>Outbound is governed like inbound.</strong> A held feed retries
+  against the destination without regenerating or skipping; a paused feed is a
+  governance decision that accumulates sequence rather than leaking; and
+  nothing in a de-identified event feed carries identifiers.</div>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

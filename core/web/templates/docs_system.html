@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% block title %}System documentation — φ(ai){% endblock %}
+{% block body %}
+{% include "docs_nav.html" %}
+<div class="doc-prose">
+<h1>Detailed system documentation</h1>
+<p class="lede">The complete reference for PHI AI — the AI-native platform for
+protected health data — in one place: what it is, every role and permission,
+every screen, the stores, how the assistant works, how the audit trail works,
+the full architecture with its data flows, the animated flow diagrams, and
+every programmatic surface. Written to be read by anyone who works in or
+around the platform, not only engineers. Sections follow the role signed in:
+parts a role cannot use are not shown.</p>
+
+<div class="callout" style="margin-top:18px">
+  <div><strong>On this page</strong><br>
+  <strong>Part I — The system:</strong> purpose · design principles · roles
+  &amp; permissions · purpose of use · the working surfaces · the stores ·
+  the assistant · the audit trail · security model · extensibility · configuration<br>
+  {% if identity.can('integration:view') %}
+  <strong><a href="#part-architecture">Part II — Full architecture with data
+  flows</a>:</strong> the animated picture · component reference · trust
+  boundaries · cloud architecture · failure modes<br>
+  {% endif %}
+  <strong><a href="#part-dataflows">Part {{ 'III' if identity.can('integration:view') else 'II' }} —
+  Data flow diagrams</a>:</strong> the four journeys, animated and walked
+  through step by step{% if identity.can('integration:view') %}<br>
+  <strong><a href="#part-api">Part IV — API details</a>:</strong> shared
+  conventions · the assistant's tools · the model API · route surface ·
+  ingestion · export · vendor authentication · error model
+  {% endif %}</div>
+</div>
+
+<h2>1. Purpose and positioning</h2>
+<p><strong>PHI AI is an AI-native platform for protected health data —
+designed from first principles for AI as a first-class, governed consumer of
+the clinical, financial and behavioral-health record.</strong> It is not an AI
+feature bolted onto a records system: the architecture exists <em>because</em>
+AI reads this data. The role-scoped retrieval tools, the sensitivity
+segmentation, the purpose-of-use tagging, the hash-chained audit of every
+model interaction, the invariants and the signature gates are not add-ons
+around a database — they are the platform, built for the moment a model
+touches a protected record. EMRs connect to it as data planes: sources
+records arrive from, targets signed work delivers to.</p>
+<p>It does three jobs: it <strong>ingests</strong> (bulk populations over the
+FHIR Bulk Data API and real-time feeds, every record envelope-encrypted,
+classified for sensitivity, and indexed before anything can read it); it
+<strong>answers and drafts</strong> (a retrieval-tuned assistant with cited
+answers, always inside the asker's role, always on the record); and it
+<strong>governs</strong> (consent gates, segmentation, purpose-of-use,
+signature requirements, export controls, and an append-only audit trail where
+every refusal is a recorded event).</p>
+<p>Equally important is what the platform is <em>not</em>:</p>
+<ul>
+  <li><strong>Not a bolt-on.</strong> Nothing here was retrofitted onto an
+    existing product: the data model, the gates and the audit chain were
+    designed together, for AI use of protected data, from the first line.
+    Signed clinical documentation still delivers to the EMR, which remains the
+    chart of legal record — a legal reality, not an architectural
+    dependency.</li>
+  <li><strong>Not autonomous.</strong> No generated text enters a chart, and
+    no record leaves the organization, without a human decision.</li>
+  <li><strong>Not a medical device.</strong> No diagnostic or treatment
+    directive; every answer's basis is independently reviewable through its
+    citations (see Compliance &amp; responsibility).</li>
+</ul>
+
+<h2>2. Design principles</h2>
+<p>Two principles sit above everything else; five more run through every
+screen and every API in their service.</p>
+<ol>
+  <li><strong>AI for PHI.</strong> The platform exists to put AI at the
+    center of protected health data — not beside it, not bolted on after.
+    Every design decision below is downstream of this one: the AI is a
+    first-class, governed consumer of the record, reaching data through the
+    same gates as people, citing what it reads, and drafting rather than
+    deciding.</li>
+  <li><strong>Compliance first.</strong> Compliance is the core design
+    principle, not a policy layer: the rules live in the shape of the
+    system. Population tools return counts and cannot enumerate; unsigned
+    drafts have no write path; psychotherapy content has no export path;
+    recording waits for the jurisdiction's consent. Where a rule can be
+    structural, it is.</li>
+  <li><strong>Minimum necessary.</strong> Every profile holds an enumerated
+    list of permissions. A screen, record or tool outside that list does not
+    exist for that profile — the navigation does not show it, the route
+    refuses it, and the assistant does not hold the tool. Nothing is
+    reachable "because the database has it."</li>
+  <li><strong>Nothing silent.</strong> Every question asked of the AI, every
+    record it reads, every export, every configuration change, every override
+    and every refusal is appended to a hash-chained audit trail that cannot
+    be quietly edited. When records are withheld from an answer or an export,
+    the withholding is <em>counted and stated</em>, never invisible.</li>
+  <li><strong>Fail closed, refuse loudly.</strong> A gate that cannot decide
+    denies. A run that cannot finish is marked failed, never
+    partially-complete. And a refusal is presented as a first-class outcome —
+    in run histories, on screens, in the audit trail — because a gate that
+    fails closed is the product, not an error condition.</li>
+  <li><strong>A human signs.</strong> AI-drafted documentation is a draft
+    until a licensed person signs it (the signature rule). Population queries
+    return counts, never named lists, on the de-identified plane
+    (the counts-never-lists rule).</li>
+  <li><strong>Calm surfaces.</strong> The interface is designed for people who
+    live in an EMR all day: one identity card, collapsible detail, no
+    autoplaying anything, and a design language where color always means
+    something — orange marks state that demands attention, green marks
+    records arriving, navy marks reading.</li>
+</ol>
+
+<h2>3. Roles and permissions</h2>
+<h3>Where roles come from — and where they do not</h3>
+<p><strong>This system is not the source of truth for users or roles, and is
+not intended to be.</strong> It is designed to be governed by your
+organization's identity source of truth — your identity provider and
+directory (Entra ID / Okta / LDAP or equivalent), where accounts are
+created, roles are assigned, access is reviewed, and departures are
+processed. The platform's job is <em>enforcement</em>, not authority:</p>
+<ul>
+  <li><strong>Identity arrives established.</strong> In the recommended
+    deployment the platform trusts an identity your reverse proxy / SSO has
+    already authenticated, or one a SMART-on-FHIR launch carries from the
+    EMR. The platform authenticates nobody in that mode and stores no
+    credential.</li>
+  <li><strong>Role assignments originate upstream.</strong> The roles an
+    identity carries are asserted by your identity layer; the platform maps
+    them to its enumerated permissions and enforces them on every route,
+    tool and option set. Change a person's role in your directory and the
+    platform's enforcement follows — there is no separate role store to
+    drift out of sync.</li>
+  <li><strong>Local accounts are a fallback, not the design.</strong> The
+    optional local-accounts mode exists for organizations with no identity
+    provider at all; it is off by default, and it is the only configuration
+    in which this platform holds a credential. If you have an IdP, use
+    it.</li>
+  <li><strong>The Control panel's matrix is an enforcement view, not a user
+    directory.</strong> It shows what each <em>role</em> can reach so
+    reviews and audits have a live artifact — it is not where people are
+    provisioned, and deliberately has no "create user" button in
+    IdP-governed deployments.</li>
+  <li><strong>Reviews and deprovisioning belong to your source of
+    truth.</strong> Access recertification, joiner/mover/leaver processing
+    and emergency revocation all happen in your identity system; the
+    platform reflects the result on the next request. (See Compliance &amp;
+    responsibility — access governance is an organizational duty this
+    software cannot discharge.)</li>
+</ul>
+<p>Nine roles, each an enumerated grant (the full live matrix renders on the
+Control panel). The asymmetries carry the security model: the Auditor reads
+the trail and cannot open a chart; the Analyst counts the population and
+cannot open a chart; Psychotherapy grants the psychotherapy store and nothing
+else; the Administrator configures the platform and cannot read a record; the
+Researcher does record-level work across charts under its own purpose-of-use
+code; and the System Administrator holds the platform's only wildcard —
+audited like everyone else.</p>
+
+<h2>4. Purpose of use</h2>
+<p>Every action that touches a record carries a purpose of use, integrated
+into the workflow where the action happens — deliberately <strong>not a
+session mode</strong>, because a purpose is an assertion about a specific
+action, not a state a session sits in. Opening a record collects it on the
+open form (preselected from the role: a clinician's default is treatment, a
+researcher's is research, records and operations roles default to
+operations); the assistant collects it per question with an explicit
+none tier; an ROI request records its purpose at creation and carries it
+through resolution; signature commits are treatment by definition. Every
+event stores the result, and the purpose also travels as an IAM session tag,
+so the cloud permission layer itself knows why a read is happening. The
+purposes mirror HIPAA's permitted-use structure: treatment, payment,
+operations, patient request, legal, research.</p>
+
+<h2>5. The working surfaces</h2>
+<p>Grouped as the navigation is: the <strong>Clinical workspace</strong> (the
+assistant, summarization, inbox triage, ambient documentation, the signature
+queue, patients &amp; charts, document intake); <strong>Revenue &amp;
+records</strong> (prior auth, documentation gaps, release of information with
+full production review, sensitive categories); <strong>Population</strong>
+(cohort builder on the live OMOP layer, no-show risk, ingest &amp; mapping QA,
+holdings, reports); <strong>Integration</strong> (source &amp; target EMR
+configuration, the bulk import manager, streaming data, and the bulk and
+streaming export managers); <strong>System</strong> (the Control panel); and
+<strong>Governance</strong> (registry &amp; preflight, the fairness screen,
+the ambient consent gate, source attributes, EMR conformance, audit,
+retention). Feature-by-feature depth is in
+<a href="/docs/features">Feature documentation</a>.</p>
+
+<h2>6. The stores</h2>
+<p>Records live as envelope-encrypted objects — each object under its own data
+key, wrapped by a KMS master key that never leaves the key service — in
+isolated stores with separate access policies: the clinical store, the audit
+store, and a physically separate psychotherapy store. A relational index
+serves the screens; an OMOP common-data-model layer serves research-grade
+analytics on the de-identified plane. Sensitivity classification happens at
+the ingestion door, so a record's category is a stored fact, uniform for every
+downstream gate.</p>
+
+<h2>7. The assistant (PHI RAG)</h2>
+<p>The retrieval contract: answer only from retrieved records; cite every
+source; never assert a record's absence from documents not retrieved; confirm
+before population-wide reads; state withholdings; counts, never lists, on the
+population plane. The model never holds a store connection — it reaches data
+only through role-scoped tools (enumerated in
+<a href="/docs/api">API details</a>), each of which audits before returning.
+Prompt history stores questions per user, never answers. The degradation
+ladder is explicit: live model with retrieval → retrieval disabled (a stated
+refusal) → live calls off (the labeled scripted fallback) → model failure (the
+error stated, the question already audited).</p>
+
+<h2>8. The audit trail</h2>
+<p>Every event appends actor, action, object reference, purpose, and a hash
+chained to the previous event's hash. Editing history breaks every hash after
+it; verification re-derives the chain and reports the first bad row.
+Concurrent writers can legitimately fork the chain — forks are recorded and
+verification distinguishes them from tampering. Object references, never
+content: the trail records <em>that</em> a note was disclosed, not the note.
+Refusals — denied screens, refused exports, rate-limit rejections — are
+first-class events, because a pattern of denials is how a privacy officer
+discovers probing.</p>
+
+<h2>9. Configuration</h2>
+<p>Runtime configuration lives in the platform state store, editable only
+through the audited Control panel and integration screens: EMR connections,
+the assistant's active model and switches, and the answer-length bound. Every
+change writes <span class="mono">config.changed</span> naming the keys that
+changed.</p>
+
+<h2>10. Security model — the consolidated view</h2>
+<p>Each control above appears where it operates; this section is the one
+place they are stated together, layer by layer.</p>
+<ul>
+  <li><strong>At rest.</strong> Every stored object is envelope-encrypted
+    before it lands: a per-object data key, wrapped by a organization-managed
+    KMS key that never leaves the key service. Key use is logged by the
+    cloud, so a decryption that bypassed the application would still leave
+    evidence. The psychotherapy store is physically separate with its own
+    access policy.</li>
+  <li><strong>In transit.</strong> TLS 1.2+ end to end — EMR↔platform,
+    platform↔storage, platform↔KMS, platform↔model provider — and the
+    storage buckets carry policies that <em>refuse</em> non-TLS requests
+    rather than merely preferring encrypted ones.</li>
+  <li><strong>Identity &amp; session.</strong> The application binds
+    localhost and trusts only a reverse-proxy-established identity (your
+    SSO), or SMART launch from the EMR, or — as the fallback — local
+    accounts. Sessions are signed; every mutation requires the session's
+    CSRF token; roles mirror cloud IAM roles (with purpose of use as an IAM
+    session tag) so the application layer and the infrastructure layer
+    cannot disagree about who may do what. The platform is <em>not</em> the
+    source of truth for users and roles — your organization's identity
+    system is.</li>
+  <li><strong>Content security.</strong> The web tier ships
+    <span class="mono">script-src 'none'</span> — the screens execute no
+    JavaScript, the animated diagrams are SVG markup, and every asset is
+    served from the platform itself: no CDN, no font service, no third-party
+    request of any kind.</li>
+  <li><strong>AI-specific controls.</strong> The model receives excerpts,
+    never a database connection. Tool schemas are generated per role, so an
+    unpermitted capability is absent rather than refused. Temperature 0,
+    bounded output, a short context tail — the model never accumulates
+    unbounded PHI context. Model traffic runs inside your BAA'd cloud
+    account (Bedrock/Vertex) or under a dedicated agreement (Anthropic
+    API). Psychotherapy access for the assistant is a separate,
+    default-off switch.</li>
+  <li><strong>Structural refusals.</strong> The controls above are not
+    policies asking models or people to behave: population tools return
+    counts and cannot enumerate; unsigned drafts have no write path;
+    psychotherapy content has no export path. The refusal is in the shape
+    of the API, not in a prompt.</li>
+  <li><strong>Monitoring.</strong> The hash-chained audit trail is
+    re-verified on every Control panel load; model analytics watch drift
+    and fire alerts that never auto-close;
+    <span class="mono">access.denied</span> patterns surface probing. What
+    the platform cannot see — your risk analysis, your BAAs, your workforce
+    training — is enumerated in
+    <a href="/docs/compliance">Compliance &amp; responsibility</a>.</li>
+</ul>
+
+<h2>11. Extensibility — frontier models, your models, your features</h2>
+<p>PHI AI is a <strong>highly configurable platform, not a fixed product</strong>.
+Three extension surfaces are part of the core design, and all three are
+managed — registered, enabled, activated, monitored and audited — through
+the same Control panel, never through code changes.</p>
+
+<h3>11.1 Every major frontier model integrates</h3>
+<p>The assistant's foundation-model slot is <strong>provider-pluggable</strong>.
+Out of the box it speaks three provider surfaces — the Anthropic API,
+<strong>AWS Bedrock</strong> and <strong>GCP Vertex AI</strong> — which
+between them serve the major frontier families: Claude, Gemini, Llama,
+Mistral and the rest of each catalog. Beyond the built-in providers, the
+model registry accepts <strong>any model behind an HTTPS endpoint</strong>,
+so a frontier model reached through your own gateway, an open-weights model
+you host, or a fine-tune you trained all join the same way. Which model is
+live is a Control panel decision: register it, enable it, activate it into
+the slot — every step audited — and deactivating falls back to the built-in
+default rather than to silence. The demo on this site happens to run Claude
+Sonnet 5; a deployment runs whatever you choose, <strong>under your own BAA
+with your AI provider</strong>.</p>
+
+<h3>11.2 Bring, build and extend your own models</h3>
+<p>The registry is not only for language models. Nine model kinds are
+first-class — foundation, retrieval, deterministic, predictive, classifier,
+imaging, optimization, mapper, custom — and fifteen capability slots wire
+them into the product: assistant, claims, prior-auth, coding, ROI, no-show,
+segmentation, ambient (the self-hosted speech listener), triage,
+scheduling, ingest, imaging, trials, measures, and other.
+Activate your own denial-risk model into the claims slot and the Claims
+&amp; billing screen scores with <em>your</em> model; the built-in core
+steps aside but stays registered, one click from reinstatement. Every model
+in a slot automatically inherits the platform's management surface:
+lifecycle audit events, live performance metrics, drift recognition against
+the population it serves, and alerting that never closes itself.</p>
+
+
+<h3>11.3 Step by step: bringing your own model — with audit and tracking on</h3>
+<p>The lifecycle below is the only path a model takes into production, and
+it is the same for a frontier LLM behind a gateway, a vendor's risk model,
+and a classifier your own team trained. Following it is what
+<em>enables</em> PHI AI's required audit and tracking — a model that skips
+a step simply never serves a slot, so there is no untracked way in.</p>
+<ol>
+  <li><strong>Prepare the endpoint.</strong> Expose the model behind
+    <strong>HTTPS</strong> (the registry rejects non-TLS endpoints at
+    registration). Decide its capability slot up front — the slot
+    determines which feature it powers and which metrics will watch it.
+    Your endpoint must be stateless with respect to PHI: it receives the
+    request, returns the inference, and retains nothing — the same posture
+    your BAA with the model's provider must cover.</li>
+  <li><strong>Register it</strong> (Control panel → Model registry →
+    Register): name, kind (foundation · retrieval · deterministic ·
+    predictive · classifier · imaging · optimization · mapper · custom),
+    slot, provider, model ID, version, endpoint URL, and its stated
+    purpose. Registration writes
+    <span class="mono">system.model_registered</span> to the audit trail
+    naming the model — tracking begins before the model serves anything.</li>
+  <li><strong>Enable it</strong> (<span class="mono">system.model_enabled</span>).
+    Enabled means eligible, not live: the slot still runs its current
+    model. This is the state for validation against your own data.</li>
+  <li><strong>Activate it into its slot</strong>
+    (<span class="mono">system.model_activated</span>, recording the slot).
+    The feature screen switches to your model immediately, and its AI-core
+    banner says so: <em>"activated from the registry."</em> The built-in
+    core steps aside but stays registered — deactivating falls back to it,
+    never to silence. The assistant slot additionally requires kind
+    <span class="mono">foundation</span> and a model ID, because that slot
+    is live-wired to the provider API.</li>
+  <li><strong>Verify the tracking took hold.</strong> Open the feature's
+    screen, then the audit trail: every invocation of the slot now writes
+    <span class="mono">model.inference</span> naming <em>your</em> model and
+    version (e.g. <span class="mono">claims/pending-queue n=25
+    model=YourRiskModel v2.1</span>). Assistant questions carry
+    <span class="mono">model=</span> on their
+    <span class="mono">ai.query</span> events the same way. This is not
+    optional instrumentation you add — the platform writes it at every
+    slot invocation, whichever model is active.</li>
+  <li><strong>Confirm monitoring attached.</strong> Model analytics &amp;
+    monitoring computes the slot's performance metrics and
+    population-stability drift for whatever model serves it — your model
+    inherits the watch the moment it activates. Alerts fire on the same
+    thresholds, are acknowledged under a name
+    (<span class="mono">model.alert_acknowledged</span>), and never close
+    themselves.</li>
+  <li><strong>Operate it like everything else.</strong> Disable
+    (<span class="mono">system.model_disabled</span>) degrades the feature
+    honestly with the switch named on its screen; delete
+    (<span class="mono">system.model_removed</span>) requires the model be
+    non-builtin and falls the slot back first. Every state change is an
+    audited event under the operator's name — the model's whole life on the
+    platform is reconstructible from the trail.</li>
+</ol>
+<p><strong>What PHI AI requires of you, summarized:</strong> a TLS endpoint,
+a truthful registration (kind, version, purpose), your own BAA with the
+model's provider for any PHI-reading slot, and validation before
+activation. <strong>What PHI AI guarantees in return:</strong> lifecycle
+audit, per-invocation <span class="mono">model.inference</span> attribution,
+live metrics, drift recognition, and alerting — for every model, built-in
+or brought, with no additional integration work.</p>
+
+<h3>11.4 Extend the features themselves</h3>
+<p>Features are built <em>against slots and permissions, not against
+models or roles</em> — which is what makes them extensible. A new feature
+declares the capability slot it draws from and the permission that gates
+its screen; the registry, monitoring, refusal and audit machinery attach to
+it for free. The same pattern governs what already ships: when a System
+Administrator disables a slot's model, that feature degrades honestly on
+its own screen with the switch named, and everything else keeps working.
+Roles compose the same way — screens check permissions, never role names,
+so your organization's identity system can define new roles without a code
+change anywhere.</p>
+
+<h3>11.5 The configuration surface, in one place</h3>
+<p>Everything below is live-configurable from the Control panel and the
+Source &amp; target EMRs screen, and every change writes
+<span class="mono">config.changed</span> (or its own
+<span class="mono">system.*</span> event) under the operator's name:</p>
+<ul>
+  <li><strong>Models:</strong> the active model per capability slot, the
+    assistant's live-call and retrieval switches, the answer-length bound,
+    and the full registry lifecycle.</li>
+  <li><strong>Integrations:</strong> source and target EMR vendor, base
+    URLs, client IDs, the bulk group, and each outbound feed's
+    paused/healthy state — with independent SSO per side.</li>
+  <li><strong>Deployment shape:</strong> the small/large storage profile,
+    retention periods with per-resource-type overrides, and the per-cloud
+    infrastructure variables (all set at deploy time, all documented in
+    Setup &amp; deployment).</li>
+  <li><strong>Identity:</strong> proxy SSO, SMART launch, or local
+    accounts — with roles asserted by your identity source of truth.</li>
+</ul>
+</div>
+
+{% if identity.can('integration:view') %}
+<section class="doc-part" id="part-architecture">
+{% include "docs_part_architecture.html" %}
+</section>
+{% endif %}
+
+<section class="doc-part" id="part-dataflows">
+{% include "docs_part_dataflows.html" %}
+</section>
+
+{% if identity.can('integration:view') %}
+<section class="doc-part" id="part-api">
+{% include "docs_part_api.html" %}
+</section>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

@@ -1,0 +1,6 @@
+<div class="doc-toc">
+  {% for key, label in docs_sections.items() %}
+  <a class="{{ 'on' if key == docs_active }}" href="/docs/{{ key }}">{{ label }}</a>
+  {% endfor %}
+</div>
+{# Made by Ryan Gomez & Co. Inc. #}

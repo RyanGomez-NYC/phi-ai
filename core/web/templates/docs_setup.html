@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}Setup & deployment — φ(ai){% endblock %}
+{% block body %}
+{% include "docs_nav.html" %}
+<div class="doc-prose">
+<h1>Setup &amp; deployment — bring your own infrastructure</h1>
+<p class="lede">The complete, step-by-step implementation guide for the PHI AI
+Platform: what you must bring, what the platform provisions, and every step
+from an empty cloud account to a verified deployment. This page is the
+primary implementation resource; the repository's
+<span class="mono">runbooks/</span> directory carries the per-cloud command
+detail, and each step below names its runbook.</p>
+
+<h2>1. What you are deploying</h2>
+<p>The platform is a set of cooperating components, each of which maps to
+infrastructure <strong>you bring</strong>:</p>
+<ul>
+  <li><strong>The application</strong> — Python/FastAPI services (web
+    interface, ingestion, bulk scheduler, delivery), shipped as containers
+    and run with Docker Compose on compute you provide.</li>
+  <li><strong>Object storage</strong> — three versioned buckets/containers:
+    the record store, the audit store, and a physically separate
+    psychotherapy store. Every object is envelope-encrypted before it lands.</li>
+  <li><strong>A KMS</strong> — organization-managed keys that wrap each object's
+    data key. Key material never leaves your key service; key use is logged
+    by your cloud.</li>
+  <li><strong>PostgreSQL</strong> — the queryable index (no clinical content,
+    by design), local accounts when enabled, prompt history, platform
+    state, the retrieval index, telemetry, and the OMOP analytics layer.</li>
+  <li><strong>Identity</strong> — your reverse proxy / identity provider, or
+    the platform's optional local accounts, or SMART-on-FHIR launch from the
+    EMR.</li>
+  <li><strong>A model provider</strong> — the Anthropic API, AWS Bedrock, or
+    GCP Vertex for the assistant's foundation model, plus any models you
+    bring through the Control panel's registry.</li>
+  <li><strong>The ambient listener (optional)</strong> — a self-hosted
+    speech-recognition model (faster-whisper, MIT) for ambient
+    documentation, running on your compute so audio never leaves the
+    account; registered and governed through the model registry's
+    <span class="mono">ambient</span> slot.</li>
+  <li><strong>An EMR connection</strong> — a backend app registered with your
+    vendor (Epic, Oracle Health, athenahealth, eClinicalWorks, MEDITECH,
+    NextGen).</li>
+</ul>
+
+<h2>2. Bring your own infrastructure — the matrix</h2>
+<p>All three clouds have a complete Terraform stack under
+<span class="mono">deploy/aws</span>, <span class="mono">deploy/gcp</span> and
+<span class="mono">deploy/azure</span>. Terraform provisions the starred
+rows; every row can instead be satisfied by infrastructure you already
+run, provided it meets the stated requirement.</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Component</th><th>AWS</th><th>GCP</th><th>Azure</th><th>Hard requirements if you bring your own</th></tr></thead>
+  <tbody>
+    <tr><td>Record / audit / psychotherapy stores *</td><td>S3 ×3</td><td>GCS ×3</td><td>Blob ×3</td>
+      <td>Versioning ON; <strong>no immutability lock</strong> (Object Lock / retention lock is unsupported by design — retention is recorded, not storage-enforced); bucket policy denies non-TLS and TLS &lt; 1.2; separate psychotherapy store with its own access policy.</td></tr>
+    <tr><td>Key management *</td><td>KMS CMK</td><td>Cloud KMS</td><td>Key Vault</td>
+      <td>Organization-managed key(s); the app role holds encrypt/decrypt only; key-use logging enabled.</td></tr>
+    <tr><td>PostgreSQL *</td><td>RDS</td><td>Cloud SQL</td><td>Database for PostgreSQL</td>
+      <td>PostgreSQL 14+; network path from the app host; separate least-privilege roles for ingest, reader, analytics (the per-cloud bootstrap SQL creates them); IAM database auth supported where the cloud offers it.</td></tr>
+    <tr><td>IAM / service identity *</td><td>IAM roles</td><td>Service accounts</td><td>Managed identities</td>
+      <td>Least privilege per component: the web role reads; the ingest role writes store+index; nothing holds key administration. Purpose-of-use rides as a session tag on AWS.</td></tr>
+    <tr><td>Compute</td><td colspan="3">anything running Docker + Docker Compose</td>
+      <td>Outbound TLS to your EMR, storage, KMS, Postgres and model provider; inbound only from your proxy.</td></tr>
+    <tr><td>Identity / TLS termination</td><td colspan="3">your proxy or IdP</td>
+      <td>The app binds localhost by default and trusts a proxy-established identity — or enable local accounts, or SMART launch. Never expose the app port directly.</td></tr>
+    <tr><td>Model provider</td><td>Bedrock or Anthropic API</td><td>Vertex or Anthropic API</td><td>Anthropic API</td>
+      <td>A BAA-covered path for PHI-reading configurations. Bedrock/Vertex keep model traffic inside the account you already hold a BAA for; the direct Anthropic API requires its own agreement.</td></tr>
+    <tr><td>BYO models (any kind)</td><td colspan="3">your inference endpoints</td>
+      <td>HTTPS only (the registry rejects non-TLS endpoints); registered → enabled → activated through the audited Control panel lifecycle.</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>3. Choose your deployment size — before you ingest anything</h2>
+<p>The platform ships two deployment shapes, selected with a single
+setting, and the choice is core to the design: a small-to-medium
+deployment and a large deployment are <strong>not the same system with
+different instance sizes</strong> — they use different storage layouts.
+Set it in <span class="mono">.env</span> before first ingest:</p>
+<ul>
+  <li><span class="mono">PHI_AI_PROFILE=small</span> — the default, and
+    correct for small-to-medium deployments (a clinic, a practice group, a
+    single hospital): <strong>one encrypted object per resource</strong>,
+    per-resource integrity digests, per-resource disposal, and a simple
+    unpartitioned index (<span class="mono">core/db/schema.sql</span>).
+    Right up to roughly 200–500&nbsp;million stored resources.</li>
+  <li><span class="mono">PHI_AI_PROFILE=large</span> — the scalable shape
+    for large deployments (a health system or large
+    implementation requiring terabyte–petabyte scale AI): <strong>NDJSON bundles per (patient, resource
+    type)</strong> — roughly 500× fewer storage objects — with the index
+    LIST-partitioned on resource type
+    (<span class="mono">core/db/schema_partitioned.sql</span>). At
+    20&nbsp;billion resources this is the difference between 20&nbsp;billion
+    objects with a 7.3&nbsp;TB index and 40&nbsp;million objects with a
+    15&nbsp;GB index.</li>
+</ul>
+<p><strong>The number that decides is object count, not terabytes.</strong>
+100&nbsp;TB of imaging can be on <span class="mono">small</span>; 20&nbsp;TB of
+discrete 5&nbsp;KB FHIR resources belongs on <span class="mono">large</span>.
+Estimate how many resources you will store — and for DICOM, count
+<em>instances</em>, not studies (the platform stores one object per SOP
+instance so a viewer can fetch a single slice). Sizing table for the
+index, one row ≈ 400 bytes:</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Stored resources</th><th>Index size</th><th>Database</th><th>Profile</th></tr></thead>
+  <tbody>
+    <tr><td>1 million</td><td>~0.4 GB</td><td class="mono">db.t4g.micro</td><td class="mono">small</td></tr>
+    <tr><td>100 million</td><td>~40 GB</td><td class="mono">db.m6g.large, 200 GB</td><td class="mono">small</td></tr>
+    <tr><td>500 million</td><td>~200 GB</td><td class="mono">db.m6g.xlarge</td><td>the crossover — decide deliberately</td></tr>
+    <tr><td>1 billion+</td><td>~400 GB+</td><td>sized per <span class="mono">docs/SCALING.md</span></td><td class="mono">large</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<p>What <span class="mono">large</span> costs, stated plainly: integrity
+and disposal move from per-resource to per-bundle (disposing one resource
+rewrites its bundle), and it assumes the source system is retired —
+against a live, appending EMR, <span class="mono">small</span> is correct
+at any size. <strong>The profile is a deployment shape, not a tuning
+knob</strong>: it determines the object keys, so changing it on a
+populated store migrates nothing — new resources land in the new layout
+while existing ones stay put. Choose before ingesting.</p>
+<p>The infrastructure sizing follows the same split. Terraform ships
+sized variable files —
+<span class="mono">terraform.tfvars.free-tier.example</span> for a
+small/dev stack and
+<span class="mono">terraform.tfvars.large-deployment.example</span>
+(roughly 50&nbsp;TB and above) — covering the database class, cold-tier
+lifecycle transitions (only worthwhile when objects are mostly above the
+128&nbsp;KB per-object billing floor, which bundling helps clear), and
+CloudTrail data-event scope. Operations were built to survive the large
+shape: audit verification is checkpointed so routine runs read only what
+is new, and storage↔index reconciliation streams as a merge join so
+memory tracks discrepancies, not store size. The full treatment —
+economics, ceilings, and what was rebuilt for scale — is
+<span class="mono">docs/SCALING.md</span>; it is the authoritative
+companion to this section.</p>
+
+<h2>4. Prerequisites — do not start without these</h2>
+<ol>
+  <li><strong>A signed BAA with your cloud provider</strong>, active for the
+    target account, <em>before provisioning anything</em> (AWS: through AWS
+    Artifact). Even development deployments should build this habit.</li>
+  <li><strong>Admin access</strong> to create object storage, KMS keys, IAM
+    roles/service accounts, and Postgres in the target account.</li>
+  <li><strong>Tools</strong>: Terraform ≥ 1.10 (native state locking), your
+    cloud's CLI (AWS CLI v2 / gcloud / az), Python 3.11+, Docker + Docker
+    Compose, OpenSSL, psql. Verify identity first
+    (<span class="mono">aws sts get-caller-identity</span> or equivalent).</li>
+  <li><strong>An EMR developer account</strong>: Epic at fhir.epic.com
+    (Backend Services app), or your vendor's console — each vendor's
+    registration path is a chapter in
+    <span class="mono">docs/EMR_CONNECTORS.md</span>.</li>
+  <li><strong>A retention decision</strong>, confirmed against
+    <span class="mono">docs/COMPLIANCE.md</span> for your state and data
+    types. Retention here is recorded and enforced by workflow, not by a
+    storage lock — read that section before accepting the posture.</li>
+</ol>
+
+<h2>5. Step 1 — provision the infrastructure</h2>
+<p>Follow your cloud's setup runbook — it is the authoritative, command-level
+version of this step: <span class="mono">runbooks/RUNBOOK_AWS_SETUP.md</span>,
+<span class="mono">RUNBOOK_GCP_SETUP.md</span> (or
+<span class="mono">RUNBOOK_GCP_ZERO_TO_ONE.md</span> for a from-nothing
+walkthrough), or <span class="mono">RUNBOOK_AZURE_SETUP.md</span>. The shape
+on every cloud:</p>
+<ol>
+  <li><strong>Bootstrap the Terraform state backend</strong>
+    (<span class="mono">deploy/aws/bootstrap</span> creates the state bucket;
+    copy <span class="mono">backend.hcl.example</span> →
+    <span class="mono">backend.hcl</span> with your account values).</li>
+  <li><strong>Configure variables</strong>: copy
+    <span class="mono">terraform.tfvars.example</span> →
+    <span class="mono">terraform.tfvars</span>. Sized examples match section 3's profiles
+    (<span class="mono">.free-tier.example</span>,
+    <span class="mono">.large-deployment.example</span>). Development stacks
+    may set <span class="mono">require_mfa_to_assume_roles=false</span>;
+    production must not.</li>
+  <li><strong><span class="mono">terraform init -backend-config=backend.hcl
+    &amp;&amp; terraform plan &amp;&amp; terraform apply</span></strong>.
+    Review the plan: confirm every bucket denies non-TLS and that
+    <em>no</em> immutability lock is configured.</li>
+  <li><strong>Capture outputs</strong>:
+    <span class="mono">terraform output env_fragment</span> emits the
+    storage, KMS, IAM and database lines for your
+    <span class="mono">.env</span>.</li>
+</ol>
+<p>What this creates: the three versioned stores, organization-managed KMS keys,
+least-privilege roles (each scoped to only the buckets and keys it needs),
+optional RDS/Cloud SQL, CloudTrail/data-access logging, and a budget guard.</p>
+
+<h2>6. Step 2 — bootstrap the databases</h2>
+<p>Apply the per-cloud bootstrap SQL (each creates the schema plus the
+least-privilege roles; all are re-runnable):</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Concern</th><th>Schema</th><th>Per-cloud bootstrap</th></tr></thead>
+  <tbody>
+    <tr><td>Record index</td><td class="mono">core/db/schema.sql (schema_partitioned.sql under PHI_AI_PROFILE=large — section 3)</td><td class="mono">bootstrap_aws.sql / _gcp / _azure</td></tr>
+    <tr><td>Local accounts (optional)</td><td class="mono">core/db/users_schema.sql</td><td class="mono">users_bootstrap_*.sql</td></tr>
+    <tr><td>Prompt history</td><td class="mono">core/db/prompts_schema.sql</td><td>—</td></tr>
+    <tr><td>Platform state (Control panel config + model registry)</td><td class="mono">core/db/platform_state_schema.sql</td><td>applied lazily by the app</td></tr>
+    <tr><td>Clinical text retrieval</td><td class="mono">core/db/retrieval_schema.sql</td><td class="mono">retrieval_bootstrap_*.sql</td></tr>
+    <tr><td>Assistant telemetry</td><td class="mono">core/db/telemetry_schema.sql</td><td class="mono">telemetry_bootstrap_*.sql</td></tr>
+    <tr><td>OMOP analytics</td><td class="mono">core/db/omop_schema.sql + omop_vocab_schema.sql</td><td class="mono">omop_bootstrap_*.sql · vocabularies per RUNBOOK_OMOP_SETUP.md</td></tr>
+    <tr><td>Imaging index (optional)</td><td class="mono">core/db/imaging_schema.sql</td><td>per RUNBOOK_DICOM_IMAGING.md</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>7. Step 3 — run the guided installer</h2>
+<p><span class="mono">python3 install/installer_chatbot.py</span> asks for
+your cloud, the storage/KMS values from Step 1's outputs, EMR connection
+details and retention settings, and writes <span class="mono">.env</span>
+(mode 600, never committed). Values already present from
+<span class="mono">terraform output env_fragment</span> are preserved, not
+discarded. If your source EMR is not Epic, set
+<span class="mono">PHI_AI_EMR_VENDOR</span> to one of
+<span class="mono">epic · cerner · athenahealth · eclinicalworks · meditech ·
+nextgen</span> — it selects the vendor capability profile and is validated at
+startup, so a typo refuses to start next to its cause.</p>
+
+<h2>8. Step 4 — register with your EMR</h2>
+<ol>
+  <li><strong>Epic (the reference path)</strong>: register a Backend
+    Services app at fhir.epic.com; generate the RSA keypair with
+    <span class="mono">scripts/generate_epic_keypair.sh</span>; host the
+    public half at a JWK Set URL
+    (<span class="mono">deploy/aws/README_EPIC_JWKS.md</span> shows an
+    S3-hosted pattern). <strong>There is no client secret</strong> — auth is
+    a signed JWT client assertion (RFC 7523). Provision the Group FHIR ID
+    for bulk export. Each health system must mark the app ready for production
+    and sign Epic's API subscription agreement; write APIs are enabled
+    per-resource <em>and per-flavor</em>, so enumerate each one.</li>
+  <li><strong>Oracle Health / eClinicalWorks / MEDITECH / NextGen</strong>:
+    same keypair model through their own portals; Oracle requires each
+    resource scope granted explicitly (verify conformance per-resource).
+    NextGen has no bulk export — population ingestion falls back to
+    per-patient reads, and the platform's managers refuse bulk operations
+    against it by design.</li>
+  <li><strong>athenahealth</strong>: OAuth2 client credentials — the one
+    vendor that issues a client secret; store it in
+    <span class="mono">.env</span> only.</li>
+  <li><strong>Verify before first ingest</strong>: the conformance probe
+    (<span class="mono">core/fhir/conformance_probe.py</span>, surfaced on
+    the EMR conformance screen) checks what the vendor actually exposes
+    against what the profile assumes.</li>
+</ol>
+
+<h2>9. Step 5 — install and start</h2>
+<p><span class="mono">./install/install.sh</span> builds and starts the
+containers. It starts only <span class="mono">app</span> and
+<span class="mono">scheduler</span> when
+<span class="mono">PHI_AI_FHIR_GROUP_ID</span> is unset — deliberately, so a
+deployment without a bulk group does not restart-loop the bulk scheduler.</p>
+
+<h2>10. Step 6 — the web interface and identity</h2>
+<p><strong>Governance note: this system is not the source of truth for users
+or roles.</strong> It is designed to be governed by your organization's
+identity source of truth — accounts and role assignments live in your IdP /
+directory, and the platform enforces the identity and roles that source
+asserts. Plan the integration below accordingly; local accounts are the
+fallback for organizations without an IdP, never the preferred design.</p>
+<ol>
+  <li>The web app (<span class="mono">python -m core.web</span> inside the
+    <span class="mono">app</span> container) <strong>binds localhost by
+    default</strong>: in the recommended deployment it does not
+    authenticate — it trusts the identity your reverse proxy establishes
+    (<span class="mono">PHI_AI_WEB_TRUST_PROXY_AUTH</span>). Put your SSO in
+    front; never expose the port directly.</li>
+  <li><strong>Or enable local accounts</strong>
+    (<span class="mono">PHI_AI_WEB_LOCAL_ACCOUNTS</span> +
+    <span class="mono">PHI_AI_WEB_SESSION_SECRET</span> + the users
+    bootstrap SQL; <span class="mono">runbooks/RUNBOOK_LOCAL_USERS.md</span>)
+    for organizations without an IdP — the only mode in which the platform
+    stores a credential.</li>
+  <li><strong>Or SMART-on-FHIR launch</strong> from inside the EMR
+    (<span class="mono">runbooks/RUNBOOK_SMART_LAUNCH.md</span>; issuer
+    allowlist file + <span class="mono">PHI_AI_WEB_SMART_REDIRECT_URI</span>).</li>
+  <li><span class="mono">PHI_AI_WEB_SESSION_SECRET</span> must be set and
+    stable for any real deployment — an ephemeral secret signs everyone out
+    on restart and breaks load-balanced replicas.</li>
+  <li>Development evaluation only:
+    <span class="mono">PHI_AI_WEB_DEV_PERSONAS</span> provides the
+    role-switching personas; it fabricates identity and must never reach
+    production.</li>
+  <li>Roles: grant per the matrix on the Control panel — nine roles
+    including <span class="mono">sysadmin</span> (the only wildcard). The
+    same roles exist as IAM roles so the two layers cannot disagree.</li>
+</ol>
+
+<h2>11. Step 7 — the assistant and your models</h2>
+<ol>
+  <li>Enable with <span class="mono">PHI_AI_ASSISTANT_ENABLED</span>, choose
+    <span class="mono">PHI_AI_ASSISTANT_PROVIDER</span> =
+    <span class="mono">anthropic · bedrock · vertex</span>, and set the
+    provider credential (API key file or cloud IAM). Bedrock/Vertex keep
+    model traffic inside your BAA'd account; the direct Anthropic API needs
+    its own agreement for PHI-reading configurations
+    (<span class="mono">PHI_AI_ASSISTANT_PHI_ACCESS</span>).</li>
+  <li>Psychotherapy content access for the assistant is a separate,
+    default-off switch
+    (<span class="mono">PHI_AI_ASSISTANT_PSYCHOTHERAPY_ACCESS</span>).</li>
+  <li><strong>Bring your own models</strong>: register anything else —
+    predictive, classifier, imaging, optimization, mapper — on the Control
+    panel's registry (HTTPS endpoints only), then enable and activate into
+    its capability slot; every lifecycle step is audited. The retrieval and
+    live-call kill switches live on the same panel.</li>
+  <li>Details: <span class="mono">runbooks/RUNBOOK_AI_ASSISTANT.md</span>
+    and <span class="mono">RUNBOOK_MODEL_GOVERNANCE.md</span>.</li>
+</ol>
+
+<h2>12. Step 8 — first data</h2>
+<ol>
+  <li><strong>Sandbox first.</strong> Run the first ingest cycle against
+    your vendor's non-production FHIR sandbox — or the bundled EMR emulators
+    (<a href="/docs/emulators">Emulators &amp; non-PHI setup</a>) — never a live EMR.</li>
+  <li><strong>Bulk</strong>: with the Group FHIR ID configured, the bulk
+    import manager runs kickoff → poll → NDJSON download →
+    encrypt-store-index; only a clean run advances the watermark.</li>
+  <li><strong>Streaming</strong>: connect ADT/results/remittance feeds per
+    <span class="mono">runbooks/RUNBOOK_EMR_EXCHANGE.md</span>.</li>
+  <li><strong>Synthetic evaluation corpus</strong>:
+    <span class="mono">scripts/generate_corpus.py</span> +
+    <span class="mono">scripts/load_local_corpus.py</span> load a
+    Synthea-generated population for evaluation without any real PHI.</li>
+</ol>
+
+<h2>13. Step 9 — verify before trusting it</h2>
+<ol>
+  <li><strong>Audit chain</strong>:
+    <span class="mono">docker compose exec app python -m core.audit.verify</span>
+    — and the Control panel re-derives the chain on every load.</li>
+  <li><strong>Deletion detectability</strong>: against the sandbox, write a
+    test object, delete it, confirm the surviving prior version and the
+    entry in your cloud's access log (CloudTrail data events / GCS Data
+    Access logs / Azure diagnostics). That is the integrity control — there
+    is no storage lock to demonstrate.</li>
+  <li><strong>TLS end-to-end</strong>: EMR↔app, app↔storage, app↔KMS —
+    confirmed in the Terraform plan's bucket policies before deployment.</li>
+  <li><strong>Permissions</strong>: walk each role against screens it must
+    and must not reach; every refusal should appear in the audit trail as
+    <span class="mono">access.denied</span>.</li>
+  <li><strong>The test suite</strong>: <span class="mono">python -m pytest
+    tests/</span> — 800+ tests, no cloud dependencies required.</li>
+  <li><strong>Full checklist</strong>:
+    <span class="mono">runbooks/RUNBOOK_VERIFICATION.md</span> and
+    <span class="mono">RUNBOOK_HIM_VERIFICATION.md</span>.</li>
+</ol>
+
+<h2>14. Promoting to production</h2>
+<ul>
+  <li><span class="mono">require_mfa_to_assume_roles=true</span>; real IdP in
+    front; dev personas and dev identity removed; stable session secret from
+    a secrets manager.</li>
+  <li>Production EMR enablement completed with the vendor (Epic:
+    per-health-system subscription agreement and per-flavor write APIs).</li>
+  <li>Monitoring on the audit trail (denial patterns,
+    <span class="mono">system.*</span> overrides, export refusals), backup
+    and restore rehearsed (<span class="mono">RUNBOOK_DATA_RESTORE.md</span>),
+    incident response wired (<span class="mono">RUNBOOK_INCIDENT_RESPONSE.md</span>).</li>
+  <li>Your organizational obligations — risk analysis, BAAs, consent
+    capture, audit review — are enumerated in
+    <a href="/docs/compliance">Compliance &amp;
+    responsibility</a>; deployment does not discharge them.</li>
+</ul>
+
+<h2>15. The runbook shelf</h2>
+<p>Every operational topic has a runbook in <span class="mono">runbooks/</span>:
+cloud setup (AWS / GCP / GCP-zero-to-one / Azure), install checklist, web UI,
+local users, SMART launch, AI assistant, model governance, analytics, OMOP
+setup, EMR exchange, document ingestion, DICOM imaging, psychotherapy notes,
+retention rules, disposition, index maintenance, data restore, HIM
+verification, verification, incident response, and emulators for vendor-free
+integration testing. When this page and a runbook disagree, the runbook is
+newer — file the discrepancy.</p>
+
+<p class="hint">Companions: <a href="/docs/architecture">Architecture</a>
+for what you are wiring together, <a href="/docs/api">API details</a>
+for the vendor auth flows, and <a href="/docs/compliance">Compliance</a>
+for what remains your organization's duty after the install succeeds.</p>
+</div>
+
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

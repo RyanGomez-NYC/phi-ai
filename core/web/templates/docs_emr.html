@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% block title %}EMR connections — φ(ai){% endblock %}
+{% block body %}
+{% include "docs_nav.html" %}
+<div class="doc-prose">
+<h1>EMR connections — API &amp; bulk export, per vendor</h1>
+<p class="lede"><strong>This platform's EMR connectivity was designed
+specifically against each vendor's published documentation.</strong> Every
+seam the integration screens enforce — auth flows, bulk-export limits, write
+surfaces — was taken from the vendor's own developer documentation, and this
+page carries the inline references. Where a capability could not be verified
+on a vendor's public pages, that is stated as recorded uncertainty rather
+than assumed; the full research record lives in the repository's
+<span class="mono">docs/EMR_CONNECTORS.md</span>, which cites the same
+sources.</p>
+
+<h2>1. The standards baseline</h2>
+<p>All six connectors build on the same published standards, referenced
+throughout the vendor chapters below:</p>
+<ul>
+  <li><a href="https://hl7.org/fhir/R4/" rel="noopener">HL7 FHIR R4</a> — the
+    resource model every vendor's certified API exposes.</li>
+  <li><a href="https://hl7.org/fhir/smart-app-launch/backend-services.html" rel="noopener">SMART
+    App Launch: Backend Services</a> — the unattended system-to-system
+    authorization profile, built on
+    <a href="https://www.rfc-editor.org/rfc/rfc7523" rel="noopener">RFC 7523</a>
+    (JWT client assertions).</li>
+  <li><a href="https://hl7.org/fhir/uv/bulkdata/" rel="noopener">FHIR Bulk Data
+    Access IG</a> — the <span class="mono">$export</span> kickoff / status /
+    NDJSON pattern the bulk import manager implements.</li>
+  <li><a href="https://hl7.org/fhir/us/core/" rel="noopener">US Core</a> —
+    the USCDI profile set the certified vendor surfaces target, required by
+    the ONC certification criterion
+    (<a href="https://www.healthit.gov/test-method/standardized-api-patient-and-population-services" rel="noopener">§170.315(g)(10)</a>)
+    that obliges certified EMRs to offer standardized patient and
+    population services.</li>
+</ul>
+
+<h2>2. Epic</h2>
+<p>Primary sources:
+<a href="https://open.epic.com/DeveloperResources" rel="noopener">open.epic.com/DeveloperResources</a>
+and <a href="https://fhir.epic.com" rel="noopener">fhir.epic.com</a>.</p>
+<h3>As a source — API</h3>
+<ul>
+  <li><strong>Federated, not central</strong>: every Epic health system runs its
+    own instance and its own FHIR base URL; production data never transits
+    anything Epic operates. The connector's base URL is per-deployment
+    configuration, and Epic issues <em>separate non-production and
+    production client IDs</em> — the sandbox ID works only against
+    <span class="mono">fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/</span>.</li>
+  <li><strong>Registration</strong>: a Backend Services app at
+    <a href="https://fhir.epic.com" rel="noopener">fhir.epic.com</a>, with the
+    public key hosted at a JWK Set URL — per Epic's JWK Set documentation,
+    static key uploads have not been accepted for new sandbox registrations
+    since August 2025. Each health system separately syncs the client ID to their
+    instance and signs Epic's API subscription agreement before production.</li>
+  <li><strong>Auth</strong> (<a href="https://fhir.epic.com/Documentation?docId=oauth2" rel="noopener">Epic
+    OAuth 2.0 documentation</a>): signed JWT client assertion — RS384,
+    <span class="mono">iss</span>=<span class="mono">sub</span>=client ID,
+    <span class="mono">aud</span>=token endpoint, unique
+    <span class="mono">jti</span>, <span class="mono">exp</span> ≤ 5 minutes.
+    <strong>No client secret exists in this flow</strong>, and the documented
+    token request carries <em>no scope parameter</em> — Epic derives the
+    grant from the app registration. The platform refuses a configured
+    client secret on Epic deployments because it would be inert.</li>
+</ul>
+<h3>As a source — bulk export</h3>
+<p>Reference: <a href="https://fhir.epic.com/Documentation?docId=fhir_bulk_data" rel="noopener">fhir.epic.com
+— Bulk Data documentation</a> (cited again in
+<span class="mono">core/fhir/bulk_client.py</span>'s own docstring):</p>
+<ul>
+  <li><strong>Group-level export only.</strong> Epic's own words: "Epic
+    supports only the Group Export operation. We do not support
+    <span class="mono">_since</span> or other bulk data operations at this
+    time." No system-level export, no incremental mode — every run is a full
+    re-extract of the Group's scope, which is why the import manager treats
+    every run as the whole population and why the watermark rule exists.</li>
+  <li><strong>The Group FHIR ID is not discoverable through any API</strong> —
+    it is provisioned with the health system during registration, which is why it
+    is a configuration field on Source &amp; target EMRs.</li>
+  <li><strong>Rate-limited to once per 24 hours per group and client ID</strong>
+    by default — the exact refusal the bulk import manager enforces before a
+    kickoff ever reaches the vendor.</li>
+</ul>
+<h3>As a target — writes</h3>
+<ul>
+  <li>Two-step, signature-gated delivery: stage, human signs, commit —
+    with AI-assisted provenance recorded on the written resource.
+    "DocumentReference create" is <em>several distinct Epic APIs with
+    separate per-health-system enablement</em> (per the
+    <a href="https://fhir.epic.com" rel="noopener">fhir.epic.com</a> API
+    catalog), so the install enumerates each flavor individually.</li>
+  <li><strong>MedicationRequest is read/search only over FHIR REST</strong> —
+    order-shaped writes exist only as CDS Hooks "unsigned order"
+    suggestions inside Epic's own workflow. The signature queue's blocked
+    metformin draft is this fact enforced, not styling.</li>
+</ul>
+
+<h2>3. Oracle Health (Cerner)</h2>
+<p>Primary sources — the Millennium Platform APIs documentation on
+docs.oracle.com (<span class="mono">fhir.cerner.com</span> now redirects
+there): the
+<a href="https://docs.oracle.com/en/industries/health/millennium-platform-apis/mfrap/r4_overview.html" rel="noopener">FHIR
+R4 API overview</a>, the
+<a href="https://docs.oracle.com/en/industries/health/millennium-platform-apis/fhir-authorization-framework/" rel="noopener">authorization
+framework</a>, and the
+<a href="https://docs.oracle.com/en/industries/health/millennium-platform-apis/mfbda/index.html" rel="noopener">Bulk
+Data Access API</a>.</p>
+<h3>As a source — API</h3>
+<ul>
+  <li><strong>Registration</strong>: system apps through the Oracle Health
+    developer console; the health system's tenant enables them. Registration
+    issues a system account, and JWT auth takes a preregistered JWKS via
+    System Account Management.</li>
+  <li><strong>Auth — two documented modes</strong>: OAuth2 client credentials
+    with the secret in an RFC 2617 Basic header, or a signed JWT client
+    assertion — which the authorization framework calls "the appropriate
+    mode of authentication for Bulk Data Access". The platform uses the JWT
+    mode because population ingestion wants
+    <span class="mono">$export</span>.</li>
+  <li><strong>Every scope must be requested explicitly</strong>
+    (<span class="mono">system/Patient.read system/Observation.read …</span>) —
+    Oracle's documentation is explicit that wildcard scopes are unsupported.
+    This is the sharpest contrast with Epic, whose backend token request
+    takes no scope parameter at all; a missing scope fails at the resource,
+    which is why the platform verifies conformance per-resource.</li>
+  <li><strong>Base URL is tenant-scoped</strong>:
+    <span class="mono">fhir-ehr.cerner.com/r4/{tenant-id}/…</span> — one
+    deployment's base URL can never reach another tenant's data.</li>
+</ul>
+<h3>As a source — bulk export</h3>
+<p>Documented in the
+<a href="https://docs.oracle.com/en/industries/health/millennium-platform-apis/mfbda/index.html" rel="noopener">Bulk
+Data Access API</a>; requires the JWT auth mode; group-level availability is
+tenant configuration — confirmed per tenant before scheduling.</p>
+<h3>As a target — writes</h3>
+<p>Oracle publishes create endpoints for several types (Patient, Condition,
+DocumentReference POST operations are in the
+<a href="https://docs.oracle.com/en/industries/health/millennium-platform-apis/mfrap/r4_overview.html" rel="noopener">R4
+docs</a>). Conditional-create (<span class="mono">If-None-Exist</span>)
+support could not be re-verified on the current public pages — recorded as
+uncertainty, to be confirmed per tenant before designing re-runnable
+delivery around it.</p>
+
+<h2>4. athenahealth</h2>
+<p>Primary source:
+<a href="https://docs.athenahealth.com/" rel="noopener">docs.athenahealth.com</a>
+(FHIR R4 API).</p>
+<ul>
+  <li><strong>As a source — API</strong>: OAuth2 client credentials with a
+    client <strong>secret</strong> — the one profiled vendor whose documented
+    flow is a secret rather than a signed JWT, and the reason the platform's
+    secret-based auth path exists at all (it is refused for every other
+    vendor). Base URLs are practice-scoped; apps are enabled per practice
+    through the athenahealth Marketplace.</li>
+  <li><strong>As a source — bulk export</strong>: supported through the
+    documented FHIR APIs; confirm per practice. Rate limits are tighter than
+    the other targets — plan extract windows accordingly.</li>
+  <li><strong>As a target — writes</strong>: through the combination of
+    proprietary and FHIR APIs documented on
+    <a href="https://docs.athenahealth.com/" rel="noopener">docs.athenahealth.com</a>;
+    confirmed per practice before any delivery is scheduled.</li>
+</ul>
+
+<h2>5. eClinicalWorks</h2>
+<p>Primary source: the
+<a href="https://fhir.eclinicalworks.com/ecwopendev/documentation" rel="noopener">eClinicalWorks
+FHIR developer portal</a> (Cures Act / g(10) APIs).</p>
+<ul>
+  <li><strong>As a source — API</strong>: SMART Backend Services with
+    asymmetric private-key JWT — the portal's own words: "Backend Services
+    uses Asymmetric (Private Key JWT) Authentication", public key registered
+    as a JWKS. Same client-assertion flow as Epic; no client secret.
+    Read APIs cover the USCDI v1–v3 surface; confirm against the practice's
+    CapabilityStatement.</li>
+  <li><strong>As a source — bulk export</strong>: the portal documents
+    backend (single-patient) <em>and</em> bulk (multiple-patient) FHIR
+    APIs. Availability for a specific practice may still require
+    contracting — confirmed before a migration is planned around
+    <span class="mono">$export</span>. Vendor-documented ceiling of
+    <strong>250 calls per minute per base URL</strong> (FHIR, authorize and
+    token endpoints, effective October 2025).</li>
+  <li><strong>As a target — writes</strong>: eCW documents FHIR
+    Create/Update APIs (V12.0.2+: Patient, Encounter, MedicationRequest,
+    Immunization, DocumentReference variants, Coverage, ServiceRequest) but
+    as a <strong>contracted add-on</strong> arranged through
+    <span class="mono">interop@eclinicalworks.com</span> — not a default
+    capability. Until a contract says otherwise, the platform delivers as
+    files for their own migration tooling.</li>
+</ul>
+
+<h2>6. MEDITECH</h2>
+<p>Primary sources: the
+<a href="https://ehr.meditech.com/ehr-solutions/greenfield-workspace-resources" rel="noopener">Greenfield
+Workspace resources page</a> and the API explorer at
+<a href="https://greenfield.meditech.com" rel="noopener">greenfield.meditech.com</a>.
+Much of the technical detail sits behind the portal login, so this chapter is
+explicit about vendor-confirmed versus certification-baseline facts.</p>
+<ul>
+  <li><strong>As a source — API</strong>: registration through the Greenfield
+    Workspace (no self-service public sandbox). Auth is recorded as SMART
+    Backend Services <em>as the ONC g(10) certification baseline</em> — the
+    public pages do not spell out the token request, and the platform's
+    profile says so in its notes rather than pretending confirmation.
+    Verified from the public explorer: operations live under
+    <span class="mono">…/v2/uscore/R4/</span>, and the surface is US Core
+    FHIR R4 for USCDI data — the narrowest published surface of the six,
+    which is why the platform's profile is deliberately the narrowest to
+    match.</li>
+  <li><strong>As a source — bulk export</strong>: verified as documented —
+    "Bulk Data" is a topic in the Greenfield explorer, and MEDITECH appears
+    in the SMART team's
+    <a href="https://github.com/smart-on-fhir/bulk-data-implementations" rel="noopener">registry
+    of bulk-data implementations</a>.</li>
+  <li><strong>As a target — writes</strong>: Greenfield describes the
+    patient-access APIs as view-only; no general FHIR create is publicly
+    documented. The platform delivers as files unless the health system's
+    MEDITECH contacts confirm a write path.</li>
+</ul>
+
+<h2>7. NextGen Healthcare</h2>
+<p>Primary sources:
+<a href="https://www.nextgen.com/api" rel="noopener">nextgen.com/api</a> and
+the <a href="https://www.nextgen.com/api/regulatory-nge" rel="noopener">NextGen
+Enterprise regulatory page</a>; the full developer guides sit behind
+<a href="https://developer.nextgen.com" rel="noopener">developer.nextgen.com</a>
+onboarding.</p>
+<ul>
+  <li><strong>Which product</strong>: this connector targets NextGen
+    <em>Enterprise</em> (base URLs shaped
+    <span class="mono">fhir.nextgen.com/nge/prod/fhir-api-r4/…</span>) — not
+    NextGen Office, a separate small-practice product with a different API
+    and auth model.</li>
+  <li><strong>As a source — API</strong>: registration through the developer
+    portal, enabled per practice. Publicly documented auth is the Patient
+    Access authorization-code flow; <strong>no system/backend flow is
+    publicly documented</strong> — the profile records SMART Backend
+    Services as the g(10) baseline expectation and flags it as requiring
+    confirmation through the portal. Published resources are USCDI/US Core
+    R4; the broader list must be confirmed against the practice's
+    CapabilityStatement.</li>
+  <li><strong>As a source — bulk export: recorded as not available until
+    proven otherwise.</strong> Nothing public documents an Enterprise-level
+    <span class="mono">$export</span>. ONC g(10) obliges the certified stack
+    to offer population services, so it likely exists behind the portal —
+    but this platform records what is verifiable, and the bulk scheduler
+    <em>refuses to run</em> against this profile until the flag is corrected
+    with evidence from the gated docs or a real instance's
+    CapabilityStatement. This is the refusal the export managers surface
+    when NextGen is the target.</li>
+  <li><strong>As a target — writes</strong>: no bulk write surface; any write
+    capability is confirmed per practice before relying on it.</li>
+</ul>
+
+<h2>8. SSO &amp; authentication capabilities, system by system</h2>
+<p>Two different kinds of sign-on meet at this platform, and they must never
+be confused: <strong>system-to-system SSO</strong> — how the platform itself
+authenticates to an EMR to move records — and <strong>user-facing
+SSO</strong> — how a person signs into the platform (your organization's
+IdP, or a SMART launch from inside the EMR). This section covers both, per
+vendor.</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>System</th><th>System-to-system auth</th><th>Credential artifact</th><th>Token lifetime</th><th>Scope model</th><th>User-facing SMART launch</th></tr></thead>
+  <tbody>
+    <tr><td>Epic</td><td>SMART Backend Services — RS384-signed JWT client assertion</td><td>RSA private key; public half at your JWK Set URL — no secret exists</td><td>Access token ≤ 60 min (assertion exp ≤ 5 min, single-use jti)</td><td><span class="mono">system/*.read</span> honored; write scopes enabled per-resource <em>and per-flavor</em>, per health system</td><td>Yes — EHR launch and standalone; the platform accepts Epic as a launch issuer on the allowlist</td></tr>
+    <tr><td>Oracle Health</td><td>SMART Backend Services — JWT assertion (documented path for bulk); client-credentials-with-secret also documented</td><td>RSA private key (JWT mode) or client secret (basic mode)</td><td>Short-lived bearer token</td><td><strong>Explicit scopes only</strong> — every <span class="mono">system/&lt;Resource&gt;.read</span> requested by name; wildcards unsupported</td><td>Yes — SMART on FHIR launch supported</td></tr>
+    <tr><td>athenahealth</td><td>OAuth2 client credentials</td><td>Client ID + client secret — the one profiled vendor whose flow is a secret</td><td>Short-lived bearer token</td><td>Scoped per API registration</td><td>Yes — SMART launch per its g(10) surface</td></tr>
+    <tr><td>eClinicalWorks</td><td>SMART Backend Services — JWT assertion, same asymmetric model as Epic</td><td>RSA private key; no secret</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
+    <tr><td>MEDITECH</td><td>SMART Backend Services (g(10) baseline; token request flagged for portal confirmation)</td><td>RSA private key</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
+    <tr><td>NextGen</td><td>SMART Backend Services (g(10) baseline; backend flow flagged for portal confirmation)</td><td>RSA private key</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
+    <tr><td><em>The platform itself (users)</em></td><td>Reverse-proxy SSO (your IdP: SAML/OIDC in front), SMART launch from the EMR, or local accounts as the fallback</td><td>Held by your IdP — the platform stores a credential only in local-accounts mode</td><td>Your IdP's session policy; platform sessions are signed cookies</td><td>Roles asserted by your identity source of truth; the platform enforces, it does not own them</td><td>—</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>9. Two systems, two SSO configurations — source and target</h2>
+<p><strong>Topology first — and the default is one system.</strong> By
+default the source system <em>is</em> the target system: the platform ingests
+from your EMR and signed documentation writes back to that same chart of
+legal record. This is fully configurable, in three shapes:</p>
+<ul>
+  <li><strong>One system (default):</strong> a single EMR serves both roles.
+    Even here the platform keeps <em>two registrations against the same
+    system</em> — a read/bulk registration for ingestion and a write-scoped
+    registration for delivery — because directional least privilege does not
+    stop mattering when the endpoints coincide.</li>
+  <li><strong>Split source and target:</strong> read from one system, deliver
+    to another — the migration and exchange configuration the rest of this
+    section details.</li>
+  <li><strong>Many to many:</strong> the platform supports multiple sources
+    and multiple targets at once — a health system ingesting from several
+    EMRs and delivering to several destinations. Every connection carries
+    its own vendor profile, its own registration and keypair, and its own
+    token lifecycle; nothing below is shared across connections. The
+    demonstration shows a single source-target pair for clarity.</li>
+</ul>
+<p>A deployment usually talks to <strong>two</strong> EMRs at once: the
+source it ingests from and the target it delivers to. These are managed as
+<strong>two fully independent SSO configurations</strong> — the Source &amp;
+target EMRs screen holds a separate vendor, base URL and client ID for each
+side, and nothing is shared between them:</p>
+<ul>
+  <li><strong>Separate registrations, always.</strong> Source and target are
+    distinct app registrations with distinct client IDs — <em>even when both
+    sides are the same vendor</em> (an Epic-to-Epic migration is still two
+    registrations). The two sides need different scopes, and a registration
+    that can do both jobs is a violation of least privilege waiting for a
+    leaked key.</li>
+  <li><strong>Separate keypairs, separate rotation.</strong> Each
+    registration gets its own RSA keypair and its own JWK Set URL. Rotating
+    the source key cannot interrupt deliveries; rotating the target key
+    cannot stall ingestion. A private key is never reused across
+    registrations, environments, or vendors.</li>
+  <li><strong>Directional least privilege.</strong> The source registration
+    requests read and bulk-export scopes only; the target registration
+    requests exactly the enumerated write scopes the delivery needs
+    (per-resource and per-flavor on Epic) and nothing else. Neither
+    credential can do the other side's job, so a compromise of one is
+    contained by construction.</li>
+  <li><strong>Separate token lifecycles.</strong> Tokens are acquired,
+    cached and expired per system. A source token is never presented to the
+    target, and the assertion's <span class="mono">aud</span> claim binds
+    each token request to its own system's token endpoint — a captured
+    assertion cannot be replayed against the other side.</li>
+  <li><strong>Failure isolation.</strong> A target-side auth outage holds
+    deliveries (accumulating, accounted) without touching ingestion; a
+    source-side outage fails runs visibly while deliveries continue.
+    Refusals and failures name which system's authentication was involved.</li>
+  <li><strong>Mixed vendors are the normal case.</strong> Ingesting from
+    Epic while delivering to Oracle Health means RS384 assertions on one
+    side and explicit per-resource scopes on the other; the vendor profiles
+    apply each system's rules independently, so each side honors its own
+    vendor's seams.</li>
+  <li><strong>User SSO is a third, separate plane.</strong> The IdP that
+    signs your people in shares nothing with either system registration:
+    system-to-system credentials can never mint a human session, and a
+    human session can never authorize a system-to-system call. Three
+    planes, three credential stores, no crossings.</li>
+</ul>
+
+<h2>10. How the platform enforces what the documentation says</h2>
+<ul>
+  <li><strong>Vendor profiles</strong> encode each documented seam — auth
+    flow, scope behavior, bulk capability, write surface — and the
+    schedulers, export managers and auth code select behavior from the
+    profile, never from optimism.</li>
+  <li><strong>The conformance probe</strong> checks a live instance's
+    CapabilityStatement against the profile before first ingest, because a
+    tenant's actual surface can be narrower than the vendor's documentation.</li>
+  <li><strong>Refusals carry the vendor's seam</strong>: a second Epic bulk
+    kickoff inside 24 hours, an Oracle request missing an explicit scope, a
+    bulk export aimed at NextGen — each refuses with the documented limit
+    named, and the refusal is recorded.</li>
+  <li><strong>Uncertainty is recorded as uncertainty.</strong> Where a
+    vendor's public pages do not confirm a capability (MEDITECH's token
+    request, NextGen's backend flow, Oracle's conditional create), the
+    profile says so — and the platform behaves conservatively until a real
+    instance or gated documentation proves otherwise.</li>
+</ul>
+<p class="hint">Vendor documentation moves. When this page and a vendor's
+current published documentation disagree, the vendor's page wins — file the
+discrepancy against <span class="mono">docs/EMR_CONNECTORS.md</span>, which
+records the review dates behind every claim above. Companions:
+<a href="/docs/api">API details</a> for the token
+flows as implemented, and
+<a href="/docs/setup">Setup &amp; deployment</a>
+for the registration steps in sequence.</p>
+</div>
+
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

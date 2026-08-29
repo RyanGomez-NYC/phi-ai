@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Compliance & responsibility — φ(ai){% endblock %}
+{% block body %}
+{% include "docs_nav.html" %}
+<div class="doc-prose">
+<h1>Compliance &amp; the managing organization's responsibility</h1>
+<p class="lede">The regulatory frame the AI-native platform is built around —
+rule by rule, with what the software enforces mapped against what remains,
+explicitly and unavoidably, the responsibility of the organization that runs
+it. Because the platform was designed for AI use of protected data from the
+first line, the compliance posture is architecture, not policy wrapped around
+an add-on. This page is design-intent documentation, not legal advice.</p>
+
+<h2>1. The division of responsibility</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Regime</th><th>The platform enforces</th><th>The organization must still do</th></tr></thead>
+  <tbody>
+    <tr><td>HIPAA Privacy Rule</td><td>Minimum necessary via enumerated permissions; purpose-of-use on every event; psychotherapy-note separation; disclosure logging</td><td>Policies, training, authorizations, patient-rights processes, the accounting workflow</td></tr>
+    <tr><td>HIPAA Security Rule</td><td>Technical safeguards: envelope encryption, unique identities, attribution, integrity-protected audit</td><td>Risk analysis, administrative &amp; physical safeguards, workforce management, contingency planning</td></tr>
+    <tr><td>42 CFR Part 2</td><td>SUD classification at ingestion; withholding; redisclosure refusal without Part 2 consent</td><td>Part 2-program determination; compliant consents; the redisclosure notice on disclosures</td></tr>
+    <tr><td>Breach rules</td><td>The forensic record; anomaly-visible refusal events</td><td>Detection response, the four-factor risk assessment, notification within the deadlines</td></tr>
+    <tr><td>HITECH Act</td><td>The encryption safe harbor: every object envelope-encrypted under the deployment's KMS, so lost media or misdirected objects are not "unsecured PHI" — entire categories of reportable breach removed by design. Expanded accounting of disclosures via per-record disclosure events; breach forensics from the hash-chained trail; minimum-necessary tightening enforced structurally; a minimized business-associate chain (your cloud, your AI provider, no ASR vendor at all)</td><td>Breach notification procedures and the 60-day clocks (HHS, individuals, media over 500); the documented breach risk assessment; BA agreements themselves; penalty-tier exposure management</td></tr>
+    <tr><td>Info blocking (Cures Act)</td><td>Auditable, rule-based grounds for every withholding</td><td>Evaluating each withholding against the exceptions</td></tr>
+    <tr><td>State law</td><td>Jurisdiction-aware consent gating, deny by default, stricter-rule-wins</td><td>Configuring the jurisdictions; tracking law changes with counsel</td></tr>
+    <tr><td>FDA (CDS)</td><td>No directives; reviewable basis via citations; human signature on everything entering the record</td><td>Keeping deployment inside the non-device criteria</td></tr>
+    <tr><td>AI governance</td><td>The signature and counts-never-lists rules; the grounding contract; registry &amp; preflight; the fairness screen</td><td>Local validation, drift monitoring, oversight with authority over the switches</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<h2>2. HIPAA, in depth</h2>
+<p><strong>Minimum necessary (§164.502(b))</strong> is implemented at four
+layers: role design (the deliberate asymmetries — the Administrator cannot
+open a chart, the Auditor holds only audit access, Psychotherapy grants
+nothing else); tool design (the AI cannot read past the person it serves);
+sweep confirmation; and withholding with counts — visible minimization, not
+silent truncation. <strong>Psychotherapy notes (§164.501,
+§164.508(a)(2))</strong> are a physically separate store, reachable by one
+role, excluded from every export, individually audited on every access.
+<strong>Accounting of disclosures (§164.528)</strong>: the trail stores date,
+actor/recipient, object reference and purpose for every disclosure-class
+event, and the ROI service stores included and withheld counts on each
+production — the raw material for the six-year accounting; the workflow is
+the organization's. <strong>Security Rule (§164.312)</strong>: access
+control, audit controls, integrity and transmission security are the
+platform's technical safeguards; §164.308's administrative safeguards and
+§164.310's physical safeguards are organizational. <strong>Breach
+(Subpart D)</strong>: individuals within 60 days of discovery, HHS within 60
+days (or annually under 500), media over 500 in a jurisdiction; the trail
+answers "what did this account touch, when, under what claimed purpose" in
+one query.</p>
+
+<h2>3. 42 CFR Part 2</h2>
+<p>Records of federally assisted SUD programs carry Part 2 handling: withheld
+from ordinary retrieval, and any export whose record set contains Part 2
+content refuses without Part 2-specific consent for that disclosure — the
+refusal recorded as a first-class outcome. The 2024 final rule aligned
+enforcement with HIPAA and permitted TPO redisclosure under a single consent
+in defined cases while keeping SUD counseling notes under a separate consent;
+the platform's separate-store and specific-consent design matches the
+strictest reading, and counsel decides where the newer flexibilities are
+taken.</p>
+
+<h2>4. Information blocking, state law, FDA</h2>
+<ul>
+  <li><strong>Info blocking:</strong> every withholding is rule-based, recorded
+and visible — never an unexplained absence — which is exactly the showing the
+exceptions require; configuring withholdings without a basis is the
+organization's risk to avoid.</li>
+  <li><strong>State law:</strong> where stricter than
+HIPAA, stricter wins: the consent gate is keyed on jurisdiction and modality
+for recording consent. Audio itself is PHI — voice is one of the eighteen
+HIPAA identifiers — so the ambient pipeline treats a recording like any
+record: encrypted under the deployment's keys, role-gated, every
+transcription an audited model interaction, raw-audio retention a governed
+setting, and the speech model self-hosted so no third party ever touches
+the audio (no ASR vendor BAA exists; the drafting model runs under the
+organization's existing AI-provider agreement). The <span class="mono">hiv</span> and
+<span class="mono">reproductive</span> categories exist so condition-specific
+statutes have something to attach to.</li>
+  <li><strong>FDA CDS:</strong> the four
+§520(o)(1)(E) criteria are engineering constraints here — no device signals,
+professional-grade information, recommendations not directives, and an
+independently reviewable basis through citations. Deployment choices can
+forfeit the posture; keeping inside it is an organizational duty.</li>
+</ul>
+
+<h2>5. The managing organization's responsibilities, in full</h2>
+<p><strong>The software is a tool. The organization that deploys it holds the
+legal duties.</strong> It cannot discharge these on the organization's
+behalf:</p>
+<ol>
+  <li><strong>Security risk analysis and management</strong> — documented,
+    periodic, covering the whole environment; deploying this software is an
+    input, never a substitute.</li>
+  <li><strong>Business associate agreements</strong> — platform operator,
+    model provider (with no-training terms verified), hosting, and every
+    downstream recipient.</li>
+  <li><strong>Access governance — in your identity source of truth, not
+    here.</strong> This system is not the source of truth for users or
+    roles: accounts, role assignments, recertification and deprovisioning
+    are governed by the organization's identity provider and directory, and
+    the platform enforces what that source asserts — who holds which role, reviewed on a
+    schedule, removed the day it is no longer needed. The Control panel's
+    matrix is the review artifact.</li>
+  <li><strong>Audit review</strong> — the chain preserves the record; someone
+    must read it, with escalation for denial patterns,
+    <span class="mono">system.*</span> overrides and export refusals.</li>
+  <li><strong>Consent capture</strong> — Part 2 consents, psychotherapy
+    authorizations, recording consent, data-sharing agreements. The platform
+    evaluates consent state; it cannot create it.</li>
+  <li><strong>Clinical accountability</strong> — every signed note is the
+    signer's; AI drafting moves no responsibility off the licensed
+    professional.</li>
+  <li><strong>Incident response and breach notification</strong> — the trail
+    is evidence; the program is the organization's.</li>
+  <li><strong>Patient rights operations</strong> — access, amendment,
+    restriction, accounting, on the organization's timelines.</li>
+  <li><strong>Retention and disposition</strong> — the schedules the retention
+    screen enforces, set with counsel; disposition is a recorded human
+    decision.</li>
+  <li><strong>AI oversight</strong> — validation against local data before
+    clinical use, drift and subgroup monitoring, and an oversight structure
+    with authority to pull the switches the Control panel deliberately
+    provides.</li>
+</ol>
+
+<h2>6. The auditor's shortcut</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Ask</th><th>Where the evidence is</th></tr></thead>
+  <tbody>
+    <tr><td>"Show me who can see what."</td><td>Control panel → Users &amp; roles (live matrix)</td></tr>
+    <tr><td>"Show me every access to this record."</td><td>Audit screen filtered to the reference; disclosure events carry actor and purpose</td></tr>
+    <tr><td>"Prove the log hasn't been altered."</td><td>Control panel and audit screen — full chain verification, forks distinguished from tampering</td></tr>
+    <tr><td>"Show me a refusal working."</td><td>The export history's refused run; any <span class="mono">access.denied</span>; the streaming gap</td></tr>
+    <tr><td>"Show me what the AI read to answer that."</td><td>The question's audit event and the reads between it and the next, plus the answer's citations</td></tr>
+    <tr><td>"Show me psychotherapy separation."</td><td>The separate store and policy; export exclusions; per-access psychotherapy events</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<p class="hint">Nothing on this page is legal advice; it documents design
+intent so counsel and compliance officers can perform their own assessment
+against their own facts.</p>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

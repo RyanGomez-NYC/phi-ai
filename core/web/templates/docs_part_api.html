@@ -1,0 +1,191 @@
+<div class="doc-prose">
+<h1>API details</h1>
+<p class="lede">Every programmatic surface of the AI-native platform: the
+conventions they share, the retrieval tools the assistant calls, the model API
+behind it, the EMR-facing integration APIs, and vendor authentication. These
+APIs were designed for AI as the consumer — audit-before-data, role-scoped
+tool schemas, structured refusals — not adapted to it afterward.</p>
+
+<h2>1. Conventions</h2>
+<ul>
+  <li><strong>Audit before data.</strong> Every surface writes its audit event
+    before returning data; a crashed request leaves its intent on the
+    trail.</li>
+  <li><strong>Refusals are data.</strong> A consent, rate-limit or
+    write-surface refusal returns a structured outcome with the rule named —
+    a legitimate result, not an exception.</li>
+  <li><strong>State changes are POST + CSRF</strong>, enforced globally as an
+    application dependency, never per-route.</li>
+  <li><strong>Purpose travels</strong> — on every event, and as an IAM session
+    tag in the cloud permission layer.</li>
+</ul>
+
+<h2>2. The assistant's tools</h2>
+<p>The model reaches data only through these tools; a role lacking a
+permission does not get a degraded tool — the tool is absent from the schema.
+Each tool audits before returning. The enumerable list lives in
+<span class="mono">core/assistant/tools.py</span>:</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Tool</th><th>Requires</th><th>Returns / withholds</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">find_patients</td><td class="mono">identity:search</td>
+      <td>Name/identifier match; demographics only.</td></tr>
+    <tr><td class="mono">list_patient_records / read_record</td><td class="mono">patient:read</td>
+      <td>A patient's record index and one record's content; sensitive-category
+      withholding stated.</td></tr>
+    <tr><td class="mono">grounded_patient_evidence</td><td class="mono">patient:read</td>
+      <td>Value-set-grounded evidence extraction with citations.</td></tr>
+    <tr><td class="mono">list_open_record / read_open_record</td><td class="mono">patient:read + launch context</td>
+      <td>The SMART-launched chart in context.</td></tr>
+    <tr><td class="mono">platform_population / count_patients_with_condition /
+      count_patients_by_facility / list_facilities</td><td class="mono">analytics:query</td>
+      <td>Counts, never lists — counts-never-lists, enforced at the API layer.</td></tr>
+    <tr><td class="mono">platform_holdings / retention_outlook /
+      audit_chain_status / deployment_configuration</td><td class="mono">report:read / audit:read / admin:config</td>
+      <td>Platform operations answers, each behind the same permission as its
+      screen.</td></tr>
+    <tr><td class="mono">search_documentation / read_documentation /
+      list_documentation</td><td>—</td>
+      <td>The platform's own documentation corpus; no PHI.</td></tr>
+    <tr><td class="mono">research search tools</td><td class="mono">research:search</td>
+      <td>Cross-record clinical text search, Researcher role only, under the
+      research purpose-of-use code.</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<h2>3. The model API</h2>
+<p>Provider-pluggable (Anthropic API, AWS Bedrock or GCP Vertex), configured
+per deployment; credentials live server-side and never in a page.</p>
+<h3>3.1 Request anatomy</h3>
+<p>Each turn sends: the system contract (the retrieval rules, the citation
+format, the refusal rules, the role's identity and purpose), a short
+conversation tail, the role's tool schemas, and the user's question:</p>
+<pre class="mono" style="background:var(--wash-2); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:11.5px; overflow-x:auto">POST [provider messages endpoint]
+[server-side credential — an API key file or cloud IAM, never in a page]
+
+{"model": "[the activated assistant model]",
+ "max_tokens": [assistant_max_tokens — Control panel],
+ "temperature": 0,
+ "system": "[the retrieval contract]",
+ "tools": [ ...role-scoped tool schemas only... ],
+ "messages": [ ...conversation tail..., {"role": "user", "content": "..."} ]}</pre>
+<h3>3.2 The tool loop</h3>
+<ol>
+  <li>The model responds with either final text or a
+    <span class="mono">tool_use</span> block naming a tool and its input.</li>
+  <li>The platform validates the tool exists <em>for this role</em>, executes
+    it server-side (audit first, then query, then withholding), and returns a
+    <span class="mono">tool_result</span> block.</li>
+  <li>The loop repeats — typically one to four tool calls — until the model
+    emits final text. The loop is bounded; a runaway loop terminates with the
+    turn's partial work discarded and the query already audited.</li>
+  <li>The final text renders with its citations. Answers are not stored;
+    only the question enters prompt history.</li>
+</ol>
+<h3>3.3 Parameters and failure behavior</h3>
+<ul>
+  <li><span class="mono">temperature 0</span> — deterministic drafting;
+    clinical answers should not vary with the weather.</li>
+  <li>Bounded output and a short context tail — the model never accumulates
+    an unbounded PHI context.</li>
+  <li>Failure ladder: retrieval disabled → structured refusal;
+    live calls off / no credential → deterministic scripted fallback, labeled;
+    API error → the error is stated, the question was already audited,
+    nothing was read.</li>
+</ul>
+
+<h2>4. The application's route surface</h2>
+<p>The platform's own HTTP surface, useful as a map of what exists. Every
+mutation is a POST carrying the session's CSRF token; GETs never mutate.</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Route</th><th>Method</th><th>Requires</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">/assistant · POST /assistant · /assistant/prompts</td><td>GET/POST</td><td class="mono">assistant role access</td></tr>
+    <tr><td class="mono">/patients · /patients/{id}/open · POST /resource</td><td>GET/POST</td><td class="mono">identity:search / patient:read</td></tr>
+    <tr><td class="mono">/cohort</td><td>GET/POST</td><td class="mono">analytics:query</td></tr>
+    <tr><td class="mono">/signature · /signature/{draft_id}</td><td>GET/POST</td><td class="mono">patient:read (sign: licensed roles)</td></tr>
+    <tr><td class="mono">/roi · /roi/{id} · /roi/{id}/fulfil · /deny · /production</td><td>GET/POST</td><td class="mono">roi:manage</td></tr>
+    <tr><td class="mono">/documents · POST /documents · /document/source</td><td>GET/POST</td><td class="mono">patient:read (+ ingest perms)</td></tr>
+    <tr><td class="mono">/integration/bulk · /streaming · /export · /streamexport · /emrconfig</td><td>GET</td><td class="mono">integration:view (config: admin:config)</td></tr>
+    <tr><td class="mono">POST /integration/bulk/run · /integration/export/run</td><td>POST</td><td class="mono">admin:config</td></tr>
+    <tr><td class="mono">/system/control + POST switch/model/config/feed/hold</td><td>GET/POST</td><td class="mono">system:admin</td></tr>
+    <tr><td class="mono">/audit · /api/audit/verify</td><td>GET</td><td class="mono">audit:read</td></tr>
+    <tr><td class="mono">/retention · /reports · /overview · /preflight · /consent</td><td>GET</td><td>per-screen permission</td></tr>
+    <tr><td class="mono">/smart/launch · /smart/callback · /smart/patient/{id}</td><td>GET</td><td>SMART launch context</td></tr>
+    <tr><td class="mono">/docs/{section}</td><td>GET</td><td>per-section (this page's parts follow the same rule)</td></tr>
+    <tr><td class="mono">/healthz · /api/stats</td><td>GET</td><td>none / report:read</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<h2>5. Ingestion APIs</h2>
+<p><strong>FHIR Bulk Data Export</strong>
+(<span class="mono">core/fhir/bulk_client.py</span>): kickoff
+(<span class="mono">GET [base]/Group/[id]/$export</span> with
+<span class="mono">Prefer: respond-async</span> → 202 + status URL), polling
+(202 + <span class="mono">X-Progress</span> → 200 + manifest), NDJSON
+download, then encrypt-store-index with reference normalization and
+sensitivity classification at the door. Only a clean run advances the
+watermark. Vendor seams enforced: Epic's one-run-per-24h group export with no
+incremental mode; NextGen's absence of bulk entirely.
+<strong>Streaming intake</strong>: three inbound feeds — ADT
+(admissions/discharges/transfers), ORU (results as they finalize) and X12 835
+(payment remittance) — each partitioned with acknowledged checkpoints. The
+protocol: each partition tracks <span class="mono">checkpoint_offset</span>
+(last event fully processed) and <span class="mono">latest_offset</span>
+(newest event seen); processing advances the checkpoint only after the event
+is durably stored. A gap — offsets seen but unacknowledged, as after a broker
+restart — is surfaced on the Streaming data screen with the exact offset
+range, and is <em>never interpolated</em>: an interpolated gap is a silent
+data-integrity failure wearing a healthy pipeline's clothes.</p>
+
+<h2>6. Export and delivery APIs</h2>
+<p><strong>Bulk delivery</strong> (<span class="mono">core/fhir/bulk_export</span>,
+<span class="mono">delivery/</span>): scope → consent &amp; redisclosure gate
+(psychotherapy never; Part 2 refuses without consent; sensitive categories
+excluded with counts) → package → deliver on the destination's write surface →
+complete / failed / refused, all recorded.
+<strong>ROI production</strong>: one filtered set, two artifacts — the FHIR
+Bundle and the Bates-numbered PDF — with included and withheld counts stored
+on the request. <strong>Write-back</strong>: only signed drafts acquire a
+write path (on Epic, a DocumentReference create attributed to the signer);
+the write-surface assertion refuses resource/interaction pairs the vendor does
+not expose. <strong>Outbound feeds</strong>: acknowledged sequences; held =
+queued and accounted; paused = governance, accumulating, never leaking.</p>
+
+<h2>7. Vendor authentication</h2>
+<p class="hint">Per-vendor detail with inline citations to each vendor's
+published documentation lives in <a href="/docs/emr">EMR connections</a>.</p>
+<p><strong>Epic — SMART Backend Services:</strong> RS384-signed JWT
+(<span class="mono">iss</span> = <span class="mono">sub</span> = client ID,
+<span class="mono">aud</span> = token endpoint, exp ≤ 5 min, single-use
+<span class="mono">jti</span>) exchanged for a short-lived token with system
+scopes; per-health-system enablement is per-resource <em>and per-flavor</em>, so
+the install runbook enumerates each write API individually.
+<strong>Oracle Health:</strong> system account with explicit per-resource
+scopes (wildcards unsupported) — a missing scope fails at the resource, so
+conformance is verified per-resource; the JWT assertion mode is the
+documented path for bulk. <strong>eClinicalWorks:</strong> the same
+asymmetric private-key JWT assertion as Epic — no client secret.
+<strong>athenahealth:</strong> OAuth2 client credentials with a client
+secret — the one profiled vendor whose documented flow is a secret.
+<strong>MEDITECH / NextGen:</strong> SMART Backend Services recorded as the
+ONC g(10) certification baseline, flagged for portal confirmation; NextGen
+exposes no documented bulk export and no bulk write surface, and the
+platform refuses accordingly rather than degrading.</p>
+
+<h2>8. Error model</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Condition</th><th>Behavior</th><th>On the trail</th></tr></thead>
+  <tbody>
+    <tr><td>Missing permission</td><td>403 naming the permission</td><td class="mono">access.denied</td></tr>
+    <tr><td>Consent absent</td><td>Structured refusal with the rule named</td><td class="mono">refusal event</td></tr>
+    <tr><td>Vendor rate limit</td><td>Run refused before reaching the vendor</td><td class="mono">bulk.refused</td></tr>
+    <tr><td>No write surface at destination</td><td>Export refused, seam named</td><td class="mono">export.refused</td></tr>
+    <tr><td>Transfer interrupted</td><td>Run failed; watermark holds</td><td>failed run recorded</td></tr>
+    <tr><td>Model API failure</td><td>Error stated; nothing read; fallback labeled</td><td>question already audited</td></tr>
+  </tbody>
+</table></div>
+{# Made by Ryan Gomez & Co. Inc. #}

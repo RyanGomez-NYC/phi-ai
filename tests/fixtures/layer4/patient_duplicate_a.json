@@ -1,0 +1,28 @@
+{
+  "resourceType": "Patient",
+  "id": "syn-patient-dup-a",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "name": [
+    {
+      "given": [
+        "Desiree"
+      ],
+      "family": "Powell"
+    }
+  ],
+  "birthDate": "1990-07-22",
+  "identifier": [
+    {
+      "system": "urn:local:facility-a:mrn",
+      "value": "A-4471"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored -
+# never commit real project IDs, principal emails, or retention decisions
+# for a real deployment into this public repo.
+
+gcp_project = "your-gcp-project-id"
+gcp_region  = "us-central1" # one of the 3 Always Free-eligible regions (us-west1, us-central1, us-east1) - see variables.tf's own description
+environment = "dev"
+
+# name_prefix defaults to "phiai". It feeds the bucket names, the Cloud
+# KMS key ring and crypto key names, the Cloud SQL instance name and the
+# three service account IDs - and on GCP the key ring can NEVER be
+# deleted and the service account emails determine the Postgres role
+# names. Set it here if you want something else, but set it before your
+# first apply.
+# name_prefix = "phiai"
+
+# --- Retention: RECORDED, NOT ENFORCED. This stack provisions no bucket
+# retention policy and no Bucket Lock (see storage.tf), so neither number
+# below prevents an early delete or causes a later one. READ variables.tf's
+# full description before setting these for anything beyond dev ---
+phi_retention_days   = 1     # dev-safe default. MUST be set to your actual state's medical record retention requirement for anything beyond a throwaway dev stack - see docs/COMPLIANCE.md
+audit_retention_days = 1     # dev-safe default. See 45 CFR 164.316(b)(2)(i) - commonly 6 years (2192 days) for audit/documentation retention specifically, independent of your state's clinical-record period
+
+# --- Access ---
+# Your own Google account, so you can impersonate the ingest/restore/auditor
+# service accounts locally for testing - find it with:
+#   echo "user:$(gcloud config get-value account)"
+trusted_principal_members = [
+  # "user:you@example.com",
+]
+
+# --- Cloud KMS ---
+key_rotation_period_seconds            = "7776000s" # 90 days. Set to null to disable rotation entirely (not recommended outside dev)
+key_destroy_scheduled_duration_seconds = 86400       # 24 hours - Google's own default, stated explicitly

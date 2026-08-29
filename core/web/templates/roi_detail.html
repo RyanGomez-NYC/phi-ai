@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}ROI request review — φ(ai){% endblock %}
+{% block body %}
+<p style="margin-bottom:6px"><a href="/roi">&larr; Release of information queue</a></p>
+<h1>ROI request — full review</h1>
+<p class="lede">The complete production preview, assembled for human review
+before anything is released. What follows is what fulfilment will assemble —
+and, just as explicitly, what the scope will exclude. The preview reads no
+clinical content (the index holds none, by design); the disclosure event is
+written by fulfilment itself, before any record is read.</p>
+
+<div class="grid stats" style="margin-top:16px">
+  <div class="card stat"><div class="n" style="font-size:16px">{{ r.patient_reference }}</div>
+    <div class="k">patient reference · requester: {{ r.requester_type }} · purpose: {{ r.purpose_of_use }}</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(candidate_total) }}</div>
+    <div class="k">records in scope for the production</div></div>
+  <div class="card stat"><div class="n {{ 'warn' if excluded_total else 'good' }}">{{ "{:,}".format(excluded_total) }}</div>
+    <div class="k">records outside the requested scope — excluded, and counted</div></div>
+</div>
+
+<p class="hint" style="margin-top:10px">Request <span class="mono">{{ r.request_id }}</span>
+· created {{ r.created_at.strftime('%Y-%m-%d') if r.created_at else '—' }} by
+<span class="mono">{{ r.created_by }}</span> · scope: {{ r.scope_description() }}</p>
+
+<h2>What fulfilment would assemble</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Resource type</th><th style="text-align:right">Count</th></tr></thead>
+  <tbody>
+    {% for rt_name, n in by_type %}
+    <tr><td class="mono">{{ rt_name }}</td><td class="num">{{ "{:,}".format(n) }}</td></tr>
+    {% else %}
+    <tr><td colspan="2" class="empty">No records in scope — fulfilment would produce an empty, documented production.</td></tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+
+{% if excluded_types %}
+<h2>Outside the requested scope</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Resource type</th><th style="text-align:right">Count</th><th>Why excluded</th></tr></thead>
+  <tbody>
+    {% for rt_name, n in excluded_types %}
+    <tr><td class="mono">{{ rt_name }}</td><td class="num v-warn">{{ "{:,}".format(n) }}</td>
+      <td style="font-size:12px; color:var(--mute)">Not among the requested resource types — excluded by the scope filter, recorded in the manifest.</td></tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+
+<div class="callout">
+  <div><strong>What fulfilment actually does.</strong> One filtered set, two
+  stored artifacts that cannot disagree: a FHIR Bundle for downstream systems
+  and a paginated, Bates-numbered PDF production for legal review — with
+  included and withheld counts recorded on the request, integrity verification
+  per record, and the <span class="mono">roi.disclosure</span> audit event
+  written <em>before</em> any record is read. Date-scope filtering happens at
+  production time by decrypting each candidate, because the clinical date
+  lives in the record and deliberately not in the index.</div>
+</div>
+
+{% if r.status == 'open' %}
+<div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; align-items:flex-start">
+  {% if identity.can('roi:export') %}
+  <form method="post" action="/roi/{{ r.request_id }}/fulfil">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Assemble &amp; release the production above</button>
+  </form>
+  {% else %}
+  <span class="hint">Releasing requires <span class="mono">roi:export</span> —
+  creating and releasing are deliberately separate grants.</span>
+  {% endif %}
+  <form method="post" action="/roi/{{ r.request_id }}/deny" style="display:flex; gap:6px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="text" name="reason" placeholder="Reason" required style="width:200px" autocomplete="off">
+    <button type="submit" class="quiet">Deny the request</button>
+  </form>
+</div>
+{% elif r.status == 'fulfilled' %}
+<p class="hint" style="margin-top:18px"><span class="pill ok">released</span>
+{{ r.record_count }} released{% if r.withheld_count %}, {{ r.withheld_count }} withheld{% endif %}
+on {{ r.fulfilled_at.strftime('%Y-%m-%d') if r.fulfilled_at else '' }} by
+<span class="mono">{{ r.fulfilled_by }}</span>.
+{% if r.production_storage_key and identity.can('roi:export') %}
+<a href="/roi/{{ r.request_id }}/production">Download the production (PDF)</a> —
+a separately audited disclosure.{% endif %}</p>
+{% else %}
+<p class="hint" style="margin-top:18px"><span class="pill danger">denied</span>
+{{ r.denied_reason }}</p>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

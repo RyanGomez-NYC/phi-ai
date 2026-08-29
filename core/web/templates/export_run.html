@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Export run detail — φ(ai){% endblock %}
+{% block body %}
+<p style="margin-bottom:6px"><a href="/integration/export">&larr; Bulk export manager</a></p>
+<h1>Export run — full detail</h1>
+<p class="lede">One outbound run, in full: what was asked for, what the gate
+decided, what left, and what was withheld.</p>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n" style="font-size:16px">{{ run.destination }}</div>
+    <div class="k">{{ run.format }} · scope: {{ run.scope }}</div></div>
+  <div class="card stat"><div class="n {{ {'complete':'good','refused':'warn','failed':'warn'}.get(run.status, '') }}">{{ run.status | upper }}</div>
+    <div class="k">started {{ run.started_at }}{{ " · finished " + run.finished_at if run.finished_at else "" }}</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(run.resources) }} / <span class="warn">{{ "{:,}".format(run.withheld) }}</span></div>
+    <div class="k">records delivered / withheld</div></div>
+</div>
+
+<h2>Run narrative</h2>
+<p style="font-size:13.5px; line-height:1.75">{{ run.note or "No notes recorded for this run." }}</p>
+
+{% if run.status == "refused" %}
+<div class="callout warn"><div><strong>This run is a refusal, and that is the
+record.</strong> Nothing left the platform. The reason above is exactly what an
+auditor should find when they ask why this export did not happen.</div></div>
+{% elif run.status == "failed" %}
+<div class="callout warn"><div><strong>Failed, not partial.</strong> The run is
+marked failed in its entirety; nothing downstream treats what did transfer as a
+complete delivery.</div></div>
+{% elif run.withheld %}
+<div class="callout"><div><strong>The withheld count is the gate working.</strong>
+Psychotherapy notes never export; Part 2 content requires its own consent;
+other sensitive categories are excluded per the data-sharing agreement — each
+exclusion counted, never silent.</div></div>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

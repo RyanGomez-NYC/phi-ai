@@ -1,0 +1,102 @@
+{
+  "fixture_set": "layer4-adversarial",
+  "generator": "hand-authored",
+  "generator_version": "n/a",
+  "seed": "n/a",
+  "command_line": "n/a - authored by hand per docs/SPEC.md \u00a77.2 Layer 4; regenerated only by deliberate edit",
+  "calibration_sources": "none - these fixtures test gates, not clinical distributions (SPEC \u00a77.7)",
+  "fixtures": {
+    "allergy_penicillin_refuted.json": {
+      "exercises": "Status-inversion rate: refuted allergy must never serialize as an active allergy",
+      "spec_ref": "SPEC \u00a75.1f, \u00a710"
+    },
+    "condition_mi_entered_in_error.json": {
+      "exercises": "Status-inversion rate: entered-in-error condition presented as active is target-zero",
+      "spec_ref": "SPEC \u00a75.1f, \u00a710"
+    },
+    "condition_asthma_resolved_2019.json": {
+      "exercises": "Temporal weighting: resolved past problem must never outrank the active list",
+      "spec_ref": "SPEC \u00a75.1e"
+    },
+    "condition_asthma_active.json": {
+      "exercises": "Temporal weighting counterpart: same code, currently active",
+      "spec_ref": "SPEC \u00a75.1e"
+    },
+    "condition_hiv_labeled.json": {
+      "exercises": "Sensitive category, meta.security POPULATED variant",
+      "spec_ref": "SPEC \u00a76.1, \u00a77.2"
+    },
+    "condition_hiv_stripped.json": {
+      "exercises": "Sensitive category, meta.security STRIPPED variant - the production condition",
+      "spec_ref": "SPEC \u00a76.1, \u00a77.2"
+    },
+    "condition_sud_part2.json": {
+      "exercises": "Part 2 SUD record; consent-lineage provenance retention",
+      "spec_ref": "SPEC \u00a76.1"
+    },
+    "condition_pregnancy_ab352.json": {
+      "exercises": "AB 352 category with an out-of-state requester: geo-gate refusal",
+      "spec_ref": "SPEC \u00a76.1"
+    },
+    "near_duplicate_patient_a.json": {
+      "exercises": "Cross-patient near-duplicate (same name/DOB, different subject): attribution-gate false negatives",
+      "spec_ref": "SPEC \u00a77.2, \u00a710"
+    },
+    "near_duplicate_patient_b.json": {
+      "exercises": "Cross-patient near-duplicate counterpart",
+      "spec_ref": "SPEC \u00a77.2, \u00a710"
+    },
+    "observation_wrong_encounter.json": {
+      "exercises": "Encounter-reference mismatch: attribution gate, encounter arm",
+      "spec_ref": "SPEC \u00a77.2"
+    },
+    "allergy_no_known.json": {
+      "exercises": "'No known allergy' (SNOMED 716186003) must not collapse with 'not asked'",
+      "spec_ref": "SPEC \u00a77.2"
+    },
+    "allergy_not_asked.json": {
+      "exercises": "'Not asked' (1631000175102): semantically different from no-known-allergy",
+      "spec_ref": "SPEC \u00a77.2"
+    },
+    "medication_codeableconcept.json": {
+      "exercises": "medication[x] as CodeableConcept: consumer must handle both forms",
+      "spec_ref": "SPEC \u00a77.2, \u00a77.3"
+    },
+    "medication_reference.json": {
+      "exercises": "medication[x] as Reference: consumer must handle both forms",
+      "spec_ref": "SPEC \u00a77.2, \u00a77.3"
+    },
+    "condition_missing_must_support.json": {
+      "exercises": "Must-support elements absent: process without error, never render absence as a clinical negative",
+      "spec_ref": "SPEC \u00a77.2, \u00a77.3"
+    },
+    "document_psychotherapy_note_labeled.json": {
+      "exercises": "Psychotherapy note, meta.security POPULATED: serialization-time exclusion",
+      "spec_ref": "SPEC \u00a76.1, \u00a77.2"
+    },
+    "document_psychotherapy_note_stripped.json": {
+      "exercises": "Psychotherapy note, label STRIPPED - the production condition; value-set signal must exclude alone",
+      "spec_ref": "SPEC \u00a76.1, \u00a77.2"
+    },
+    "document_note_embedded_identifiers.json": {
+      "exercises": "Narrative with embedded (synthetic) identifiers: de-identification pass",
+      "spec_ref": "SPEC \u00a77.2"
+    },
+    "condition_multiyear_1998.json": {
+      "exercises": "Multi-year span exceeding any retrieval window: 5.1(g) structured spine keeps it",
+      "spec_ref": "SPEC \u00a77.2"
+    },
+    "condition_unmapped_local_code.json": {
+      "exercises": "Local/proprietary code: 5.13 unmapped-code detection",
+      "spec_ref": "SPEC \u00a75.13, \u00a77.2"
+    },
+    "patient_duplicate_a.json": {
+      "exercises": "Duplicate patient record across facilities: 5.13 HIM worklist, never auto-merged",
+      "spec_ref": "SPEC \u00a75.13, \u00a77.2"
+    },
+    "patient_duplicate_b.json": {
+      "exercises": "Duplicate patient counterpart",
+      "spec_ref": "SPEC \u00a75.13, \u00a77.2"
+    }
+  }
+}

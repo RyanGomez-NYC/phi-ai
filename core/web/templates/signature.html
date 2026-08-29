@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Signature queue — φ(ai){% endblock %}
+{% block body %}
+<h1>Signature queue</h1>
+<p class="lede">Nothing the platform generates enters the legal medical record
+without a human signature event. Drafts stage here; a licensed human signs; the
+signature commits and AI-assisted provenance is written onto the resource. There is
+no auto-commit path, including for content classified low-risk.</p>
+
+<div class="callout warn">
+  <div><strong>Open dependency, handled conservatively.</strong> {{ dependency }}</div>
+</div>
+
+<div class="tablewrap" style="margin-top:22px">
+  <table>
+    <thead><tr><th>Draft</th><th>Target write API</th><th>Interaction</th><th>State</th><th style="text-align:right">Action</th></tr></thead>
+    <tbody>
+      {% for d in drafts %}
+      <tr>
+        <td>
+          <div class="card-title">{{ d.what }}</div>
+          <div class="hint">{{ d.detail }}</div>
+          {% if not d.writable %}<div class="hint" style="color:var(--warn-fg); margin-top:5px">{{ d.blocked_reason }}</div>{% endif %}
+        </td>
+        <td class="mono">{{ d.api }}</td>
+        <td><span class="{{ 'v-warn' if not d.writable else 'v-mute' }}">{{ 'unavailable' if not d.writable else d.interaction }}</span></td>
+        <td>
+          {% if not d.writable %}<span class="v-warn">blocked — no write path</span>
+          {% elif d.signed %}<span class="v-good">signed — committed</span>
+          {% else %}<span class="v-amber">staged, unsigned</span>{% endif %}
+        </td>
+        <td style="text-align:right">
+          {% if d.signed or not d.writable %}
+            <a href="/signature/{{ d.id }}" class="mono" style="font-size:11.5px">review &rarr;</a>
+          {% else %}
+            <a href="/signature/{{ d.id }}"><button type="button">Review &amp; sign &rarr;</button></a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="grid cards">
+  {% for f in facts %}
+  <div class="card">
+    <div class="card-kicker">{{ f.k }}</div>
+    <div class="card-body">{{ f.v }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<details class="fine"><summary>How the unavailable row and signing actually work</summary><p class="disclaimer">The unavailable row is not styling: its refusal text is raised
+by <span class="mono">core/governance/writeback.py</span>'s write-surface assertion
+against Epic's verified R4 interactions. A capability the vendor does not expose is
+shown as unavailable, never silently degraded. Signing here records a
+<span class="mono">signature.committed</span> audit event for this session.</p></details>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

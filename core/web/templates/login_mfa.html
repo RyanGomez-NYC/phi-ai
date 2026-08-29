@@ -1,0 +1,25 @@
+{% extends "login_base.html" %}
+{% block title %}Verification code · φ(ai){% endblock %}
+{% block body %}
+<div class="kicker">Sign in</div>
+<h1>Verification code</h1>
+<p class="lede">Open the authenticator app you enrolled and enter the current six-digit
+code for φ(ai).</p>
+
+{% if error %}<div class="status danger"><strong>Not accepted</strong>{{ error }}</div>{% endif %}
+
+<form method="post" action="/login/mfa">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="field">
+    <label for="code">Six-digit code</label>
+    <input type="text" id="code" name="code" required autocomplete="one-time-code"
+           inputmode="numeric" pattern="[0-9 ]*" maxlength="9" autofocus
+           spellcheck="false">
+  </div>
+  <div style="margin-top:18px"><button type="submit">Verify</button></div>
+</form>
+
+<div class="hint" style="margin-top:18px">Each code works once. If you have lost the
+  device, an administrator can clear the enrolment so you can set up a new one.</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

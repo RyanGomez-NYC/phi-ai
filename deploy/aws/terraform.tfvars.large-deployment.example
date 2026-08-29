@@ -1,0 +1,80 @@
+# ---------------------------------------------------------------------------
+# Sizing profile: LARGE deployment (roughly 50 TB and above).
+#
+# The default tfvars are tuned for a small deployment - free-tier
+# database, no cold-tier transitions - and several of those defaults are
+# actively WRONG at scale rather than merely suboptimal. Copy this over
+# terraform.tfvars and adjust.
+#
+# THE NUMBER THAT DECIDES EVERYTHING IS OBJECT COUNT, NOT BYTES. Nothing
+# here scales with terabytes; it scales with how many objects those
+# terabytes are divided into. 100 TB of DICOM studies is ~1 million
+# objects and trivial. The same 100 TB of 5 KB FHIR resources is ~22
+# billion objects and needs a different design, not a bigger instance.
+# Work out your object count before using any figure below.
+# ---------------------------------------------------------------------------
+
+environment = "prod"
+aws_region  = "us-east-1"
+
+# name_prefix defaults to "phi-ai" and feeds immutable cloud identifiers.
+# Set it before your first apply if you want something else; at this
+# scale, changing it afterwards is a bucket-to-bucket object migration,
+# not a variable edit.
+# name_prefix = "phi-ai"
+
+# --- Cold-tier transitions -------------------------------------------------
+#
+# OFF by default, and that default is correct for a small deployment: S3
+# Standard-IA and Glacier IR bill a 128 KB MINIMUM PER OBJECT, so a 5 KB
+# FHIR resource is billed at 128 KB and transitioning costs MORE than
+# leaving it in Standard.
+#
+# THAT REASONING INVERTS once documents and images dominate the volume,
+# which is what makes a deployment large in the first place. A 1 MB
+# scanned document is far above the 128 KB floor, so the saving is real:
+# at 100 TB it is roughly $2,355/month in Standard against $410 in Glacier
+# Instant Retrieval - about $23,000 a year.
+#
+# Turn this on only if your stored data is mostly objects comfortably
+# ABOVE 128 KB. If it is mostly small FHIR resources, leave it off however
+# large the total.
+enable_lifecycle_transitions = true
+
+# --- Database --------------------------------------------------------------
+#
+# One index row per stored resource, roughly 400 bytes including
+# indexes. Size from OBJECT COUNT:
+#
+#     1 million objects   ->  ~0.4 GB   db.t4g.micro is fine
+#   100 million objects   ->   ~40 GB   db.m6g.large, 200 GB storage
+#   500 million objects   ->  ~200 GB   db.m6g.xlarge, and PARTITION
+#                                       the resource table by resource_type
+#     1 billion+          ->  ~400 GB+  partitioning is mandatory; consider
+#                                       whether an index is the right shape
+#                                       at all
+#
+# The schema ships unpartitioned. Above roughly 500 million rows, add
+# declarative partitioning before ingestion rather than after - converting
+# a populated table is far more disruptive than starting partitioned.
+db_instance_class     = "db.m6g.large"
+db_allocated_storage_gb = 200
+
+# --- Retention -------------------------------------------------------------
+phi_retention_days   = 3653   # 10 years - VERIFY against your state law
+audit_retention_days = 2192   # 6 years - HIPAA 164.316(b)(2)(i)
+
+# --- Teardown --------------------------------------------------------------
+# Leave false in production. With no Object Lock, this is the only thing
+# between `terraform destroy` and the stored data. (It is additionally
+# gated to environment == "dev" on every bucket, so it is inert here
+# regardless - but set it correctly anyway.)
+force_destroy_buckets = false
+
+# --- Audit / CloudTrail ----------------------------------------------------
+#
+# Object-level data events are what make a deletion attributable. They
+# bill per event, so at high object counts this is a real line item -
+# price it against how much you need per-object attribution, and do not
+# switch it off silently to save money.
+cloudtrail_data_events = true

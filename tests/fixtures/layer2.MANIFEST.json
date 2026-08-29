@@ -1,0 +1,13 @@
+{
+  "fixture_set": "layer2-synthea",
+  "generator": "synthea",
+  "generator_version": "v4.0.0",
+  "jar_sha256": "ed43c20ad40ba5c3bc724503a5af032715fe3c491620b766148e7c2361e6ecc1",
+  "seed": "20260821",
+  "command_line": "<repo>/.cache/synthea-with-dependencies-v4.0.0.jar -s 20260821 -cs 20260821 -p 25 --exporter.fhir.use_us_core_ig=true --exporter.baseDirectory <repo>/.cache/synthea-run Massachusetts",
+  "calibration_sources": "Synthea module library - DIRECTIONAL ONLY, no epidemiological claim supported (SPEC \u00a77.2; Walonoski et al. 2018, doi:10.1093/jamia/ocx079)",
+  "generated_at": "2026-08-26T17:01:21.379817+00:00",
+  "bundles": 33,
+  "resources_marked": 33564,
+  "note": "Corpus is NOT committed (reproducible from generator+version+seed per R3); this manifest is the committed record. Regenerate with scripts/generate_corpus.py."
+}

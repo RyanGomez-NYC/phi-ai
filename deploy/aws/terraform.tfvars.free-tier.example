@@ -1,0 +1,56 @@
+# Free-tier-optimized dev deployment.
+#
+# Copy to terraform.tfvars (gitignored) and fill in the values marked
+# REQUIRED below. Every other value here is a real, working default for a
+# single-developer dev stack - not a placeholder to second-guess unless
+# you have a specific reason to change it.
+#
+# This configuration cannot run at exactly $0/month - see the comment
+# above separate_audit_key in variables.tf and docs/COST.md for why. It
+# gets everything ELSE as close to free as AWS allows.
+
+environment = "dev"
+
+# REQUIRED. AWS sends a subscription-confirmation email here after the
+# first apply - you must click it or the budget alert never actually
+# fires.
+budget_alert_email = "you@example.com"
+
+# REQUIRED to connect to anything by hand (assume the restore role, run
+# an ad-hoc query, etc.) rather than only via a running service's own
+# instance role. Use your own IAM user/role ARN - find it with
+# `aws sts get-caller-identity`.
+trusted_principal_arns = ["arn:aws:iam::<account-id>:user/<your-iam-username>"]
+
+# Dev-safe: lets `terraform destroy` actually remove buckets during
+# iteration. Never set this true outside dev.
+force_destroy_buckets = true
+
+# --- Cost controls: dev-optimized ------------------------------------------
+# Each of these trades a real security/observability property for cost
+# savings. Read the full description on each variable in variables.tf
+# before reusing this file as a starting point for anything beyond a
+# personal dev stack holding synthetic data.
+
+separate_audit_key     = false # shares the store KMS key; saves $1-3/mo
+enable_key_rotation    = false # fine for a short-lived dev stack
+cloudtrail_data_events = false # app audit log alone is enough for dev
+
+# --- Postgres index ----------------------------------------------------
+# See the big comment block above `enable_db` in variables.tf first - the
+# RDS free tier is TIME-LIMITED (unlike the flat KMS cost) and starts
+# billing automatically, with no warning, once it ends.
+
+enable_db = true
+
+# REQUIRED to actually connect to the database from your own machine.
+# Find your IP with `curl -s https://checkip.amazonaws.com`. Defaults to
+# empty (no access at all) on purpose - see db_allowed_cidr_blocks in
+# variables.tf.
+db_allowed_cidr_blocks = ["<your-ip>/32"]
+
+# Only needed if connecting directly from a machine outside the VPC (e.g.
+# your own laptop, as opposed to an EC2/ECS instance already inside it).
+# Combined with db_allowed_cidr_blocks above, this is still restricted to
+# your specific IP - not open to the internet.
+db_publicly_accessible = true

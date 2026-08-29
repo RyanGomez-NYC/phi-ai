@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% set active = 'assistant' %}
+{% set fullbleed = true %}
+{% block body %}
+{# Three panes: the thread on the left, the exchange in the middle, and
+   what the answer was built from on the right. A citation should be
+   checkable without scrolling away from the answer that made it.
+
+   Everything here is a plain form. No JavaScript - this interface runs
+   under `script-src 'none'` (core/web/security.py), and the one feature
+   that renders model-generated text into a PHI interface is the last
+   place to spend that. #}
+<div class="workspace">
+
+  <aside class="rail-left">
+    <div>
+      <a class="rail-item on" href="/assistant">Current thread</a>
+      {% if conversation.turns %}
+        <form method="post" action="/assistant">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="page_key" value="assistant">
+          <button type="submit" name="action" value="clear" class="rail-item">New question</button>
+        </form>
+      {% endif %}
+    </div>
+
+    {% if conversation.turns %}
+    <div>
+      <div class="rail-head">In this thread</div>
+      <div class="thread-list">
+        {% for turn in conversation.turns %}
+          <a href="#turn-{{ loop.index }}">
+            <div class="thread-q">{{ turn.question }}</div>
+            <div class="thread-when">{{ turn.at.strftime('%H:%M') }} ·
+              {{ turn.sources | length }} source{{ '' if turn.sources | length == 1 else 's' }}</div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if prompts_enabled and saved_prompts %}
+    <div>
+      <div class="rail-head">Saved prompts</div>
+      <div class="prompt-list">
+        {% for p in saved_prompts %}
+        <div class="prompt-row">
+          <a class="prompt-run" href="/assistant?prefill={{ p.id }}"
+             title="{{ p.prompt }}">{{ p.label or p.prompt }}</a>
+          <form method="post" action="/assistant/prompts">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="prompt_id" value="{{ p.id }}">
+            <input type="hidden" name="prompt_action" value="unsave">
+            <button type="submit" class="prompt-act" title="Remove from saved">★</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if prompts_enabled and recent_prompts %}
+    <div>
+      <div class="rail-head">Prompt history</div>
+      <div class="prompt-list">
+        {% for p in recent_prompts %}
+        <div class="prompt-row">
+          <a class="prompt-run" href="/assistant?prefill={{ p.id }}"
+             title="{{ p.prompt }}">{{ p.prompt }}</a>
+          <form method="post" action="/assistant/prompts">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="prompt_id" value="{{ p.id }}">
+            <input type="hidden" name="prompt_action" value="save">
+            <button type="submit" class="prompt-act" title="Save this prompt">☆</button>
+          </form>
+          <form method="post" action="/assistant/prompts">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="prompt_id" value="{{ p.id }}">
+            <input type="hidden" name="prompt_action" value="delete">
+            <button type="submit" class="prompt-act" title="Remove from history">×</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="rail-foot">Click a prompt to load it into the question box —
+        nothing runs until you press Ask. Saving pins it above; removing deletes
+        the bookmark, never the audit record.</div>
+    </div>
+    {% endif %}
+
+    {# The truth about where this conversation lives, which is not the
+       same as the retention that governs records. It is process memory
+       for the life of the session and is never written down; the audit
+       entry for each question is what persists. #}
+    <div class="rail-foot">
+      This thread is held in memory for your session only — never written to
+      the platform, and gone when the session ends. Every question is recorded
+      in the audit trail.
+    </div>
+  </aside>
+
+  <section class="thread">
+    <div class="thread-head">
+      {% if back %}
+        <p class="lede" style="margin-bottom:var(--space-3)">
+          <a href="{{ back }}" class="back">&larr; Back to {{ back_to }}</a></p>
+      {% endif %}
+      <div class="kicker">Assistant</div>
+      <h1>Ask the platform</h1>
+      <p class="lede">
+        {% if phi_access == 'none' %}
+          Scoped to this deployment's own documentation and configuration — no patient
+          record is in reach. Answers cite the file they came from.
+        {% elif phi_access == 'in_context' %}
+          Scoped to the record you already have open, plus this deployment's own
+          documentation. Answers cite what they came from.
+        {% else %}
+          Scoped to what your own role can open, plus this deployment's own
+          documentation. Answers cite what they came from.
+        {% endif %}
+        It remembers this conversation — follow-up questions work.
+      </p>
+
+      {# The scope notice, computed from the SAME permission checks that
+         build the tool schema (core/assistant/tools.py) - it can never
+         promise more or less than the assistant can actually reach. #}
+      <div class="scope-notice">
+        <div class="scope-kicker">Your access scope —
+          {{ identity.roles | map(attribute='value') | sort | join(', ') }}</div>
+        <div class="scope-body">
+          The assistant's answers are limited by <strong>your</strong> role: it holds
+          only the tools your permissions grant, so it cannot read anything for you
+          that you could not open yourself.
+          {% if phi_access == 'none' %}
+            On this deployment it reaches documentation and configuration only — no
+            patient record is in reach for anyone.
+          {% else %}
+            On this profile it can read the platform's documentation{{ ' and aggregates' if identity.can('report:read') }}{{ '; search patients' if identity.can('identity:search') }}{{ '; read charts, labs and notes (sensitive categories withheld, with counts)' if identity.can('patient:read') }}{{ '; count populations — counts only, never patient lists' if identity.can('analytics:query') }}{{ '; search clinical text across records under the research purpose' if identity.can('research:search') }}.
+            {% set cannots = [] %}
+            {% if not identity.can('patient:read') %}{% set _ = cannots.append('open an individual chart') %}{% endif %}
+            {% if not identity.can('analytics:query') %}{% set _ = cannots.append('run population counts') %}{% endif %}
+            {% if not identity.can('psychotherapy:read') %}{% set _ = cannots.append('touch psychotherapy notes') %}{% endif %}
+            {% if cannots %}
+            <span class="scope-cannot">It cannot {{ cannots | join('; ') }} —
+            questions needing those are refused, and the refusal is recorded.</span>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="ask">
+      {% if phi_access == 'none' %}
+      <div class="status warn">
+        <strong>It cannot see clinical content.</strong>
+        There is no patient's record it can read, and questions about an individual cannot be
+        answered here — use <a href="/patients">patient records</a>, where every read is audited
+        against your username and a stated purpose of use. Records, identifiers and dates of
+        birth pasted below are refused rather than sent.
+      </div>
+      {% elif phi_access == 'in_context' %}
+      <div class="status warn">
+        <strong>It can read the record you already have open — and nothing else.</strong>
+        It cannot search for a patient or open a different one. Anything it reads is recorded in
+        the audit trail as a disclosure, against your name and the purpose of use you stated when
+        you opened the record, and appears in an accounting of disclosures.
+      </div>
+      {% else %}
+      <div class="status danger">
+        <strong>This assistant can read patient records.</strong>
+        Your organisation has enabled record lookup, so it can search the platform and read
+        anything your own role permits. Every record it reads is recorded in the audit trail as a
+        disclosure against your name and the purpose of use you state below. Ask for what you
+        need rather than everything about a patient — the minimum necessary standard applies here
+        as it does anywhere else.
+      </div>
+      {% endif %}
+
+      {% if error %}
+        <div class="status danger"><strong>Could not answer.</strong> {{ error }}</div>
+      {% endif %}
+      {% if note %}
+        <div class="status warn"><strong>Answered without reading any records</strong> — {{ note }}.</div>
+      {% endif %}
+
+      <form method="post" action="/assistant">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="page_key" value="assistant">
+        {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
+        <div class="ask-row">
+          <label for="question" class="sr-only">{{ 'Follow-up' if conversation.turns else 'Question' }}</label>
+          {# autofocus ONLY on an empty conversation. With turns on the page the
+             browser scrolls to the focused element on load, which lands the user
+             past the answer they just asked for. #}
+          <textarea id="question" name="question" rows="5"
+                    {% if not conversation.turns or draft %}autofocus{% endif %}
+                    placeholder="{{ 'Ask a follow-up — it remembers what you just asked.' if conversation.turns else 'Ask in plain language — “why would reconciliation report objects missing from the index?”' }}">{{ draft or '' }}</textarea>
+          <div class="ask-actions">
+            <button type="submit">{{ 'Ask a follow-up' if conversation.turns else 'Ask the platform' }}</button>
+            {% if conversation.turns %}
+              <button type="submit" name="action" value="clear" class="quiet small">Start over</button>
+            {% endif %}
+            <p class="hint">Every question is recorded in the audit trail.</p>
+          </div>
+        </div>
+
+        {% if phi_access == 'lookup' %}
+          {# Required before the assistant may read anything. Same codes and the
+             same audit field as every other clinical read in this interface -
+             free text is refused there and is refused here, because a purpose
+             that is only ever written and never compared is not auditable. #}
+          <div class="field">
+            <label for="purpose_of_use">Purpose of use</label>
+            <select id="purpose_of_use" name="purpose_of_use">
+              <option value="">None — answer from documentation only</option>
+              {% for code, label in purposes %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+            </select>
+            <div class="hint">Recorded against every record the assistant reads for this question.
+              Leave unset and it will answer without opening anything.</div>
+          </div>
+        {% endif %}
+
+      </form>
+
+      {# Starters. Each is its OWN form, deliberately: a submit button
+         carrying `name="question"` inside the ask form would collide with
+         the textarea of the same name, and the empty textarea - being
+         first in the document - is the value that would win. So each chip
+         posts its own question and nothing else. #}
+      {% if not conversation.turns %}
+      {% set starters = [
+        ('Configuration & holdings', 'How is this deployment configured, and what is stored?'),
+        ('Retention due for review', 'What retention periods are configured, and what is due for review?'),
+        ('Audit chain status', 'What does the audit chain verification currently report?'),
+        ('Reconciliation differences', 'Why would reconciliation report objects missing from the index?'),
+      ] %}
+      <div class="starters">
+        {% for label, question in starters %}
+        <form method="post" action="/assistant">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="page_key" value="assistant">
+          <input type="hidden" name="question" value="{{ question }}">
+          <button type="submit">{{ label }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <p class="disclaimer">Answers are generated and may be incomplete — verify against the
+        cited source before relying on it. Requests go to {{ destination }}.</p>
+    </div>
+
+    <div class="transcript">
+      {% for turn in conversation.turns %}
+        <div class="turn" id="turn-{{ loop.index }}">
+          <div class="asked">
+            <span class="who-said">{{ identity.username }}</span>
+            <div class="said">{{ turn.question }}</div>
+          </div>
+          <div class="answered {{ 'refused' if turn.refused }}">
+            <span class="who-said">Platform assistant</span>
+            <div class="said answer">{{ turn.answer }}</div>
+            {% if turn.sources %}
+              <div class="cites">
+                {% for source in turn.sources %}
+                  <span class="tag tag-outline">{{ source.split('/') | last }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">Nothing asked yet. Answers appear here, with their sources beside them.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <aside class="rail-right">
+    <div class="rail-head">Sources in this answer</div>
+    {% set last = conversation.turns | last if conversation.turns else none %}
+    {% if last and last.sources %}
+      {% for source in last.sources %}
+        <div class="card source-card">
+          <div class="card-kicker">
+            {% if source.startswith('runbooks/') %}Runbook
+            {% elif source.startswith('docs/') %}Design note
+            {% elif source.endswith('.py') %}Module
+            {% elif source.startswith('fhir/') or source.startswith('dicom/') %}Stored record
+            {% else %}Source{% endif %}
+          </div>
+          <div class="card-title">{{ source.split('/') | last }}</div>
+          <div class="card-body">{{ source }}</div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="hint" style="margin-top:0">Every answer names what it was built from. The
+        sources for the most recent one are listed here.</p>
+    {% endif %}
+
+    <hr class="hr">
+
+    <div class="rail-head">Scope</div>
+    <dl class="scope">
+      <dt>Can reach</dt>
+      <dd>
+        {% if phi_access == 'none' %}This deployment's runbooks, configuration and totals. No
+          clinical content of any kind.
+        {% elif phi_access == 'in_context' %}The one record you have open, plus this
+          deployment's runbooks, configuration and totals.
+        {% else %}Anything your own role can open, plus this deployment's runbooks,
+          configuration and totals.
+        {% endif %}
+      </dd>
+      <dt>Never</dt>
+      <dd>Psychotherapy notes, at any tier. Anything your account cannot see in this interface.
+        It has no write access of any kind.</dd>
+      <dt>Requests go to</dt>
+      <dd>{{ destination }}</dd>
+      <dt>Recorded</dt>
+      <dd>Every question, against your username. Every record read, as a disclosure.</dd>
+    </dl>
+  </aside>
+
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

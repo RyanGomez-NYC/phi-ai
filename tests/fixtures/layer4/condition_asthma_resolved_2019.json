@@ -1,0 +1,43 @@
+{
+  "resourceType": "Condition",
+  "id": "syn-cond-asthma-old",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "clinicalStatus": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "resolved"
+      }
+    ]
+  },
+  "verificationStatus": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+        "code": "confirmed"
+      }
+    ]
+  },
+  "code": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "code": "J45.909",
+        "display": "Asthma, unspecified"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/syn-anna-1"
+  },
+  "onsetDateTime": "2017-05-01",
+  "abatementDateTime": "2019-08-14"
+}

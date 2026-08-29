@@ -1,0 +1,77 @@
+# Copy to terraform.tfvars and edit. Do not commit terraform.tfvars.
+
+# ---------------------------------------------------------------------------
+# DEV STACK (safe to tear down)
+# ---------------------------------------------------------------------------
+environment = "dev"
+aws_region  = "us-east-1"
+
+# name_prefix defaults to "phi-ai" and feeds immutable cloud identifiers
+# (bucket names, the KMS alias, the RDS identifier, IAM role names). Set
+# it here if you want something else, but set it BEFORE your first apply -
+# no provider can rename any of those in place afterwards.
+# name_prefix = "phi-ai"
+
+# Retention is a declared policy value recorded as object metadata. This
+# stack provisions no Object Lock, so these numbers neither prevent an
+# early delete nor cause a later one. Never use these values for real
+# patient data.
+phi_retention_days   = 1
+audit_retention_days = 1
+
+# Allows `terraform destroy` to empty and delete the buckets. Honored ONLY
+# in dev - with no Object Lock, this flag is the only thing between
+# `terraform destroy` and the store contents.
+force_destroy_buckets = true
+
+# Your own IAM user/role ARN, so you can assume the restore/auditor roles
+# from your laptop. Find it with: aws sts get-caller-identity
+trusted_principal_arns = [
+  # "arn:aws:iam::123456789012:user/your-name",
+]
+
+enable_cloudtrail = true
+
+# REQUIRED whenever monthly_budget_usd > 0 (the default, $5). AWS sends a
+# subscription-confirmation email you must click before alerts actually
+# fire.
+budget_alert_email = "you@example.com"
+
+# ---------------------------------------------------------------------------
+# Postgres index (optional - set enable_db = false to skip entirely; S3
+# storage is unaffected either way). See core/db/schema.sql.
+# ---------------------------------------------------------------------------
+enable_db = true
+
+# REQUIRED to actually connect from your own machine - defaults to empty
+# (no network access at all) on purpose. Find your IP with:
+#   curl -s https://checkip.amazonaws.com
+db_allowed_cidr_blocks = [
+  # "203.0.113.7/32",
+]
+
+# Only needed connecting directly from a laptop rather than a compute
+# resource already inside the VPC. Combined with db_allowed_cidr_blocks
+# above, this is still restricted to your specific IP, not the internet.
+db_publicly_accessible = true
+
+
+# ---------------------------------------------------------------------------
+# PRODUCTION reference (do NOT uncomment casually)
+#
+# Retention here is documentation, not a control. There is no Object Lock
+# behind these numbers - raising one does not make anything harder to
+# delete, it only changes what disposition date gets recorded on each
+# object. Set it from your strictest applicable requirement - confirm
+# against docs/COMPLIANCE.md and your counsel - but understand that
+# enforcing it is an operational responsibility (IAM scoping, monitoring,
+# documented disposition), not something the infrastructure does for you.
+# ---------------------------------------------------------------------------
+# environment            = "prod"
+# name_prefix            = "phi-ai"
+# phi_retention_days     = 3653   # 10 years -- VERIFY against your state law
+# audit_retention_days   = 2192   # 6 years  -- HIPAA 164.316(b)(2)(i)
+# force_destroy_buckets  = false
+# trusted_principal_arns = ["arn:aws:iam::123456789012:role/phi-ai-runner"]
+# db_publicly_accessible = false  # VPC-internal access only in production
+# db_deletion_protection = true

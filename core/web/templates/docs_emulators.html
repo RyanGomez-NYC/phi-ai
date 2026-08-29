@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Emulators & non-PHI setup — φ(ai){% endblock %}
+{% block body %}
+{% include "docs_nav.html" %}
+<div class="doc-prose">
+<h1>Emulators &amp; the non-PHI version of the system</h1>
+<p class="lede"><strong>The EMR emulators were created to test and demonstrate
+this software.</strong> Registering with six vendors takes weeks each, and
+sandboxes are not always obtainable at all (MEDITECH has no self-service
+sandbox). The emulators are synthetic stand-ins for every profiled vendor, so
+the entire integration — auth, bulk export, writes, in-context launch — can be
+exercised and shown end to end without a real EMR and without a single byte of
+PHI. The same machinery is how you run a complete <strong>non-PHI version of
+the platform</strong> for evaluation, demonstration, training and CI.</p>
+
+<h2>1. What they are</h2>
+<p>One server per vendor (<span class="mono">emulators/</span> in the
+repository; <span class="mono">runbooks/RUNBOOK_EMULATORS.md</span> is the
+operational reference). <strong>All data is synthetic</strong> — one set of
+fake patients, imported from a single source
+(<span class="mono">scripts/mock_epic_server.py</span>) rather than copied,
+so there is exactly one synthetic dataset in the repository.</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Vendor emulator</th><th>Port</th><th>Auth it accepts</th><th><span class="mono">$export</span></th><th>Creatable</th></tr></thead>
+  <tbody>
+    <tr><td>Epic</td><td class="mono">9101</td><td>JWT assertion</td><td>yes</td><td class="mono">DocumentReference</td></tr>
+    <tr><td>Oracle Health (Cerner)</td><td class="mono">9102</td><td>JWT assertion <strong>or</strong> Basic secret; explicit scopes required</td><td>yes</td><td class="mono">DocumentReference, Condition, Observation</td></tr>
+    <tr><td>athenahealth</td><td class="mono">9103</td><td><strong>client secret</strong></td><td>yes</td><td class="mono">DocumentReference</td></tr>
+    <tr><td>eClinicalWorks</td><td class="mono">9104</td><td>JWT assertion</td><td>yes</td><td>nothing</td></tr>
+    <tr><td>NextGen</td><td class="mono">9105</td><td>JWT assertion</td><td><strong>no</strong> — refuses with an OperationOutcome</td><td class="mono">DocumentReference</td></tr>
+    <tr><td>MEDITECH</td><td class="mono">9106</td><td>JWT assertion</td><td>yes</td><td>nothing</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>2. Usage</h2>
+<p>Start them all, or one vendor:</p>
+<pre class="mono" style="background:var(--wash-2); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:11.5px; overflow-x:auto">python -m emulators                    # all six (ports 9101–9106)
+python -m emulators --vendor cerner    # one vendor</pre>
+<p>Point the platform at an emulator exactly as at a real EMR — that is the
+point. Set the FHIR base URL to the emulator
+(<span class="mono">http://127.0.0.1:9101/api/FHIR/R4</span> for Epic), select
+the vendor profile, and run the bulk import: kickoff, a genuinely
+asynchronous status poll (the first poll returns
+<span class="mono">202</span>, as every real implementation does), NDJSON
+download, encrypt-store-index. Plain <span class="mono">http</span> is
+accepted <strong>only for loopback</strong> (127.0.0.1, ::1, localhost) — the
+same carve-out RFC 8252 makes — and a remote http issuer is refused
+outright.</p>
+<p><strong>In-context launch, end to end</strong>: open
+<span class="mono">http://127.0.0.1:9101/emulator/launch</span> — a stand-in
+for a clinician viewing a chart — and it sends a SMART EHR launch at the
+platform (<span class="mono">python -m emulators --record-url
+http://127.0.0.1:8080/smart/launch</span>). The launch is honest: the
+id_token is really RSA-signed with a key published at
+<span class="mono">/.well-known/jwks.json</span>, PKCE is enforced, and
+authorization codes are single-use — an emulator handing out unsigned tokens
+would let a client that skips signature verification pass its tests, which is
+precisely the defect worth catching. Register an emulator in the SMART issuer
+allowlist like any EMR, and mark it <span class="mono">record_source:
+true</span> if the deployment ingests from it (the loader matches that key
+literally; a misspelling is silently forward-compatible, so confirm by
+launching, not by re-reading the YAML).</p>
+
+<h2>3. They reproduce the seams, not just the happy path</h2>
+<p>Testing against one generic FHIR server proves very little — integrations
+break on the vendor seams, and each emulator reproduces its vendor's
+honestly, <em>including the unhelpful behaviors</em>:</p>
+<ul>
+  <li><strong>athenahealth rejects a JWT assertion</strong> with
+    <span class="mono">invalid_client</span>, as it would live; a client
+    secret sent to any JWT-only vendor gets the mirror-image refusal.</li>
+  <li><strong>Cerner demands explicit system scopes</strong> at the token
+    endpoint — a scope-less request (Epic's normal shape) or a wildcard gets
+    <span class="mono">invalid_scope</span>, exactly as Oracle Health
+    documents — and it also accepts the Basic-header secret mode.</li>
+  <li><strong>NextGen refuses <span class="mono">$export</span></strong> with
+    an OperationOutcome, not an empty result — "unsupported" must never be
+    mistakable for "no data".</li>
+  <li><strong>Epic advertises create for almost nothing; MEDITECH and
+    eClinicalWorks for nothing at all</strong> — so the delivery capability
+    check has something real to refuse.</li>
+  <li><strong>Only Cerner honors <span class="mono">If-None-Exist</span></strong>;
+    the others return <span class="mono">412</span>, which is what makes
+    duplicate-prevention testable.</li>
+  <li><strong>Pagination is two per page regardless of
+    <span class="mono">_count</span></strong>, so a mishandled
+    <span class="mono">next</span> link fails here, not against a large
+    practice.</li>
+</ul>
+
+<h2>4. What a green run proves — and does not</h2>
+<p>It proves the client handles the shapes these servers produce: the auth
+flows, pagination, the async bulk-export handshake, capability-gated writes,
+conditional create, and in-context launch with a verified id_token — the
+majority of integration defects. <strong>It is not certification.</strong> A
+particular health system's build may behave differently; every vendor profile
+still requires confirmation against the instance's own CapabilityStatement,
+and the emulators never override that.</p>
+
+<h2>5. Setting up the non-PHI version of the system</h2>
+<p>A complete deployment of the real software in which <strong>no real
+person's data exists anywhere</strong> — the configuration for evaluation,
+demonstrations, training and CI, and the configuration this platform's own
+development runs on:</p>
+<ol>
+  <li><strong>Deploy the platform normally</strong> — the full stack from
+    <a href="/docs/setup">Setup &amp; deployment</a>
+    (dev tfvars are fine), or a local
+    <span class="mono">scripts/run_web_dev.sh</span> instance. Nothing about
+    the non-PHI configuration is a different codebase.</li>
+  <li><strong>Generate the synthetic population</strong>:
+    <span class="mono">scripts/generate_corpus.py</span> builds a
+    Synthea-generated corpus — invented people with clinically plausible
+    longitudinal records. Synthea is directionally, not quantitatively,
+    calibrated: it supplies volume and structure, never an epidemiological
+    claim.</li>
+  <li><strong>Load it through the real pipeline</strong> — either directly
+    (<span class="mono">scripts/load_local_corpus.py</span>, which runs
+    reference normalization, sensitivity classification,
+    encrypt-store-index) or the full dress rehearsal: serve the corpus from
+    the Epic emulator and run the bulk import manager against it, so
+    kickoff → poll → NDJSON → store is exercised end to end.</li>
+  <li><strong>Use development personas</strong>
+    (<span class="mono">PHI_AI_WEB_DEV_PERSONAS</span>) for the role-switching
+    walkthrough — fabricated identity, every action still audited against
+    the persona shown, and never enabled in production.</li>
+  <li><strong>Enable the assistant</strong> against the synthetic corpus —
+    the full RAG loop, citations, withholding and refusals all demonstrate
+    with zero PHI exposure.</li>
+  <li><strong>Exercise every seam</strong>: the emulators for all six
+    vendors, the streaming and export managers' seeded specimens, the
+    consent gate, the Part 2 refusal, the audit chain verification.</li>
+  <li><strong>Say what it is.</strong> A non-PHI deployment should label
+    itself synthetic on every page — a fixed banner stating no real patients
+    exist in it — because the honest label is what lets you show the system to
+    anyone without a BAA in sight.</li>
+</ol>
+<p>What the non-PHI version gives you: every feature of the platform — the
+gates, the assistant, the integration managers, the audit trail — behaving
+exactly as production does, demonstrable to any audience, testable in CI,
+with no real patient in the blast radius of a mistake.</p>
+
+<p class="hint">Companions:
+<a href="/docs/setup">Setup &amp; deployment</a> for
+the production path, and
+<a href="/docs/emr">EMR connections</a> for the
+vendor seams the emulators reproduce.</p>
+</div>
+
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

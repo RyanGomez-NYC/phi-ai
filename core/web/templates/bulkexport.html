@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Bulk export manager — φ(ai){% endblock %}
+{% block body %}
+<h1>Bulk export manager</h1>
+<p class="lede">Data leaving the platform in bulk — delivery to the target EMR,
+HIE contributions, registry submissions, and release-of-information
+productions. Every export applies the same gates the interface does: sensitive
+categories are excluded with their counts recorded, Part 2 content refuses
+redisclosure without its own consent, and a partial export is marked failed
+rather than presented as complete.</p>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(last_complete.resources if last_complete else 0) }}</div>
+    <div class="k">records in the last completed export</div></div>
+  <div class="card stat"><div class="n warn">{{ "{:,}".format(last_complete.withheld if last_complete else 0) }}</div>
+    <div class="k">sensitive records withheld from it — counted, never silent</div></div>
+  <div class="card stat"><div class="n">{{ target }}</div>
+    <div class="k">delivery target (from Source &amp; target EMRs)</div></div>
+</div>
+
+{% if identity.can("admin:config") %}
+<form method="post" action="/integration/export/run" style="margin-top:18px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit">Start export to target EMR</button>
+  <span class="hint" style="margin-left:10px">The run excludes the sensitive
+    categories and records the exclusion counts, like the real delivery path.</span>
+</form>
+{% endif %}
+
+<h2>Export history</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Started</th><th>Destination</th><th>Format</th><th>Scope</th>
+    <th>Status</th><th style="text-align:right">Records</th>
+    <th style="text-align:right">Withheld</th><th>Notes</th></tr></thead>
+  <tbody>
+    {% for r in runs %}
+    <tr>
+      <td class="mono nowrap"><a href="/integration/export/{{ r.id }}">{{ r.started_at }} &rarr;</a></td>
+      <td>{{ r.destination }}</td>
+      <td class="mono">{{ r.format }}</td>
+      <td>{{ r.scope }}</td>
+      <td><span class="{{ {'complete':'v-good','failed':'v-warn','refused':'v-warn'}.get(r.status, 'v-mute') }}">{{ r.status }}</span></td>
+      <td class="num">{{ "{:,}".format(r.resources) }}</td>
+      <td class="num {{ 'v-warn' if r.withheld }}">{{ "{:,}".format(r.withheld) }}</td>
+      <td style="font-size:12px; color:var(--mute)">{{ r.note }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+
+<div class="callout warn">
+  <div><strong>The refusal in the history is the feature.</strong> The insurer's
+  ROI production was refused because the record set contained 42 CFR Part 2
+  content and no Part 2-specific consent accompanied the request — an export
+  path that honors the same boundary every screen does, and records the refusal
+  where an auditor will find it.</div>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

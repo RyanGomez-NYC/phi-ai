@@ -1,0 +1,28 @@
+{
+  "resourceType": "DocumentReference",
+  "id": "syn-psynote-stripped",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "status": "current",
+  "docStatus": "final",
+  "type": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "76516-4",
+        "display": "Psychotherapy note"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/syn-kyle-1"
+  },
+  "description": "Same note, meta.security stripped - the production condition."
+}

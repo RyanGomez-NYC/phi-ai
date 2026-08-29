@@ -1,0 +1,44 @@
+{% extends "login_base.html" %}
+{% block title %}Set up your authenticator · φ(ai){% endblock %}
+{% block body %}
+<div class="kicker">Sign in</div>
+<h1>Set up your authenticator</h1>
+<p class="lede">This platform requires a second factor. Add the key below to an
+authenticator app — Google Authenticator, Microsoft Authenticator, 1Password, Aegis,
+anything that does standard TOTP — then enter the code it shows.</p>
+
+{% if error %}<div class="status danger"><strong>Not accepted</strong>{{ error }}</div>{% endif %}
+
+<div class="field">
+  <label>Account</label>
+  <div class="mono">{{ mfa_username }}</div>
+</div>
+<div class="field" style="margin-top:14px">
+  <label>Setup key</label>
+  <div class="mono" style="word-break:break-all;user-select:all">{{ mfa_secret }}</div>
+  <div class="hint">Type this into the app's "enter a setup key" option. There is no QR
+    code on this page: rendering one needs JavaScript or an image generated from a
+    secret, and this interface runs with scripting switched off entirely
+    (<span class="mono">script-src 'none'</span>) because it displays PHI. The key is
+    the same thing a QR code would encode.</div>
+</div>
+<div class="field" style="margin-top:14px">
+  <label>Full setup URI</label>
+  <div class="mono" style="word-break:break-all;user-select:all">{{ mfa_uri }}</div>
+</div>
+
+<form method="post" action="/login/enrol" style="margin-top:18px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="field">
+    <label for="code">Code from the app</label>
+    <input type="text" id="code" name="code" required autocomplete="one-time-code"
+           inputmode="numeric" pattern="[0-9 ]*" maxlength="9" autofocus
+           spellcheck="false">
+  </div>
+  <div style="margin-top:18px"><button type="submit">Confirm and continue</button></div>
+</form>
+
+<div class="hint" style="margin-top:18px">Nothing is saved until a code from your app is
+  accepted, so an abandoned setup cannot lock you out.</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

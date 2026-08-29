@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set active = 'admin' %}
+{% block title %}Accounts · φ(ai){% endblock %}
+{% block body %}
+<div class="kicker">Administration</div>
+<h1>Accounts</h1>
+<p class="lede">Who may sign in to this platform, and what each of them may do. Every
+change here is written to the audit trail against your name — 45 CFR 164.308(a)(3) and
+(a)(4) ask an organisation to authorise access, review it, and end it when somebody
+leaves; this page is where those three happen.</p>
+
+{% if error %}<div class="status danger"><strong>Could not complete</strong>{{ error }}</div>{% endif %}
+{% if notice %}<div class="status"><strong>Done</strong>{{ notice }}</div>{% endif %}
+
+{% if issued %}
+<div class="card" style="border-color:var(--warn,#a86)">
+  <div class="kicker">Shown once</div>
+  <h2 style="margin-top:4px">Temporary password for {{ issued[0] }}</h2>
+  <div class="mono" style="font-size:20px;user-select:all;word-break:break-all">{{ issued[1] }}</div>
+  <div class="hint" style="margin-top:8px">Hand this to {{ issued[0] }} in person or by a
+    channel you trust — never by email, which this system does not use for exactly that
+    reason. It is not stored anywhere in readable form and cannot be shown again. They
+    must choose their own password before they can reach anything else.</div>
+</div>
+{% endif %}
+
+<h2>New account</h2>
+<div class="card">
+  <form method="post" action="/admin/users">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="row">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autocomplete="off"
+               autocapitalize="none" spellcheck="false" placeholder="j.okafor">
+        <div class="hint">Lower case. This is the name in the audit trail, permanently.</div>
+      </div>
+      <div class="field">
+        <label for="display_name">Full name <span class="hint" style="display:inline">optional</span></label>
+        <input type="text" id="display_name" name="display_name" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="email">Email <span class="hint" style="display:inline">optional</span></label>
+        <input type="text" id="email" name="email" autocomplete="off">
+        <div class="hint">A note for you. Nothing is ever sent to it.</div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>Roles</label>
+      <div class="hint">Grant the narrowest set that lets them do their job. An auditor is
+        not a viewer with extras — they read the trail and must not read the records it
+        describes.</div>
+      <div style="margin-top:8px">
+        {% for role in grantable %}
+        <label style="display:inline-flex;gap:6px;margin-right:16px;font-weight:normal">
+          <input type="checkbox" name="roles" value="{{ role.value }}"> {{ role.value }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div style="margin-top:16px"><button type="submit">Create account</button></div>
+  </form>
+</div>
+
+<h2>Accounts</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Username</th><th>Name</th><th>Roles</th><th>Second factor</th><th>Status</th><th>Last sign-in</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td class="mono"><a href="/admin/users/{{ u.username }}">{{ u.username }}</a></td>
+      <td>{{ u.display_name or '—' }}</td>
+      <td>{% for role in u.roles|sort %}<span class="pill">{{ role }}</span> {% else %}<span class="muted">none</span>{% endfor %}</td>
+      <td>{% if u.mfa_enrolled %}<span class="pill ok">enrolled</span>
+          {% elif mfa_policy == 'required' %}<span class="pill warn">pending</span>
+          {% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if u.status == 'active' %}
+            {% if u.locked_until %}<span class="pill warn">locked</span>{% else %}<span class="pill ok">active</span>{% endif %}
+          {% else %}<span class="pill danger">disabled</span>{% endif %}</td>
+      <td class="mono muted nowrap">{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') if u.last_login_at else 'never' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">No accounts yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="hint" style="margin-top:10px">{{ admin_count }} active administrator(s).
+  Accounts are disabled, never deleted: an audit entry from years ago names an account,
+  and a deleted account makes that entry name nobody.</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

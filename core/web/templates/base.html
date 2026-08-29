@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}φ(ai){% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" type="image/svg+xml" href="/static/brand/favicon.svg">
+{# Referrer suppressed: paths carry opaque patient references, and there
+   is no reason for any of them to reach a third party. #}
+<meta name="referrer" content="no-referrer">
+{# Per-session CSRF token. Safe to expose on the page: the protection is
+   that a cross-origin attacker cannot READ this document, and every
+   state-changing form must echo it back. #}
+<meta name="csrf-token" content="{{ csrf_token }}">
+</head>
+<body class="{{ 'embedded' if embedded }}">
+<header class="site-head">
+  <a class="brand" href="/">
+    <img src="/static/brand/wordmark.svg?v=2" alt="φ(ai)" width="294" height="120">
+  </a>
+
+  {% if identity %}
+  {# Horizontal navigation: one hover/touch dropdown per group, from the
+     same role-filtered table as ever. Below 1020px the bar collapses
+     into the single Menu dropdown beside it. #}
+  <nav class="top-nav" aria-label="Primary">
+    {% for group in nav_groups %}
+    {% set group_on = group['items'] | selectattr('key', 'equalto', active) | list %}
+    <div class="nav-menu">
+      <span class="nav-menu-label{{ ' on' if group_on }}" tabindex="0">{{ group.label }}</span>
+      <div class="nav-menu-drop">
+        {% for item in group['items'] %}
+        <a class="{{ 'on' if item.key == active }}" href="{{ item.href }}">{{ item.label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </nav>
+
+  <div class="nav-menu all-menu">
+    <span class="nav-menu-label" tabindex="0">Menu</span>
+    <div class="nav-menu-drop">
+      {% for group in nav_groups %}
+      <div class="nav-menu-group">{{ group.label }}</div>
+      {% for item in group['items'] %}
+      <a class="{{ 'on' if item.key == active }}" href="{{ item.href }}">{{ item.label }}</a>
+      {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="spacer"></div>
+
+  {% if identity %}
+  {% if personas %}
+  <div class="nav-menu persona-menu">
+    <span class="nav-menu-label" tabindex="0">
+      {%- for p in personas if p.current %}<span class="persona-name">{{ p.name }}</span>{% endfor -%}
+      <span class="persona-short">Role</span></span>
+    <div class="nav-menu-drop drop-right">
+      {% for p in personas if p.current %}
+      <div class="nav-menu-group">Signed in — {{ p.label }}</div>
+      {% endfor %}
+      {% for p in personas if not p.current %}
+      <form method="post" action="/persona">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="persona" value="{{ p.username }}">
+        <button type="submit" class="persona">
+          <span class="who-line name-line">{{ p.name }}</span>
+          <span class="role-line">{{ p.label }}</span>
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="nav-menu persona-menu">
+    <span class="nav-menu-label" tabindex="0"><span class="persona-name">{{ identity.username }}</span><span class="persona-short">Role</span></span>
+    <div class="nav-menu-drop drop-right">
+      <div class="nav-menu-group">{{ identity.roles | map(attribute='value') | join(', ') or 'no role assigned' }}</div>
+      {% if local_accounts %}<a href="/account">Your account · sign out</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <details class="docs-menu">
+    <summary><span class="docs-full">Documentation</span><span class="docs-short">Docs</span></summary>
+    <div class="docs-drop">
+      {# The role dictates what the user can see - sections a role
+         cannot use are not offered here, and the route refuses a
+         direct URL just the same. #}
+      <a href="/docs/system">Detailed system documentation</a>
+      <a href="/docs/setup">Implementation &amp; setup guide</a>
+      <a href="/docs/features">Feature documentation</a>
+      {% if identity.can('integration:view') %}<a href="/docs/emr">EMR connections</a>{% endif %}
+      {% if identity.can('admin:config') %}<a href="/docs/emulators">Emulators &amp; non-PHI setup</a>{% endif %}
+      <a href="/docs/compliance">Compliance &amp; responsibility</a>
+      <a href="/docs/attribution">Attribution</a>
+    </div>
+  </details>
+  {% endif %}
+
+  {% if chart_url %}
+    <a class="back-to-emr" href="{{ chart_url }}" target="_top"
+       rel="noopener">&larr; Back to {{ chart_label }}</a>
+  {% endif %}
+
+  <a class="repo-btn" href="https://github.com/RyanGomez-NYC/phi-ai" rel="noopener">Repo</a>
+</header>
+
+  {# Ask-from-anywhere, as a sub-header on every page but the assistant's
+     own. A plain HTML form, not a scripted widget: this interface runs
+     under `script-src 'none'` (see core/web/security.py). #}
+  {% if assistant_enabled and csrf_token and identity.can('assistant:use') and active != 'assistant' %}
+  {# One quiet row. The standing facts (every question audited; reads
+     audited as disclosures) ride in the input's title and are stated in
+     full on the assistant page itself, where the answer lands. #}
+  <div class="askbar">
+    <form method="post" action="/assistant">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="page_key" value="{{ page_key or active or 'dashboard' }}">
+      <input type="hidden" name="back" value="{{ request.url.path }}">
+      {% if assistant_context_patient %}<input type="hidden" name="context_patient" value="{{ assistant_context_patient }}">{% endif %}
+      {% if assistant_context_key %}<input type="hidden" name="context_key" value="{{ assistant_context_key }}">{% endif %}
+      {% if purpose %}<input type="hidden" name="purpose_of_use" value="{{ purpose }}">{% endif %}
+      <label for="ask-question" class="sr-only">Ask the assistant</label>
+      <input type="text" id="ask-question" name="question" autocomplete="off"
+             placeholder="Ask the assistant — it knows which page you're on"
+             title="Every question is recorded in the audit trail.{% if assistant_reads_phi and (assistant_context_patient or assistant_context_key) %} Anything it reads from this record is audited as a disclosure against your name and stated purpose.{% else %} It cannot see any patient's records — identifiers are refused rather than sent.{% endif %}">
+      <button type="submit">Ask</button>
+    </form>
+  </div>
+  {% endif %}
+
+<div class="page">
+  <main class="{{ 'fullbleed' if fullbleed }}">
+  {% block body %}{% endblock %}
+  </main>
+
+  {# One quiet line by default; the full colophon a click away. An EMR
+     footer states facts, it does not deliver a lecture on every page. #}
+  <footer class="colophon">
+    <details class="colophon-fold">
+      <summary class="legal">
+        <span class="mono">{{ identity.username }}</span> &middot; session logged &middot;
+        every AI interaction and record read is on the audit trail &middot;
+        release {{ release or 'dev' }} &middot; <span class="fold-more">about this platform</span>
+      </summary>
+      <div class="cols">
+        <div>
+          <div class="col-label">Signed in</div>
+          <div class="who-name">{{ identity.username }}</div>
+          <div class="who-detail">Roles: {{ identity.roles | map(attribute='value') | join(', ') or 'none assigned' }}.
+            {% if personas %}Development personas active &mdash; no authentication occurred; every action is still audited against the persona shown.{% endif %}
+            {% if local_accounts %}<a href="/account">Your account</a>{% endif %}</div>
+        </div>
+        <div>
+          <div class="col-label hot">On the record</div>
+          <div class="col-body">Every AI interaction, registration decision, preflight
+            verdict, consent evaluation, signature event, action-space override and
+            geo-gate refusal is an appended, hash-chained event with object keys only
+            &mdash; never content. Refusals are shown, not hidden &mdash; a gate that
+            fails closed is the product.</div>
+        </div>
+        <div>
+          <div class="col-label">Standing</div>
+          <div class="col-body">Non-device under the January 2026 FDA CDS guidance: no
+            diagnostic or treatment directive, and every answer's basis is independently
+            reviewable. Complete against the synthetic corpus; not validated against real
+            clinical narrative until a pilot runs. Generated output is cited and
+            reviewable, never a directive, and never committed without a human
+            signature. Not legal advice; not a substitute for a HIPAA security risk
+            assessment.</div>
+        </div>
+        <div>
+          <div class="col-label">Release</div>
+          <div class="col-body mono">{{ release or 'dev' }} &middot; spec adopted 21 Aug 2026</div>
+          <div class="col-body"><a href="https://github.com/RyanGomez-NYC/phi-ai">phi-ai &middot; Apache 2.0</a></div>
+        </div>
+      </div>
+    </details>
+    <div class="footer-credit">
+      <span>Built by <a href="https://ryangomez.nyc" rel="noopener">Ryan Gomez &amp; Co. Inc.</a></span>
+      <a class="repo-btn" href="https://github.com/RyanGomez-NYC/phi-ai" rel="noopener">Repo</a>
+    </div>
+  </footer>
+</div>
+</body>
+</html>
+{# Made by Ryan Gomez & Co. Inc. #}

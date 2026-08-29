@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Streaming data — φ(ai){% endblock %}
+{% block body %}
+<h1>Streaming data</h1>
+<p class="lede">Real-time intake — admissions and discharges, lab results as
+they finalize, and payment remittance — on partitioned feeds with acknowledged
+checkpoints. A gap between checkpoint and latest offset is surfaced with its
+exact range and never interpolated.</p>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(totals.events) }}</div>
+    <div class="k">events today across all partitions</div></div>
+  <div class="card stat"><div class="n">{{ totals.partitions }}</div>
+    <div class="k">partitions under checkpoint discipline</div></div>
+  <div class="card stat"><div class="n {{ 'warn' if totals.gaps else 'good' }}">{{ totals.gaps }}</div>
+    <div class="k">gaps detected — surfaced loudly, never interpolated</div></div>
+</div>
+
+<h2>Partitions</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Feed</th><th style="text-align:right">Partition</th>
+    <th style="text-align:right">Checkpoint</th><th style="text-align:right">Latest</th>
+    <th style="text-align:right">Today</th><th>Last event</th><th>State</th></tr></thead>
+  <tbody>
+    {% for p in parts %}
+    <tr>
+      <td>{{ p.feed }}</td>
+      <td class="num">{{ p.partition_no }}</td>
+      <td class="num mono">{{ "{:,}".format(p.checkpoint_offset) }}</td>
+      <td class="num mono">{{ "{:,}".format(p.latest_offset) }}</td>
+      <td class="num">{{ "{:,}".format(p.events_today) }}</td>
+      <td class="mono" style="color:var(--mute)">{{ p.last_event_at }}</td>
+      <td><span class="{{ 'v-warn' if p.gap_detected else 'v-good' }}">{{ 'GAP' if p.gap_detected else 'healthy' }}</span></td>
+    </tr>
+    {% if p.note %}
+    <tr><td colspan="7" style="color:var(--warn-fg); font-size:12px; background:var(--warn-bg)">{{ p.note }}</td></tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

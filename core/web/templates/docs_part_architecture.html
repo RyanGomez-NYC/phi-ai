@@ -1,0 +1,232 @@
+<div class="doc-prose">
+<h1>Full architecture with data flows</h1>
+<p class="lede">The whole platform on one page — an AI-native architecture,
+designed from first principles for AI use of protected data. Watch the dots:
+each moving dot is data traveling — green flows are records arriving, navy
+flows are people and the AI reading under the platform's rules, orange flows
+are records leaving, and every faint gray thread reports to the audit trail.
+Hover over any box for a plain-English explanation. (The animation is SVG
+markup — this interface executes no script.)</p>
+</div>
+<div class="diagram-frame">
+  <div class="diagram-title">PHI AI — end-to-end architecture (animated)</div>
+  {{ diagrams.arch | safe }}
+</div>
+<p class="diagram-caption">Records flow from the source EMRs through ingestion
+into the encrypted stores, where sensitive categories are fenced off. People
+and the AI assistant read through role gates; drafts return to the EMR only
+with a human signature; exports pass consent gates before anything leaves.
+Every box reports to the audit trail — including the gates' refusals.</p>
+<div class="doc-prose">
+<h2>1. How to read the picture</h2>
+<ul>
+  <li><strong>Nothing skips the gates.</strong> There is no path from the
+    stores to a person, the AI, or another organization that does not pass a
+    role, consent or signature gate.</li>
+  <li><strong>The AI is inside the walls.</strong> PHI RAG reaches data only
+    through the same audited, role-scoped tools people use; the foundation
+    model receives only the excerpts the gates released for the current
+    question.</li>
+  <li><strong>Green in, orange out.</strong> Arrival is about completeness
+    (watermarks, checkpoints, surfaced gaps); departure is about permission
+    (consent gates, exclusion counts, refusals).</li>
+</ul>
+
+
+<h2>2. Component reference</h2>
+<h3>2.1 Source EMRs</h3>
+<ul>
+  <li><strong>Role:</strong> data planes into the AI-native platform — Epic,
+Oracle Health, athenahealth, eClinicalWorks, MEDITECH, NextGen. Records
+arrive from them; signed documentation delivers back to them (the chart of
+legal record, as the law requires — the intelligence, governance and AI-ready
+data model live in this platform).</li>
+  <li><strong>Inputs:</strong> signed write-back
+and configured deliveries.</li>
+  <li><strong>Outputs:</strong> bulk extracts and
+streaming events.</li>
+  <li><strong>Failure mode:</strong> vendor unavailability stalls
+ingestion — runs fail visibly, watermarks hold, and nothing downstream
+silently ages.</li>
+</ul>
+
+<h3>2.2 Bulk import</h3>
+<ul>
+  <li><strong>Role:</strong> population-scale arrival over the FHIR Bulk Data
+API.</li>
+  <li><strong>Honors:</strong> each vendor's real seams — Epic's one-run-per-24h
+group export with no incremental mode, NextGen's absence of bulk entirely.</li>
+  <li><strong>Emits:</strong> <span class="mono">bulk.completed</span> /
+<span class="mono">bulk.refused</span>.</li>
+  <li><strong>Key property:</strong> the
+watermark — the timestamp of the last known-complete extract — advances only
+on a clean run, so a half-arrived population can never masquerade as the
+current state.</li>
+</ul>
+
+<h3>2.3 Streaming intake</h3>
+<ul>
+  <li><strong>Role:</strong> real-time arrival — ADT admissions and discharges,
+ORU lab results, X12 835 remittance — on partitioned feeds.</li>
+  <li><strong>Key property:</strong> per-partition acknowledged checkpoints; a gap
+between checkpoint and latest offset is displayed with its exact range on the
+Streaming data screen.</li>
+  <li><strong>Deliberate non-feature:</strong> gap
+interpolation. A pipeline that guesses what it missed is a data-integrity
+incident that has not been discovered yet.</li>
+</ul>
+
+<h3>2.4 Encrypt · store · index</h3>
+<p><strong>Role:</strong> the only doorway into the stores. Every record —
+bulk or streamed — is (1) encrypted, (2) classified for sensitivity
+(sud_part2, mental_health, reproductive, hiv, genetic, or none; psychotherapy
+content routed to its separate store), (3) normalized (reference resolution,
+terminology mapping), and (4) indexed for retrieval. <strong>Key
+property:</strong> classification happens at the door, not at read time — a
+record's sensitivity is a stored fact, uniform for every downstream gate.</p>
+
+<h3>2.5 The stores</h3>
+<p><strong>Role:</strong> the encrypted holdings — record store, audit store
+and the physically separate psychotherapy store, with the queryable index
+beside them (no clinical content in the index, by design). <strong>Key
+properties:</strong> no direct read path exists; every consumer goes through
+the gates; integrity checks — storage↔index reconciliation and full
+audit-chain verification — run as live operations, not annual rituals.</p>
+
+<h3>2.6 Role · consent · purpose gates</h3>
+<ul>
+  <li><strong>Role:</strong> the enforcement point every read crosses.
+Evaluates: the role's permissions (enumerated, no wildcards except the
+System Administrator's audited <span class="mono">*</span>), the record's
+sensitivity class against the reader's role and the applicable consent, and
+the session's purpose of use.</li>
+  <li><strong>Outputs:</strong> released records, plus
+a withholding count for whatever was held back.</li>
+  <li><strong>Emits:</strong> disclosure-family events on release, <span class="mono">access.denied</span>
+on refusal.</li>
+  <li><strong>Key property:</strong> the gate cannot be bypassed by the
+AI — the assistant's tools call the same gate code the screens do.</li>
+</ul>
+
+<h3>2.7 The assistant (PHI RAG)</h3>
+<ul>
+  <li><strong>Role:</strong> plans retrieval, calls role-scoped tools, assembles
+gate-released excerpts, and produces cited answers.</li>
+  <li><strong>Contract:</strong> answer only from retrieved records; cite every
+source; never assert absence from unretrieved documents; confirm before
+population sweeps; state withholdings; counts, never lists, on the population
+plane.</li>
+  <li><strong>Controls:</strong> the Control panel's retrieval and live-call
+switches (off = the assistant refuses to read at all, and says so).</li>
+  <li><strong>Emits:</strong> a query event per question, plus the tools' own
+events.</li>
+</ul>
+
+<h3>2.8 The foundation model</h3>
+<ul>
+  <li><strong>Role:</strong> the language model the assistant runs on, called
+over the model API (Anthropic API, AWS Bedrock or GCP Vertex) at
+temperature 0 with bounded output.</li>
+  <li><strong>Receives:</strong> the system
+contract, a short conversation tail, the role's tool schemas, and
+gate-released excerpts — never a database connection, never bulk data.</li>
+  <li><strong>Data terms:</strong> excerpts are used to answer the question, not to
+train models, under the organization's agreement with the provider.</li>
+</ul>
+
+<h3>2.9 People &amp; screens</h3>
+<p><strong>Role:</strong> the role model's profiles, each seeing exactly the
+screens its permissions allow (the full matrix is in Part I). <strong>Key
+property:</strong> screens check permissions, not roles — role composition
+changes without touching screens.</p>
+
+<h3>2.10 Human signature</h3>
+<ul>
+  <li><strong>Role:</strong> the signature rule's enforcement point. AI drafts queue;
+a licensed reviewer edits and signs; only the signed artifact acquires a
+write path to the EMR.</li>
+  <li><strong>Emits:</strong> <span class="mono">signature.committed</span>. <strong>Deliberate
+non-feature:</strong> auto-commit, batch signing, or timeout-advance. A
+draft's only exits are a signature or a return.</li>
+</ul>
+
+<h3>2.11 Export managers</h3>
+<ul>
+  <li><strong>Role:</strong> the only doorways out — bulk delivery, ROI
+production and outbound feeds. Apply the consent &amp; redisclosure gate,
+record exclusion counts, honor the destination's write surface, and track
+acknowledgment.</li>
+  <li><strong>Emits:</strong> <span class="mono">export.completed</span>
+/ <span class="mono">export.refused</span>.</li>
+  <li><strong>Key property:</strong> the
+three outcomes (complete / failed / refused) are all first-class and all
+visible in run history.</li>
+</ul>
+
+<h3>2.12 The audit trail</h3>
+<p><strong>Role:</strong> the append-only, hash-chained memory of everything
+above. Every component writes to it; nothing edits it; the Control panel
+re-derives the chain on every load and reports
+<span class="mono">intact</span> or the first broken row. Concurrent writers
+may fork the chain legitimately; verification understands forks and
+distinguishes them from tampering.</p>
+
+<h2>3. The cloud architecture</h2>
+<ul>
+  <li><strong>Envelope encryption.</strong> Every stored object under its own
+    data key, wrapped by a KMS master key that never leaves the key service;
+    key use is itself logged.</li>
+  <li><strong>Isolated stores.</strong> Record objects, audit events and
+    psychotherapy content in separate stores with separate access policies —
+    the psychotherapy separation is infrastructure, not a WHERE clause.</li>
+  <li><strong>Relational index + OMOP.</strong> The index serves the screens;
+    the OMOP layer serves research-grade analytics on the de-identified
+    plane.</li>
+  <li><strong>IAM in depth.</strong> Roles enforced in the application AND as
+    cloud IAM policy, with purpose of use as an IAM session tag — the storage
+    layer can refuse a read whose purpose tag is absent.</li>
+  <li><strong>A no-script web tier.</strong>
+    <span class="mono">script-src 'none'</span>: the screens execute no
+    JavaScript; these diagrams animate as SVG markup.</li>
+  <li><strong>Credential hygiene.</strong> Model-provider and vendor
+    credentials live server-side in restricted stores, never in pages, never
+    in the repository.</li>
+</ul>
+
+<h2>4. Trust boundaries</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Boundary</th><th>Crosses it</th><th>Never crosses it</th></tr></thead>
+  <tbody>
+    <tr><td>Vendor EMR ↔ platform</td>
+      <td>Authenticated extracts, streaming events, signed write-back, configured deliveries</td>
+      <td>Unsigned generated content; credentials beyond the OAuth flows</td></tr>
+    <tr><td>Ingestion ↔ stores</td>
+      <td>Encrypted, classified, indexed records</td>
+      <td>Unclassified or unencrypted records</td></tr>
+    <tr><td>Stores ↔ readers (people or AI)</td>
+      <td>Gate-released records with withholding counts</td>
+      <td>Direct queries; sensitive records for excluded roles; psychotherapy content for anyone but its role</td></tr>
+    <tr><td>Platform ↔ model provider</td>
+      <td>The contract, the question, gate-released excerpts for this question</td>
+      <td>Bulk data; a store connection; credentials; withheld records</td></tr>
+    <tr><td>Platform ↔ external recipients</td>
+      <td>Consent-gated packages with recorded exclusions; acknowledged feed events</td>
+      <td>Psychotherapy notes (ever); Part 2 content without consent; partial exports presented as complete</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<h2>5. Failure modes</h2>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Failure</th><th>What happens</th><th>What never happens</th></tr></thead>
+  <tbody>
+    <tr><td>Bulk download interrupted</td><td>Run failed; watermark holds; retry is a fresh run</td><td>A partial population presented as current</td></tr>
+    <tr><td>Stream broker restart</td><td>Gap surfaced with exact offsets; resume from checkpoint</td><td>Interpolated events; silently skipped offsets</td></tr>
+    <tr><td>Model API down</td><td>Error stated; labeled fallback; questions still audited</td><td>Unlabeled degraded answers; lost audit events</td></tr>
+    <tr><td>Export destination rejecting</td><td>Bulk: failed. Streaming: held with retry, backlog counted</td><td>Dropped or duplicated deliveries</td></tr>
+    <tr><td>Gate cannot evaluate</td><td>Deny, rule named, audited</td><td>Fail-open release</td></tr>
+    <tr><td>Audit chain broken</td><td>Verification reports the first bad row</td><td>Quiet acceptance of a tampered log</td></tr>
+  </tbody>
+</table></div>
+{# Made by Ryan Gomez & Co. Inc. #}

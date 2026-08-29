@@ -1,0 +1,39 @@
+{
+  "resourceType": "Condition",
+  "id": "syn-neardup-a",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "clinicalStatus": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "active"
+      }
+    ]
+  },
+  "code": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "code": "E11.9",
+        "display": "Type 2 diabetes mellitus"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/syn-anna-cadence-1"
+  },
+  "note": [
+    {
+      "text": "Anna Cadence, DOB 1985-02-14."
+    }
+  ],
+  "onsetDateTime": "2024-01-10"
+}

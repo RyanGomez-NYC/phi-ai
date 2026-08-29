@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set active = 'account' %}
+{% block title %}Your account · φ(ai){% endblock %}
+{% block body %}
+<div class="kicker">Your account</div>
+<h1>{{ account.display_name or account.username }}</h1>
+<p class="lede">What this account is, and what it may do. Roles are granted by an
+administrator — they are not something you can change here, which is the point of
+them.</p>
+
+{% if notice %}<div class="status"><strong>Done</strong>{{ notice }}</div>{% endif %}
+{% if error %}<div class="status danger"><strong>Could not complete</strong>{{ error }}</div>{% endif %}
+
+<div class="card">
+  <div class="row">
+    <div class="field">
+      <label>Username</label>
+      <div class="mono">{{ account.username }}</div>
+      <div class="hint">This is what appears beside every record you open, in the audit
+        trail, for as long as the record is retained.</div>
+    </div>
+    <div class="field">
+      <label>Roles</label>
+      <div>{% for role in account.roles|sort %}<span class="pill">{{ role }}</span>
+        {% else %}<span class="muted">no role assigned</span>{% endfor %}</div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <div class="field">
+      <label>Password last changed</label>
+      <div class="mono">{{ account.password_changed_at.strftime('%Y-%m-%d %H:%M') if account.password_changed_at else '—' }}</div>
+    </div>
+    <div class="field">
+      <label>Second factor</label>
+      <div>{% if account.mfa_enrolled %}<span class="pill ok">enrolled</span>
+        {% elif mfa_policy == 'required' %}<span class="pill danger">required, not set up</span>
+        {% elif mfa_policy == 'optional' %}<span class="pill warn">not set up</span>
+        {% else %}<span class="pill warn">not in use in this deployment</span>{% endif %}</div>
+    </div>
+    <div class="field">
+      <label>Active sessions</label>
+      <div class="mono">{{ active_sessions }}</div>
+    </div>
+  </div>
+</div>
+
+<h2>Password</h2>
+<div class="card">
+  <p>Changing your password signs out every other browser and device using this account.</p>
+  <a href="/account/password"><button type="button">Change password</button></a>
+</div>
+
+{% if mfa_policy != 'off' %}
+<h2>Second factor</h2>
+<div class="card">
+  {% if account.mfa_enrolled %}
+  <p>An authenticator is enrolled. Setting up a new one replaces it — do that when you
+    change phones, <em>before</em> the old one is wiped. If it is already gone, an
+    administrator can clear the enrolment for you.</p>
+  {% else %}
+  <p>No authenticator is enrolled on this account.</p>
+  {% endif %}
+  <a href="/login/enrol"><button type="button" class="quiet">
+    {{ 'Set up a new authenticator' if account.mfa_enrolled else 'Set up an authenticator' }}</button></a>
+</div>
+{% endif %}
+
+<h2>Sign out</h2>
+<div class="card">
+  <form method="post" action="/logout">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="quiet">Sign out</button>
+  </form>
+  <div class="hint" style="margin-top:8px">Ends this session immediately, server side —
+    not just in this browser.</div>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

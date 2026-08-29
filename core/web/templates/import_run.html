@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Import run detail — φ(ai){% endblock %}
+{% block body %}
+<p style="margin-bottom:6px"><a href="/integration/bulk">&larr; Bulk import manager</a></p>
+<h1>Import run — full detail</h1>
+<p class="lede">One ingestion run, stage by stage, with its effect on the
+watermark stated plainly.</p>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n" style="font-size:16px">{{ run.source }}</div>
+    <div class="k">group <span class="mono">{{ run.group_id or "—" }}</span></div></div>
+  <div class="card stat"><div class="n {{ {'complete':'good','refused':'warn','failed':'warn'}.get(run.status, '') }}">{{ run.status | upper }}</div>
+    <div class="k">started {{ run.started_at }}{{ " · finished " + run.finished_at if run.finished_at else " · did not finish" }}</div></div>
+  <div class="card stat"><div class="n">{{ "{:,}".format(run.resources) }}</div>
+    <div class="k">records processed</div></div>
+</div>
+
+<h2>Stages</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Stage</th><th>Outcome for this run</th></tr></thead>
+  <tbody>
+    {% for stage, outcome, cls in stages %}
+    <tr><td>{{ stage }}</td><td><span class="v-{{ cls }}">{{ outcome }}</span></td></tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>Run narrative</h2>
+<p style="font-size:13.5px; line-height:1.75">{{ run.note or "No notes recorded for this run." }}</p>
+
+<div class="callout">
+  <div><strong>Watermark effect:</strong>
+  {% if run.status == "complete" %}this run completed every file, so the
+  watermark advanced — downstream consumers may treat this extract as the
+  current population.{% elif run.status == "refused" %}a refused kickoff moves
+  nothing; the watermark was untouched.{% else %}the watermark did NOT advance —
+  a dirty or unfinished run never moves the clean-run boundary, so nothing
+  downstream mistook this for a complete extract.{% endif %}</div>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

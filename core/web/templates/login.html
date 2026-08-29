@@ -1,0 +1,30 @@
+{% extends "login_base.html" %}
+{% block body %}
+<div class="kicker">Sign in</div>
+<h1>φ(ai)</h1>
+<p class="lede">This system holds protected health information. Every page you open and
+every record you read is recorded against your name.</p>
+
+{% if error %}<div class="status danger"><strong>Could not sign in</strong>{{ error }}</div>{% endif %}
+
+<form method="post" action="/login">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="field">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" required autocomplete="username"
+           autocapitalize="none" spellcheck="false" autofocus>
+  </div>
+  <div class="field" style="margin-top:14px">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required
+           autocomplete="current-password">
+  </div>
+  <div style="margin-top:18px"><button type="submit">Sign in</button></div>
+</form>
+
+<div class="hint" style="margin-top:18px">Locked out, or never issued an account? Your
+  platform administrator can reset a password and clear a lockout. There is no email
+  recovery here by design — a reset is handed over by a person who confirmed who you
+  are.</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

@@ -1,0 +1,42 @@
+{# Shell for the pages a person sees BEFORE they have an identity.
+   Deliberately not base.html: that one renders the navigation and the
+   colophon from `identity`, and there is no identity here yet. Sharing
+   it and guarding every reference with `{% if identity %}` would mean
+   the signed-in layout carried the unauthenticated case in it forever.
+
+   Same stylesheet, same wordmark, no navigation and no assistant
+   drawer - there is nothing on this page a signed-out visitor may
+   reach. Still under `script-src 'none'` (core/web/security.py), so
+   this is a form and a button, like every other page here. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Sign in · φ(ai){% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" type="image/svg+xml" href="/static/brand/favicon.svg">
+<meta name="referrer" content="no-referrer">
+<meta name="csrf-token" content="{{ csrf_token }}">
+</head>
+<body class="signin">
+<header class="masthead">
+  {# Same wordmark as base.html: vector, same origin, sized by height.
+     See static/brand/README.md. #}
+  <a class="brand" href="/">
+    <img src="/static/brand/wordmark.svg?v=2" alt="φ(ai)" width="294" height="120">
+    <span class="sub">Clinical record platform</span></a>
+</header>
+<main>
+<div class="card" style="max-width:460px;margin:48px auto">
+{% block body %}{% endblock %}
+</div>
+</main>
+<footer class="colophon">
+  {% if release %}<span>Release {{ release }}</span>{% endif %}
+  <span>Session logged</span>
+  <span>HIPAA &middot; 45 CFR 164</span>
+</footer>
+</body>
+</html>
+{# Made by Ryan Gomez & Co. Inc. #}

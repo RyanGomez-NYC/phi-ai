@@ -1,0 +1,23 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "syn-medreq-ref-1",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "status": "active",
+  "intent": "order",
+  "medicationReference": {
+    "reference": "Medication/syn-med-metformin-1",
+    "display": "Metformin 500 MG Oral Tablet"
+  },
+  "subject": {
+    "reference": "Patient/syn-anna-1"
+  },
+  "authoredOn": "2026-06-11"
+}

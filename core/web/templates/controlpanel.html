@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}Control panel — φ(ai){% endblock %}
+{% block body %}
+<h1>Control panel</h1>
+<p class="lede">The System Administrator's seat. Everything on the platform can
+be controlled from here — the models, the outbound feeds, the import hold, the
+configuration — and none of it quietly: full control is not exemption, and
+every switch thrown on this page lands on the audit trail under your name.</p>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n {{ 'good' if chain.ok else 'warn' }}">{{ 'intact' if chain.ok else 'BROKEN' }}</div>
+    <div class="k">audit chain, verified live on this page load ({{ "{:,}".format(chain.checked) }} events)</div></div>
+  <div class="card stat"><div class="n">{{ models | length }}</div>
+    <div class="k">models in the registry — every kind, not only LLMs</div></div>
+  <div class="card stat"><div class="n {{ 'good' if assistant_available else 'warn' }}">{{ 'configured' if assistant_available else 'not configured' }}</div>
+    <div class="k">assistant provider on this deployment</div></div>
+</div>
+
+<h2>Models</h2>
+<p class="hint">The assistant's models, each with its management switch. Off is
+honest: the platform degrades to a labeled fallback or a stated refusal, never
+to silence.</p>
+<div class="model-grid">
+  <div class="model-panel">
+    <div class="mp-head"><span class="mp-name">PHI RAG</span>
+      <span class="mp-kind">retrieval-tuned LLM</span>
+      <span class="mp-state {{ 'v-good' if rag_enabled else 'v-warn' }}">{{ 'ENABLED' if rag_enabled else 'DISABLED' }}</span></div>
+    <div class="mp-body"><dl class="mp-facts">
+      <dt>Purpose</dt><dd>The PHI AI assistant — answers from the platform's
+        stores with citations, under the reader's role and purpose.</dd>
+      <dt>Guardrails</dt><dd>Minimum-necessary confirmation before sweeps ·
+        sensitive withholding with counts · counts-never-lists on the
+        population plane · cites every source.</dd>
+      <dt>Runs on</dt><dd>the active foundation model (at right)</dd>
+    </dl></div>
+    <div class="mp-foot">
+      <form method="post" action="/system/control/switch">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="name" value="rag_enabled">
+        <button type="submit">{{ 'Disable retrieval' if rag_enabled else 'Enable retrieval' }}</button>
+      </form>
+      <span class="mp-note">Disabled = the assistant refuses to read the stores
+        at all and says so; it never answers about records from memory.</span>
+    </div>
+  </div>
+  <div class="model-panel">
+    <div class="mp-head"><span class="mp-name">Claude Sonnet 5</span> <span class="mp-kind">demo default — bring your own LLM</span>
+      <span class="mp-kind">foundation model</span>
+      <span class="mp-state {{ 'v-good' if assistant_live else 'v-warn' }}">{{ 'ON' if assistant_live else 'OFF' }}</span></div>
+    <div class="mp-body"><dl class="mp-facts">
+      <dt>Provider</dt><dd>Anthropic API / AWS Bedrock (deployment-configured)</dd>
+      <dt>Active model</dt><dd><span class="mono">{{ active_model }}</span>{{ ' — activated from the registry below' if active_model != 'claude-sonnet-5' else ' (default)' }}</dd>
+      <dt>Parameters</dt><dd>temperature 0 · bounded output · short context tail</dd>
+      <dt>Data terms</dt><dd>Receives only gate-released excerpts per question;
+        not used for model training under the organization's agreement.</dd>
+    </dl></div>
+    <div class="mp-foot">
+      <form method="post" action="/system/control/switch">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="name" value="assistant_live">
+        <button type="submit">{{ 'Switch off' if assistant_live else 'Switch on' }}</button>
+      </form>
+      <span class="mp-note">Off = no request ever leaves for the model; the
+        scripted fallback answers and says why. Questions audited either way.</span>
+    </div>
+  </div>
+  <div class="model-panel">
+    <div class="mp-head"><span class="mp-name">Scripted fallback</span>
+      <span class="mp-kind">deterministic responder</span>
+      <span class="mp-state v-good">ALWAYS ON</span></div>
+    <div class="mp-body"><dl class="mp-facts">
+      <dt>Purpose</dt><dd>Answers from fixed logic when live model calls are
+        off or unavailable.</dd>
+      <dt>Guardrails</dt><dd>Inherits every gate; states plainly that it is the
+        fallback.</dd>
+    </dl></div>
+    <div class="mp-foot"><span class="mp-note">No switch — the fallback cannot
+      be disabled. A platform whose failure mode is silence has a worse failure
+      mode.</span></div>
+  </div>
+</div>
+
+<h2>Model registry — every model, any kind</h2>
+<p class="hint">Every model the platform runs, in one inventory: the language
+models behind the assistant <em>and</em> the predictive, classification,
+optimization and mapping models behind the other capabilities. Bring your own:
+register any model against the capability slot it serves — an LLM by provider
+and model ID, or any other model by its HTTPS inference endpoint. The lifecycle
+is registered → enabled → activated, each an audited decision.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Model</th><th>Kind</th><th>Slot</th><th>Provider / endpoint</th>
+    <th>Model ID · version</th><th>Status</th><th style="width:250px">Actions</th></tr></thead>
+  <tbody>
+    {% for m in models %}
+    {% if m.slot == 'assistant' %}
+      {% set is_active = m.kind == 'foundation' and m.model_id == active_model %}
+    {% else %}
+      {% set ov = slot_overrides.get(m.slot, '') %}
+      {% set is_active = (m.builtin and not ov) or (ov == m.id | string) %}
+    {% endif %}
+    <tr>
+      <td>{{ m.name }}{% if m.purpose %}<div class="hint" style="font-size:11.5px">{{ m.purpose }}</div>{% endif %}</td>
+      <td class="mono">{{ m.kind }}</td>
+      <td class="mono">{{ m.slot }}</td>
+      <td style="font-size:12px">{{ m.provider or "—" }}
+        {% if m.endpoint_url %}<div class="mono" style="font-size:10.5px; color:var(--mute)">{{ m.endpoint_url }}</div>{% endif %}</td>
+      <td class="mono" style="font-size:11px">{{ m.model_id or "—" }}{{ " · v" + m.version if m.version }}
+        {% if is_active %} <span class="v-good">ACTIVE</span>{% endif %}</td>
+      <td><span class="{{ {'enabled':'v-good','registered':'v-amber','disabled':'v-warn'}.get(m.status, 'v-mute') }}">{{ m.status }}</span></td>
+      <td>
+        <div style="display:flex; gap:6px; flex-wrap:wrap">
+          {% if not is_active and (m.status == 'enabled' or m.builtin)
+                and not (m.slot == 'assistant' and (m.kind != 'foundation' or not m.model_id)) %}
+          <form method="post" action="/system/control/model/activate">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="model_id" value="{{ m.id }}">
+            <button type="submit" class="bare">{{ 'Restore default' if m.builtin else 'Activate' }}</button>
+          </form>
+          {% endif %}
+          {% if not m.builtin %}
+          <form method="post" action="/system/control/model/state">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="model_id" value="{{ m.id }}">
+            <input type="hidden" name="op" value="{{ 'disable' if m.status == 'enabled' else 'enable' }}">
+            <button type="submit" class="bare">{{ 'Disable' if m.status == 'enabled' else 'Enable' }}</button>
+          </form>
+          {% if not is_active %}
+          <form method="post" action="/system/control/model/delete">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="model_id" value="{{ m.id }}">
+            <button type="submit" class="bare" style="color:var(--warn-fg)">Remove</button>
+          </form>
+          {% endif %}
+          {% else %}<span class="v-mute" style="font-size:11px">built-in</span>{% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+
+<h3 style="margin-top:18px">Register a new model — bring your own</h3>
+<form method="post" action="/system/control/model/add" style="margin-top:8px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end">
+    <label class="mono" style="font-size:11px; color:var(--mute)">Name<br>
+      <input type="text" name="name" required maxlength="80" style="width:180px"></label>
+    <label class="mono" style="font-size:11px; color:var(--mute)">Kind<br>
+      <select name="kind">{% for k in model_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select></label>
+    <label class="mono" style="font-size:11px; color:var(--mute)">Serves (slot)<br>
+      <select name="slot">{% for s in model_slots %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></label>
+    <label class="mono" style="font-size:11px; color:var(--mute)">Provider<br>
+      <input type="text" name="provider" maxlength="60" style="width:140px"></label>
+    <label class="mono" style="font-size:11px; color:var(--mute)">Model ID<br>
+      <input type="text" name="model_id" maxlength="120" style="width:150px"></label>
+    <label class="mono" style="font-size:11px; color:var(--mute)">Version<br>
+      <input type="text" name="version" maxlength="40" style="width:60px"></label>
+    <label class="mono" style="font-size:11px; color:var(--mute)">Inference endpoint (BYOM)<br>
+      <input type="text" name="endpoint_url" maxlength="300" placeholder="https://…" style="width:220px"></label>
+    <label class="mono" style="font-size:11px; color:var(--mute)">Purpose<br>
+      <input type="text" name="purpose" maxlength="300" style="width:200px"></label>
+    <button type="submit">Register model</button>
+  </div>
+</form>
+<p class="hint">Endpoints must be HTTPS; anything else is rejected. A model
+that cannot actually answer fails loudly with the error stated — the platform
+never silently falls back to a model you did not choose.</p>
+
+<h2>Live controls</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Control</th><th>State</th><th style="width:200px">Action</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Bulk import — 24-hour vendor hold</td>
+      <td><span class="{{ 'v-warn' if hold_active else 'v-good' }}">{{ 'HOLDING' if hold_active else 'clear' }}</span></td>
+      <td>
+        {% if hold_active %}
+        <form method="post" action="/system/control/hold">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="bare">Release the hold</button>
+        </form>
+        {% else %}<span class="v-mute">nothing to release</span>{% endif %}
+      </td>
+      <td style="font-size:12px; color:var(--mute)">An administrative override
+        recorded as <span class="mono">system.hold_released</span> — an
+        override that leaves no trace is a vulnerability, not a feature.</td>
+    </tr>
+    {% for f in feeds %}
+    <tr>
+      <td>Outbound feed — {{ f.feed }}</td>
+      <td><span class="{{ {'healthy':'v-good','held':'v-warn','paused':'v-amber'}.get(f.state, 'v-mute') }}">{{ f.state }}</span></td>
+      <td>
+        {% if f.state != 'held' %}
+        <form method="post" action="/system/control/feed">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="feed_id" value="{{ f.id }}">
+          <button type="submit" class="bare">{{ 'Resume' if f.state == 'paused' else 'Pause' }}</button>
+        </form>
+        {% else %}<span class="v-mute">held by destination — retries itself</span>{% endif %}
+      </td>
+      <td style="font-size:12px; color:var(--mute)">{{ 'Paused accumulates sequence; resuming delivers from the checkpoint, nothing skipped.' if f.state == 'paused' else "Pausing stops delivery without losing the feed's place." }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>Users &amp; roles</h2>
+<p class="hint">Every role on the platform and exactly what it can reach. The
+System Administrator's <span class="mono">*</span> is the only wildcard —
+everyone else holds an enumerated, minimum-necessary list.
+<strong>This matrix is the enforcement view, not the authority:</strong> users
+and role assignments are governed by your organization's identity source of
+truth (IdP / directory); the platform enforces what that source asserts.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Role</th><th>Permissions</th></tr></thead>
+  <tbody>
+    {% for row in role_matrix %}
+    <tr><td class="mono">{{ row.role }}</td>
+      <td class="mono" style="font-size:11px">{{ row.permissions | join(' · ') }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+{% if personas %}
+<p class="hint">Development personas active on this instance:
+{% for p in personas %}{{ p.get('name', p.username) }} (<span class="mono">{{ p.username }}</span>){{ ", " if not loop.last }}{% endfor %}.</p>
+{% endif %}
+
+<h2>Platform configuration — everything configurable, editable here</h2>
+<form method="post" action="/system/control/config">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="tablewrap"><table>
+    <thead><tr><th style="width:240px">Setting</th><th>Value</th><th>Constraint</th></tr></thead>
+    <tbody>
+      {% for k, label in [("source_vendor", "Source vendor"), ("source_base_url", "Source FHIR base URL"),
+                          ("source_client_id", "Source client ID"), ("source_group_id", "Source group FHIR ID"),
+                          ("target_vendor", "Target vendor"), ("target_base_url", "Target FHIR base URL"),
+                          ("target_client_id", "Target client ID")] %}
+      <tr>
+        <td>{{ label }}<div class="hint mono" style="font-size:10.5px">{{ k }}</div></td>
+        <td>{% if k.endswith("vendor") %}
+          <select name="{{ k }}">
+            {% for vk, vd in vendors.items() %}
+            <option value="{{ vk }}" {{ 'selected' if cfg[k] == vk }}>{{ vd.name }}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <input type="text" name="{{ k }}" value="{{ cfg[k] }}" maxlength="300" style="width:100%; max-width:420px">
+          {% endif %}</td>
+        <td class="mono" style="font-size:11px; color:var(--mute)">{{ 'supported vendors only' if k.endswith('vendor') else 'free text' }}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td>Answer length limit<div class="hint mono" style="font-size:10.5px">assistant_max_tokens</div></td>
+        <td><input type="number" name="assistant_max_tokens" min="256" max="4096"
+             value="{{ cfg.assistant_max_tokens or '1500' }}" style="width:120px"></td>
+        <td class="mono" style="font-size:11px; color:var(--mute)">256–4096 tokens</td>
+      </tr>
+      <tr>
+        <td>Active assistant model / switches<div class="hint mono" style="font-size:10.5px">assistant_model · rag_enabled · assistant_live</div></td>
+        <td class="mono" style="font-size:11.5px">{{ active_model }} · {{ 'on' if rag_enabled else 'off' }} · {{ 'on' if assistant_live else 'off' }}</td>
+        <td class="mono" style="font-size:11px; color:var(--mute)">set via the registry and panels above</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <div style="margin-top:12px">
+    <button type="submit">Save configuration</button>
+    <span class="hint" style="margin-left:10px">Only changed keys are written
+      and audited; unchanged values are left untouched.</span>
+  </div>
+</form>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

@@ -1,0 +1,33 @@
+{
+  "resourceType": "Condition",
+  "id": "syn-cond-local",
+  "meta": {
+    "tag": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+        "code": "HTEST",
+        "display": "test health data"
+      }
+    ]
+  },
+  "clinicalStatus": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "active"
+      }
+    ]
+  },
+  "code": {
+    "coding": [
+      {
+        "system": "urn:local:epic:edg",
+        "code": "EDG-771001",
+        "display": "local diagnosis concept"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/syn-henry-1"
+  }
+}

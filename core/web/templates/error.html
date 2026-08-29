@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} — φ(ai)</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" type="image/svg+xml" href="/static/brand/favicon.svg">
+<meta name="referrer" content="no-referrer">
+</head>
+<body>
+{# Standalone on purpose: this page renders when something about the
+   session or request went wrong, so it must not depend on an identity,
+   a nav, or any context the failure may have taken with it. #}
+<div class="login-shell">
+  <div class="signin" style="margin-top:14vh">
+    <div class="kicker">{{ status_code }}</div>
+    <h1>{{ title }}</h1>
+    <p style="margin-top:12px; font-size:13.5px; line-height:1.7; color:var(--slate)">{{ detail }}</p>
+    <a class="btn" style="display:block; text-align:center; margin-top:18px"
+       href="{{ retry_path or '/' }}">{{ retry_label or 'Back to the platform' }}</a>
+  </div>
+</div>
+</body>
+</html>
+{# Made by Ryan Gomez & Co. Inc. #}

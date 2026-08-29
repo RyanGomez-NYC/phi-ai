@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ spec.title }} — φ(ai){% endblock %}
+{% block body %}
+<h1>{{ spec.title }}</h1>
+<p class="lede">{{ spec.lede }}</p>
+
+{% if spec.invariants %}
+<div class="chips">
+  {% for i in spec.invariants %}<span class="chip">{{ i }}</span>{% endfor %}
+</div>
+{% endif %}
+
+{% if live_note %}<p class="hint" style="margin-top:14px">{{ live_note }}</p>{% endif %}
+
+{% for s in sections %}
+  {% if s.kind == 'stats' %}
+    <h3 class="kicker" style="margin-top:28px">{{ s.head }}</h3>
+    <div class="grid stats">
+      {% for it in s['items'] %}
+      <div class="card stat">
+        <div class="n {{ it.cls }}" {% if it.small %}style="font-size:15px"{% endif %}>{{ it.v }}</div>
+        <div class="k">{{ it.k }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+  {% elif s.kind == 'table' %}
+    <h3 class="kicker" style="margin-top:28px">{{ s.head }}</h3>
+    <div class="tablewrap" style="margin-top:12px">
+      <table>
+        <thead><tr>{% for c in s.cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in s.rows %}
+          <tr>{% for cell in row %}<td class="{{ cell.cls }}">{{ cell.t }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  {% elif s.kind == 'list' %}
+    <h3 class="kicker" style="margin-top:28px">{{ s.head }}</h3>
+    <div class="ruled">
+      {% for it in s['items'] %}
+      <div><div class="t">{{ it.t }}</div><div class="b">{{ it.b }}</div></div>
+      {% endfor %}
+    </div>
+
+  {% elif s.kind == 'callout' %}
+    <h3 class="kicker" style="margin-top:28px">{{ s.head }}</h3>
+    <div class="callout {{ 'warn' if s.warn }}" style="margin-top:12px">
+      <div><strong>{{ s.title }}</strong> {{ s.body }}</div>
+    </div>
+  {% endif %}
+{% endfor %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Model registry &amp; egress preflight — φ(ai){% endblock %}
+{% block body %}
+<h1>Model registry &amp; egress preflight</h1>
+<p class="lede">PHI egress to any model is declared and preflighted with
+machine-checkable evidence. Registration failure stops the run — there is no
+degraded mode. Where a cloud exposes no queryable property, the asymmetry is
+recorded as an operator attestation rather than dressed up as a check.</p>
+
+<div class="seg mono" style="margin-top:20px">
+  {% for key, c in clouds.items() %}
+  <a class="{{ 'on' if key == cloud }}" href="/preflight?cloud={{ key }}">{{ c.label }}</a>
+  {% endfor %}
+</div>
+
+<div class="tablewrap" style="margin-top:18px">
+  <table>
+    <thead><tr><th>Check</th><th>Finding</th><th style="text-align:right">Verdict</th></tr></thead>
+    <tbody>
+      {% for p in data.checks %}
+      <tr>
+        <td>
+          <div class="card-title">{{ p.check }}</div>
+          <div class="mono hint">{{ p.probe }}</div>
+        </td>
+        <td>{{ p.finding }}</td>
+        <td style="text-align:right"><span class="pill {{ p.cls }}">{{ p.verdict }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="callout {{ 'warn' if data.tone == 'warn' }}">
+  <div><strong>{{ data.title }}</strong> {{ data.body }}</div>
+</div>
+
+<h2>Registered models</h2>
+<div class="tablewrap" style="margin-top:16px">
+  <table>
+    <thead><tr><th>Model target</th><th>Intended use</th><th>92.210 screen</th><th>Fairness report</th><th style="text-align:right">Executes</th></tr></thead>
+    <tbody>
+      {% for r in registry %}
+      <tr>
+        <td class="mono" style="color:var(--navy)">{{ r.model }}</td>
+        <td>{{ r.use }}</td>
+        <td><span class="{{ r.screen[1] }}">{{ r.screen[0] }}</span></td>
+        <td><span class="{{ r.fair[1] }}">{{ r.fair[0] }}</span></td>
+        <td style="text-align:right"><span class="{{ r.exec[1] }}">{{ r.exec[0] }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<details class="fine"><summary>Whose models these are</summary><p class="disclaimer">{{ registry_footnote }}</p></details>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

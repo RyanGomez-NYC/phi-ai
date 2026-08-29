@@ -1,0 +1,56 @@
+# Sensitive-category value sets (SPEC §6.1) - SEED FILE, NOT A CLINICAL
+# DETERMINATION.
+#
+# Copy to sensitive_value_sets.yaml, then have whoever owns your
+# organization's segmentation review CURATE it. The codes below are a
+# deliberately small starting seed using systems this repository may
+# lawfully commit (ICD-10-CM from CMS/CDC; SNOMED codes appear only as
+# individual factual references, not as an extract of the release).
+# Real coverage requires your organization's licensed vocabularies -
+# load them via core/terminology/loader.py - and clinical review.
+# ABSENCE OF A CODE HERE IS NOT ABSENCE OF SENSITIVITY: the engine
+# fails closed on unclassifiable resources, but a sensitive resource
+# carrying only codes this file omits WILL pass. Curation is the
+# operator work that determines recall (RUNBOOK_MODEL_GOVERNANCE.md).
+#
+# Categories must use the platform's names:
+#   psychotherapy_notes, part2_sud, reproductive_health, hiv, genetic,
+#   mental_health, minor_consented
+
+categories:
+  hiv:
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "B20"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "Z21"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "B97.35"}
+  mental_health:
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F32.9"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F33.1"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F41.1"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F20.9"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F31.9"}
+  part2_sud:
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F11.20"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F10.20"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "F14.20"}
+  reproductive_health:
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "Z33.1"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "Z30.9"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "O80"}
+  genetic:
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "Z14.8"}
+    - {system: "http://hl7.org/fhir/sid/icd-10-cm", code: "Z15.01"}
+  psychotherapy_notes:
+    # Psychotherapy notes are primarily excluded by resource
+    # type/department and note-type codes; LOINC 76516-4 is the
+    # psychotherapy-note document type.
+    - {system: "http://loinc.org", code: "76516-4"}
+  minor_consented: []   # state consent-age matrix unresearched (SPEC §11 #5);
+                        # category exists so the engine fails closed, not open
+
+# Source department / compartment -> category. Part 2 provenance is a
+# retained attribute (SPEC §6.1); list every Part 2 program department
+# identifier your ingest emits.
+departments:
+  dept-part2-program: part2_sud
+  dept-behavioral-health: mental_health
+# Made by Ryan Gomez & Co. Inc.

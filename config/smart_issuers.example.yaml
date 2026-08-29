@@ -1,0 +1,114 @@
+# Registered EMR instances permitted to launch this platform in context.
+#
+# THIS FILE IS AN ALLOWLIST AND IS SECURITY-CRITICAL. The `iss` parameter
+# on a launch tells this application which server to trust for
+# authentication. Without an allowlist, a crafted launch link could point
+# it at an attacker's authorization server and have it accept that
+# server's token as proof of who the user is. An issuer that is not
+# listed here cannot launch.
+#
+# Absent file = SMART launch disabled. That is the safe default.
+#
+# Copy to config/smart_issuers.yaml and edit. Do NOT commit real client
+# secrets - use `env:VARIABLE_NAME` and put the value in your secret store.
+# That name is read literally, exactly as written here, so give the full
+# variable name including its PHI_AI_ prefix.
+#
+# SPELL THE KEYS EXACTLY AS SHOWN. A key this loader does not recognise
+# is ignored, so a misspelling silently takes the default rather than
+# failing - `record_source` in particular defaults to true, and getting
+# it wrong sends a launching clinician to a record view for a patient id
+# that cannot resolve. See core/web/smart/config.py.
+
+issuers:
+  # ---- Epic -------------------------------------------------------
+  - label: "Example Hospital — Epic production"
+    issuer: "https://fhir.example-hospital.org/api/FHIR/R4"
+    vendor: epic
+    client_id: "REPLACE-with-the-client-id-Epic-issued-for-this-organization"
+    client_secret: "env:PHI_AI_SMART_EPIC_SECRET"
+
+    # Roles granted to anyone launching from this EMR. "Authenticated by
+    # an EMR" is not the same claim as "authorised to read these
+    # records", so this is an explicit decision per issuer and never a
+    # default. A clinician launching in patient context normally needs
+    # `viewer`.
+    roles: [viewer]
+
+    # Did THIS deployment's records come from THIS EMR instance?
+    #
+    # In-context launch works by taking the patient id the EMR sends and
+    # looking it up here. Patient ids are opaque and instance-specific, so
+    # an id from a different EMR will not resolve - the user is landed on
+    # search with an explanation rather than a confidently-empty record.
+    # Set false for an EMR that may launch this platform but did not
+    # populate it.
+    record_source: true
+
+    # Render this platform INSIDE this EMR's iframe rather than a
+    # separate window.
+    #
+    # Off by default, and enabling it is a deployment-wide decision, not a
+    # per-issuer one in effect: a session cookie only reaches a cross-site
+    # frame with SameSite=None, so switching this on changes the cookie
+    # policy for every user of this instance. CSRF tokens are enforced
+    # unconditionally for exactly that reason.
+    #
+    # This origin is added to Content-Security-Policy frame-ancestors.
+    # Only origins listed here may frame this platform - never "*",
+    # because an open frame policy on a PHI application invites
+    # clickjacking.
+    embedded: false
+
+    # Deep link back into this EMR's chart, offered as a "Back to ..."
+    # link once a clinician has launched from it.
+    #
+    # SITE-SPECIFIC. The URL shape differs per vendor AND per install,
+    # so there is nothing to infer - ask whoever administers the EMR for
+    # the URL that opens a patient chart, and the one that opens a
+    # specific encounter if you want encounter-level return.
+    #
+    # Placeholders: {patient} and {encounter}, both percent-encoded.
+    # A template needing {encounter} renders NO link when the session has
+    # no encounter context - a partially-substituted URL either 404s or
+    # opens the wrong record.
+    #
+    # Validated at startup: https only, no embedded credentials, no
+    # unknown placeholders. Leave unset to offer no link at all, which is
+    # better than a guessed one.
+    # chart_url: "https://epic.example-hospital.org/Chart?pat={patient}&csn={encounter}"
+    # chart_label: "Epic"
+
+  # ---- Oracle Health (Cerner) -------------------------------------
+  # - label: "Example Hospital — Cerner"
+  #   issuer: "https://fhir-ehr.cerner.com/r4/TENANT-ID"
+  #   vendor: cerner
+  #   client_id: "..."
+  #   client_secret: "env:PHI_AI_SMART_CERNER_SECRET"
+  #   roles: [viewer]
+  #   record_source: false
+
+  # ---- athenahealth ------------------------------------------------
+  # - label: "Example Practice — athenahealth"
+  #   issuer: "https://api.platform.athenahealth.com/fhir/r4"
+  #   vendor: athenahealth
+  #   client_id: "..."
+  #   roles: [viewer]
+  #   record_source: false
+
+  # ---- eClinicalWorks ----------------------------------------------
+  # - label: "Example Practice — eClinicalWorks"
+  #   issuer: "https://fhir.eclinicalworks.com/fhir/r4/PRACTICE-ID"
+  #   vendor: eclinicalworks
+  #   client_id: "..."
+  #   roles: [viewer]
+  #   record_source: false
+
+  # ---- NextGen Healthcare ------------------------------------------
+  # - label: "Example Practice — NextGen"
+  #   issuer: "https://fhir.nextgen.com/nge/prod/fhir-api-r4"
+  #   vendor: nextgen
+  #   client_id: "..."
+  #   roles: [viewer]
+  #   record_source: false
+# Made by Ryan Gomez & Co. Inc.

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="kicker">SMART launch</div>
+<h1>Signed in — no patient context</h1>
+<div class="status warn">
+  <strong>You are signed in, but the platform could not open a patient record</strong>
+  {{ reason }}
+</div>
+<div class="card">
+  <form method="post" action="/patients">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="row">
+      <div class="field">
+        <label for="term">Patient identifier</label>
+        <input type="text" id="term" name="term" autofocus autocomplete="off"
+               placeholder="e.g. eAB12cd3">
+      </div>
+      <button type="submit">Search</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

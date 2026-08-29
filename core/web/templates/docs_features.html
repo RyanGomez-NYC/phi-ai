@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Feature documentation — φ(ai){% endblock %}
+{% block body %}
+{% include "docs_nav.html" %}
+<div class="doc-prose">
+<h1>Feature documentation</h1>
+<p class="lede">Every feature of the AI-native platform: what it is for, who
+uses it, how the workflow runs, and the guardrails and audit events wired into
+it. Every feature here was designed for AI use of protected data from the
+start — the governance is in the feature, not wrapped around it.</p>
+
+<h2>1. Clinical workspace</h2>
+<h3>1.1 PHI AI assistant (PHI RAG)</h3>
+<ul>
+  <li><strong>For:</strong> cited answers and drafts from the record.</li>
+  <li><strong>Workflow:</strong> the question travels with the asker's roles and
+purpose; the assistant plans retrieval against its role-scoped tools; the
+gates release what the role allows, withholding the rest with counts; the
+model drafts from the released excerpts; the answer renders with citations and
+the withholding statement. Prompt history and saved prompts store questions
+only — an answer is regenerated from records, never cached as a shadow chart.</li>
+  <li><strong>Guardrails:</strong> grounding contract, minimum-necessary
+confirmation before sweeps, counts-never-lists, the psychotherapy boundary.</li>
+  <li><strong>Audits:</strong> every question and every tool read.</li>
+</ul>
+<h3>1.2 Patients &amp; charts</h3>
+<p>Search and the storyboard chart, with sensitivity callouts stating what was
+withheld from the view and why. Every open is a
+<span class="mono">phi.disclosure</span>-class event carrying reader and
+purpose.</p>
+<h3>1.3 Summarization, inbox triage, ambient documentation, patient instructions</h3>
+<p>Generated working material, each with the same discipline: every sentence
+traceable to a cited record; triage reorders and never removes; ambient
+documentation runs a self-hosted ambient listener (faster-whisper, MIT,
+registered in the registry's <span class="mono">ambient</span> slot) behind
+the jurisdiction-aware consent gate — audio never leaves the deployment, so
+no ASR vendor BAA exists; transcription audits as
+<span class="mono">model.inference</span>, drafting flags ASR-uncertain
+terms for the signer; ambient
+documentation begins at the consent gate; instructions derive only from the
+visit's actual orders. All of it is draft until signed.</p>
+<h3>1.4 Signature queue</h3>
+<p>the signature rule as a screen. Drafts carry their full text and citations into a
+per-draft review; the sign control appears only after the full draft, and the
+refusal on the unwritable row comes from the real Epic write-surface assertion
+(<span class="mono">core/governance/writeback.py</span>), not from copy.
+Signing writes <span class="mono">signature.committed</span>; nothing advances
+by timeout, default or batch approval.</p>
+<h3>1.5 Document intake</h3>
+<p>Scanned-document ingestion: OCR to patient-linked FHIR resources with the
+original stored alongside — OCR is lossy and the scan remains the source.</p>
+
+<h2>2. Revenue &amp; records — every feature's core is a model</h2>
+<p class="hint">Each feature below is powered by a registered model in the
+Control panel's registry, with its own enable switch, its metrics on the
+Model monitoring screen, and the standard degradation rule: a disabled core
+means the feature says so and computes nothing unmanaged.</p>
+
+<h3>2.1 Claims &amp; billing — the denial risk model</h3>
+<p><strong>The core</strong> (registry: <em>Denial risk model</em>, predictive,
+slot <span class="mono">claims</span>): every pending claim is scored 0–99
+<em>before</em> adjudication from the payer and service-line denial history in
+the Data Store. Each score is advisory and each factor cites the real counts
+it came from ("this payer: 100 of 1,230 denied"). The screen leads with the
+scored pending queue and the strongest payer &times; service denial clusters —
+where process fixes beat resubmission. <strong>Guardrails:</strong> a score
+never blocks a claim; calibration and drift are watched on Model monitoring;
+subgroup behavior belongs to the fairness discipline.</p>
+
+<h3>2.2 Prior auth &amp; appeals — the evidence assembler</h3>
+<p><strong>The core</strong> (registry: <em>Prior auth evidence assembler</em>,
+retrieval, slot <span class="mono">priorauth</span>): the payer's criteria are
+checked by retrieval — the diagnosis, the order, the result series, the
+training note — each criterion citing its chart entry, gaps shown as gaps and
+never inferred. From that evidence the assembler <strong>drafts the appeal
+letter</strong>: NOT-MET criteria acknowledged plainly, and the draft lands in
+the signature queue where the signature rule holds it until a clinician signs.
+Drafting is audited (<span class="mono">ai.query</span>,
+<span class="mono">ai.draft_created</span>).</p>
+
+<h3>2.3 Documentation gaps — the coding integrity model</h3>
+<p><strong>The core</strong> (registry: <em>Coding integrity model</em>,
+classifier, slot <span class="mono">coding</span>) reads in <strong>both
+directions</strong>: charts whose own results support a diagnosis absent from
+the problem list (A1c ≥ 6.5 with no diabetes coded; eGFR &lt; 60 twice with no
+CKD; sustained hypertensive pressures with no hypertension), and money billed
+with no clinical note in a ±45-day window. A tool that only finds revenue is
+upcoding with better branding; both directions is documentation integrity.
+Findings carry their evidence and become drafted clinician queries in the
+signature queue — the model never changes a code or a note.</p>
+
+<h3>2.4 Release of information — the requirements validator</h3>
+<p><strong>The core</strong> (registry: <em>ROI requirements validator</em>,
+classifier, slot <span class="mono">roi</span>): before any release, every
+request is validated against the configured requirements of the applicable
+jurisdiction — federal authorization elements (signature, expiration, scope
+specificity, revocation language, Part 2 consent) plus the state rules
+counsel configures. Verdicts are met / UNMET / needs-review, each with its
+citation; a hard unmet requirement makes Fulfil a recorded refusal naming the
+requirement (<span class="mono">roi.refused</span>); every evaluation is
+recorded (<span class="mono">roi.requirements_evaluated</span>).
+<strong>The asymmetry is the design:</strong> the validator can block a
+release and can never approve one — the human decision remains the release.
+Patient-access requests are evaluated under the access right, not the
+authorization rules; unconfigured jurisdictions fail closed to human
+review.</p>
+
+<h3>2.5 Sensitive categories — the classifier, in the open</h3>
+<p><strong>The core</strong> (registry: <em>Sensitivity classifier</em>,
+classifier, slot <span class="mono">segmentation</span>) classifies every
+incoming condition, medication and document at the ingestion door — and its
+uncertainty is managed in the open: classifications resting on thin evidence
+queue for human review, uncertain stays withheld (fail closed), and every
+confirm/clear decision is audited
+(<span class="mono">segmentation.reclassified</span>). A missed Part 2 record
+is the most consequential error this platform could make, which is why the
+review queue is the feature, not a footnote.</p>
+
+<h2>3. Population</h2>
+<p><strong>Cohort builder</strong> runs on the live OMOP layer and returns
+counts, never lists (the counts-never-lists rule is structural — the query path cannot
+enumerate). <strong>No-show risk</strong> and <strong>scheduling</strong> are
+registered predictive/optimization models under the fairness screen; the
+permitted intervention is support, never denial of scheduling.
+<strong>Ingest &amp; mapping QA</strong> queues low-confidence terminology
+mappings for humans. <strong>Holdings</strong> and <strong>Reports</strong>
+answer "what is in this platform right now" with live counts and integrity
+checks.</p>
+
+<h2>4. Integration</h2>
+<h3>4.1 Source &amp; target EMRs</h3>
+<p>Connection configuration with each vendor's real seams in view — auth
+method, bulk capability, write surface. Saving writes
+<span class="mono">config.changed</span>.</p>
+<h3>4.2 Bulk import manager</h3>
+<p>FHIR Bulk Data runs with per-run detail (kickoff → poll → download →
+encrypt-store-index) and the watermark rule: only a clean run advances the
+last-known-complete marker. A kickoff inside the vendor's 24-hour window is
+refused and the refusal recorded (<span class="mono">bulk.refused</span>).</p>
+<h3>4.3 Streaming data</h3>
+<p>ADT, results and 835 remittance on checkpointed partitions; a gap between
+checkpoint and latest offset is surfaced with its exact range and never
+interpolated.</p>
+<h3>4.4 Bulk export manager</h3>
+<p>Records leaving in bulk, with per-run detail: psychotherapy notes never
+export; Part 2 refuses redisclosure without consent; sensitive exclusions are
+counted; a destination without a bulk write surface refuses with the seam
+named. Outcomes are complete / failed / refused, all first-class
+(<span class="mono">export.completed / export.refused</span>).</p>
+<h3>4.5 Streaming export</h3>
+<p>Outbound feeds under acknowledgment discipline: held means queued and
+accounted, retried without regenerating; paused is a governance decision from
+the Control panel that accumulates and does not leak.</p>
+
+<h2>5. System — the Control panel &amp; model monitoring</h2>
+<p>The System Administrator's seat (<span class="mono">system:admin</span>,
+the wildcard role's screen): the model registry — every model of every kind,
+LLM, predictive, classifier, optimization, mapper, with bring-your-own
+registration by provider/model ID or HTTPS endpoint and an audited
+registered → enabled → activated lifecycle per capability slot; the assistant
+model panels with the retrieval and live-calls switches; live controls (bulk
+hold release, feed pause/resume); a live audit-chain verification on every
+load; the full role/permission matrix; and the editable platform
+configuration. Every switch writes a <span class="mono">system.*</span> event
+under the administrator's own name.</p>
+
+<p><strong>Model analytics &amp; monitoring:</strong> every registered
+model carries live metrics computed from the stores and the audit trail —
+performance (score separation, calibration, acceptance rates), drift
+recognition (population-stability index of each model's input mix against its
+baseline, ≥0.10 watch / ≥0.25 act), and alerting whose alerts never
+auto-close: acknowledging is an audited human action and a recurring
+condition re-fires. Monitoring does not validate a model clinically; the
+organization's oversight duties stand.</p>
+
+<h2>6. Governance</h2>
+<p><strong>Registry &amp; preflight</strong>: no AI capability runs
+unregistered; preflight checks declarations against the egress evidence per
+cloud. <strong>Fairness screen</strong>: subgroup performance shown, not
+averaged away. <strong>Ambient consent gate</strong>: deny-by-default,
+jurisdiction- and modality-keyed, from the live gate
+(<span class="mono">core/governance/consent_gate.py</span>), every evaluation
+audited. <strong>Source attributes</strong> and <strong>EMR
+conformance</strong>: provenance and verified vendor capability.
+<strong>Audit</strong>: the trail with chain verification.
+<strong>Retention</strong>: schedules and the disposition queue — the platform
+never deletes on its own authority.</p>
+
+<h2>7. The refusal, everywhere</h2>
+<p>The platform's signature feature is the one it shows most often: the
+recorded refusal. A 403 that names its missing permission, an export history
+with a refused row, a rate-limited kickoff, a withheld-records count on a
+chart — each is the governance working in the open. If the refusals ever
+stopped appearing, <em>that</em> would be the finding.</p>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

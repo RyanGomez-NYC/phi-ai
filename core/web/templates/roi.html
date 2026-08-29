@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% set active = 'roi' %}
+{% block body %}
+<div class="kicker">Disclosure</div>
+<h1>Release of information</h1>
+<p class="lede">Records requests, the record sets produced for them, and the disclosure
+accounting required under 45 CFR 164.528. Requester details are stored encrypted, never in the
+index — the same rule that keeps patient names out of it applies to the people asking.</p>
+
+{% if error %}<div class="status danger"><strong>Could not complete</strong>{{ error }}</div>{% endif %}
+
+<h2>New request</h2>
+<div class="card">
+  <form method="post" action="/roi">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="row">
+      <div class="field">
+        <label for="patient_reference">Patient reference</label>
+        <input type="text" id="patient_reference" name="patient_reference" placeholder="Patient/eAB12cd3" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="requester_type">Requester type</label>
+        <select id="requester_type" name="requester_type" required>
+          {% for code, label in requester_types %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label for="requester_detail">Requester</label>
+      <input type="text" id="requester_detail" name="requester_detail" required autocomplete="off"
+             placeholder="Name of the individual or organization making the request">
+      <div class="hint">Stored encrypted alongside the records, not in the index. A disclosure
+        with no identified requester cannot be accounted for.</div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="authorization_reference">Authorization reference <span class="hint" style="display:inline">optional</span></label>
+        <input type="text" id="authorization_reference" name="authorization_reference"
+               placeholder="Signed authorization, subpoena or court order reference" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="purpose_of_use">Purpose of use</label>
+        <select id="purpose_of_use" name="purpose_of_use" required>
+          {% for code, label in purposes %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div class="field">
+        <label for="scope_start">Records from <span class="hint" style="display:inline">optional</span></label>
+        <input type="text" id="scope_start" name="scope_start" placeholder="YYYY-MM-DD" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="scope_end">Records through <span class="hint" style="display:inline">optional</span></label>
+        <input type="text" id="scope_end" name="scope_end" placeholder="YYYY-MM-DD" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="scope_resource_types">Record types <span class="hint" style="display:inline">optional</span></label>
+        <input type="text" id="scope_resource_types" name="scope_resource_types"
+               placeholder="e.g. Encounter, DiagnosticReport — blank for all" autocomplete="off">
+      </div>
+    </div>
+    <div class="hint" style="margin-top:6px">Dates bound the <strong>date of service</strong>, not
+      when the record was stored — a retired EHR's whole history is ingested within days, so
+      ingestion dates would scope nothing usefully. The end date includes its whole day. Records
+      carrying no determinable date are <strong>included</strong> and flagged in the manifest for
+      review, rather than silently dropped from a legal production.</div>
+
+    <div style="margin-top:16px"><button type="submit">Open request</button></div>
+  </form>
+</div>
+
+<h2>Requests</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Request</th><th>Patient</th><th>Requester</th><th>Opened</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for r in requests %}
+    <tr>
+      <td class="mono">{{ r.request_id }}</td>
+      <td class="mono">{{ r.patient_reference }}
+        <div class="muted" style="font-size:12px;margin-top:3px">{{ r.scope_description() }}</div>
+      </td>
+      <td>{{ r.requester_type }}</td>
+      <td class="mono muted nowrap">{{ r.created_at.strftime('%Y-%m-%d') if r.created_at else '—' }}<br>
+        <span class="muted">{{ r.created_by }}</span></td>
+      <td>
+        {% if r.status == 'fulfilled' %}
+          <span class="pill ok">released</span>
+          <div class="muted" style="font-size:12px;margin-top:3px">
+            {{ r.record_count }} released{% if r.withheld_count %}, {{ r.withheld_count }} withheld as out of scope{% endif %} ·
+            {{ r.fulfilled_at.strftime('%Y-%m-%d') if r.fulfilled_at else '' }}
+          </div>
+        {% elif r.status == 'denied' %}
+          <span class="pill danger">denied</span>
+          <div class="muted" style="font-size:12px;margin-top:3px">{{ r.denied_reason }}</div>
+        {% else %}<span class="pill warn">open</span>{% endif %}
+      </td>
+      <td class="nowrap">
+        {% if r.status == 'open' %}
+          <a href="/roi/{{ r.request_id }}"><button type="button" class="small">Review production &rarr;</button></a>
+          <div class="muted" style="font-size:12px;margin-top:4px">Full review before
+            anything is released — the release controls live there.</div>
+        {% elif r.status == 'fulfilled' %}
+          <a href="/roi/{{ r.request_id }}" class="mono" style="font-size:11.5px">detail &rarr;</a>
+          {% if r.production_storage_key and identity.can('roi:export') %}
+            <a href="/roi/{{ r.request_id }}/production"><button type="button" class="small">Download production (PDF)</button></a>
+            <div class="muted" style="font-size:12px;margin-top:4px">Bates-numbered, with manifest
+              and integrity appendix</div>
+          {% endif %}
+        {% else %}
+          <a href="/roi/{{ r.request_id }}" class="mono" style="font-size:11.5px">detail &rarr;</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">No requests yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

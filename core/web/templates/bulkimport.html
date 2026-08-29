@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Bulk import manager — φ(ai){% endblock %}
+{% block body %}
+<h1>Bulk import manager</h1>
+<p class="lede">FHIR Bulk Data Export from the source EMR — the only way to
+ingest an entire population. Kickoff, asynchronous status polling, NDJSON
+download, then encrypt-store-index for every record. The vendor's real seams
+are honored: on Epic a run needs a Group FHIR ID, is limited to once per 24
+hours, and is always a full re-extract.</p>
+
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ "{:,}".format(last_complete.resources if last_complete else 0) }}</div>
+    <div class="k">records in the last clean run</div></div>
+  <div class="card stat"><div class="n">{{ group_id or "—" }}</div>
+    <div class="k">group FHIR ID (from Source &amp; target EMRs)</div></div>
+  <div class="card stat"><div class="n {{ 'good' if can_run else 'warn' }}">{{ 'ready' if can_run else 'rate-limited' }}</div>
+    <div class="k">{{ 'a kickoff is permitted now' if can_run else "inside the vendor's 24-hour window — kickoff would be refused" }}</div></div>
+</div>
+
+{% if identity.can("admin:config") %}
+<form method="post" action="/integration/bulk/run" style="margin-top:18px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit">Start bulk import run</button>
+  <span class="hint" style="margin-left:10px">The run, its stages and its
+    watermark behavior are recorded like the real pipeline's.</span>
+</form>
+{% endif %}
+
+<h2>Run history</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Started</th><th>Finished</th><th>Source</th><th>Group</th>
+    <th>Status</th><th style="text-align:right">Records</th><th>Notes</th></tr></thead>
+  <tbody>
+    {% for r in runs %}
+    <tr>
+      <td class="mono nowrap"><a href="/integration/bulk/{{ r.id }}">{{ r.started_at }} &rarr;</a></td>
+      <td class="mono nowrap" style="color:var(--mute)">{{ r.finished_at or "—" }}</td>
+      <td>{{ r.source }}</td>
+      <td class="mono">{{ r.group_id or "—" }}</td>
+      <td><span class="{{ {'complete':'v-good','failed':'v-warn','refused':'v-warn','running':'v-amber'}.get(r.status, 'v-mute') }}">{{ r.status }}</span></td>
+      <td class="num">{{ "{:,}".format(r.resources) }}</td>
+      <td style="font-size:12px; color:var(--mute)">{{ r.note }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+
+<div class="callout">
+  <div><strong>The watermark rule.</strong> A clean run advances the ingestion
+  watermark — the marker of the last known-complete extract. A failed or
+  interrupted run never moves it, so a half-arrived population can never
+  impersonate the current state.</div>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

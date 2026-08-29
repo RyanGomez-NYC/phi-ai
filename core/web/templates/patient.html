@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% set active = 'patients' %}
+{% set page_key = 'patient' %}
+{% set assistant_context_patient = patient_reference %}
+{% block body %}
+<div class="kicker">Record</div>
+<h1 class="mono">{{ patient_reference }}</h1>
+<p class="lede">{{ resources | length }} stored resource{{ '' if resources|length == 1 else 's' }}.
+This view was recorded in the audit trail as <strong>{{ purpose }}</strong>.</p>
+
+{% if launched_in_context and encounter_id %}
+<div class="status ok">
+  <strong>Showing one encounter — {{ resources | length }} of {{ encounter_total }} stored records</strong>
+  You launched from encounter <span class="mono">{{ encounter_id }}</span>, so this view is
+  filtered to it. <strong>This is not necessarily every record for that visit</strong> — a record
+  whose encounter link is missing or recorded differently will not appear here.
+  <a href="/smart/patient/{{ patient_reference.split('/')[1] }}">Show the complete record</a>.
+</div>
+{% elif launched_in_context %}
+<div class="status ok">
+  <strong>Opened in context from your EMR</strong>
+  You arrived here from this patient's chart, so the platform opened the same patient. The access
+  was recorded as <strong>treatment</strong> against your EMR identity.
+</div>
+{% endif %}
+
+{# Imaging. Rendered only when this deployment holds DICOM and this
+   user's role includes imaging:read - see core/web/app.py's
+   _imaging_studies(). Opening a study POSTs a purpose of use, which is
+   what the DICOMweb API requires before it will serve a single pixel;
+   the viewer itself has nowhere to carry one. #}
+{% if imaging_studies %}
+<h2>Imaging</h2>
+<div class="card bare">
+  <div class="tablewrap">
+  <table>
+    <thead>
+      <tr><th>Study date</th><th>Description</th><th>Modality</th>
+          <th>Accession</th><th style="width:130px">Images</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for study in imaging_studies %}
+      <tr>
+        <td class="mono">{{ study.study_date or '—' }}</td>
+        <td>{{ study.study_description or 'Untitled study' }}</td>
+        <td>{{ study.modalities or '—' }}</td>
+        <td class="mono">{{ study.accession_number or '—' }}</td>
+        <td class="num">{{ "{:,}".format(study.instance_count or 0) }}</td>
+        <td>
+          <form method="post" action="/imaging/open">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="study_instance_uid" value="{{ study.study_instance_uid }}">
+            {# The purpose already stated to open this record carries
+               forward, so viewing images is audited under the same reason
+               as reading the chart it was reached from. #}
+            <input type="hidden" name="purpose_of_use" value="{{ purpose }}">
+            <button type="submit" class="quiet small">Open in viewer</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Opening a study is recorded in the audit trail against your username and
+    this record's stated purpose of use. The viewer runs on a separate address and reads
+    images from this platform as you scroll — nothing is downloaded to it.</p>
+</div>
+{% endif %}
+
+<h2>Stored resources</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Type</th><th>Resource id</th><th>Stored</th><th>Retention until</th><th></th></tr></thead>
+  <tbody>
+  {% for r in resources %}
+    <tr>
+      <td>{{ r.resource_type }}</td>
+      <td class="mono">{{ r.resource_id }}</td>
+      <td class="mono muted nowrap">{{ r.stored_at.strftime('%Y-%m-%d') if r.stored_at else '—' }}</td>
+      <td class="mono muted nowrap">
+        {{ r.retention_until.strftime('%Y-%m-%d') if r.retention_until else '—' }}
+      </td>
+      <td>
+        <form method="post" action="/resource">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="storage_key" value="{{ r.storage_key }}">
+          <input type="hidden" name="purpose_of_use" value="{{ purpose }}">
+          <button type="submit" class="quiet small">View</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No resources for this patient.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

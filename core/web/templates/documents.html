@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set active = 'documents' %}
+{% block body %}
+<div class="kicker">Ingestion</div>
+<h1>Ingest a scanned document</h1>
+<p class="lede">Scanned charts, faxed referrals and outside records are OCR'd and stored as
+patient-linked FHIR resources. The original scan is stored alongside the text and remains the
+record of truth.</p>
+
+{% if error %}<div class="status danger"><strong>Ingestion failed</strong>{{ error }}</div>{% endif %}
+
+{% if result %}
+<div class="status {{ 'warn' if result.low_confidence or result.text_empty else 'ok' }}">
+  <strong>Stored — {{ result.document_id }}</strong>
+  {{ result.page_count }} page{{ '' if result.page_count == 1 else 's' }} ·
+  linked to {{ result.patient_reference }}
+  {% if result.low_confidence %}
+    · <strong>low OCR confidence ({{ '%.0f'|format(result.mean_confidence) }}%)</strong> —
+    marked preliminary and needs review.
+  {% elif result.text_empty %}
+    · <strong>no text extracted</strong> — the source is stored and can be re-OCR'd later.
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/documents" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field">
+      <label for="patient_reference">Patient reference</label>
+      <input type="text" id="patient_reference" name="patient_reference"
+             placeholder="Patient/eAB12cd3" required autocomplete="off">
+      <div class="hint"><strong>You are asserting whose record this is.</strong> The system never
+        reads the document to work this out — OCR confuses 0/O and 1/l routinely, and a misread
+        identifier would file this under the wrong patient with nothing downstream to catch it.</div>
+    </div>
+    <div class="field">
+      <label for="title">Title <span class="hint" style="display:inline">optional</span></label>
+      <input type="text" id="title" name="title" placeholder="e.g. Cardiology referral, 2019">
+    </div>
+    <div class="field">
+      <label for="upload">Document</label>
+      <input type="file" id="upload" name="upload" required
+             accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.gif,.webp">
+      <div class="hint">PDF, PNG, JPEG, TIFF (including multi-page), BMP, GIF or WebP. Up to 100 MB
+        and 500 pages. Printed text only — Tesseract is not built for handwriting.</div>
+    </div>
+    <button type="submit">OCR and store</button>
+  </form>
+</div>
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Draft review — φ(ai){% endblock %}
+{% block body %}
+<p style="margin-bottom:6px"><a href="/signature">&larr; Signature queue</a></p>
+<h1>Draft review</h1>
+<p class="lede">The full draft, exactly as it would be committed. Read it
+against its citations, then sign or leave it — nothing enters the record until
+you do, and signing makes the content yours.</p>
+
+<div class="grid stats" style="margin-top:14px">
+  <div class="card stat"><div class="n" style="font-size:16px">{{ d.what }}</div>
+    <div class="k">{{ d.detail }}</div></div>
+  <div class="card stat"><div class="n" style="font-size:14px"><span class="mono">{{ d.api }}</span></div>
+    <div class="k">target write API</div></div>
+  <div class="card stat"><div class="n {{ 'warn' if not d.writable else ('good' if d.signed else '') }}">{{ 'blocked' if not d.writable else ('signed' if d.signed else 'unsigned') }}</div>
+    <div class="k">{{ 'no write path exists' if not d.writable else ('committed to the record' if d.signed else 'staged — waiting on a human') }}</div></div>
+</div>
+
+{% if not d.writable %}
+<div class="callout warn"><div><strong>No write path.</strong> {{ d.blocked_reason }}</div></div>
+{% endif %}
+
+<h2>Full draft</h2>
+<div style="border:1px solid var(--line); border-radius:10px; background:var(--wash); padding:20px 24px;">
+  <div class="mono" style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--warn-fg); margin-bottom:12px">
+    AI-generated draft — unsigned — not part of the record</div>
+  <div style="white-space:pre-wrap; font-size:13.5px; line-height:1.75; color:var(--body)">{{ d.body or "No draft body available." }}</div>
+</div>
+
+{% if d.signed %}
+<p class="hint" style="margin-top:16px"><span class="v-good">Signed</span> —
+recorded as <span class="mono">signature.committed</span> on the audit trail.</p>
+{% elif d.writable %}
+<form method="post" action="/signature" style="margin-top:18px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="draft_id" value="{{ d.id }}">
+  <button type="submit">Sign — commit this content under my name</button>
+  <span class="hint" style="margin-left:10px">Signing writes
+    <span class="mono">signature.committed</span> and releases the write-back.
+    The content becomes the signer's, clinically and legally.</span>
+</form>
+{% else %}
+<p class="hint" style="margin-top:16px">This draft cannot be committed from the
+platform (no write path). Act on it inside the EMR's own workflow; the platform
+records that the suggestion was presented.</p>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

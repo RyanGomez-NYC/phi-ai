@@ -1,0 +1,131 @@
+<div class="doc-prose">
+<h1>Data flow diagrams</h1>
+<p class="lede">The four journeys data makes through the AI-native platform,
+animated and walked through step by step. Notice that the AI sits inside every
+flow, never outside the gates: this is what a platform designed for AI use of
+protected data looks like in motion. Dots are data on the move; a red branch
+is a refusal, and the refusal is always recorded, never silent. Hover over any
+box for a plain-English explanation.</p>
+</div>
+
+<div class="diagram-frame">
+  <div class="diagram-title">1 · A question becomes a cited answer (PHI RAG)</div>
+  {{ diagrams.rag | safe }}
+</div>
+<p class="diagram-caption">The question is audited before any retrieval; each
+tool call passes the same gates a screen does; the model drafts only from
+gate-released excerpts; the answer carries citations and the withholding
+statement. A failed turn still leaves its reads on the trail.</p>
+
+<div class="doc-prose"><h2 class="wt">Walkthrough</h2></div>
+<div class="tablewrap"><table>
+  <thead><tr><th>#</th><th>Step</th><th>What happens</th><th>Audit event</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>The question</td><td>A signed-in role asks. Their identity, roles and purpose of use travel with the question. The question enters prompt history (questions only — answers are never stored).</td><td class="mono">query event</td></tr>
+    <tr><td>2</td><td>Retrieval planning</td><td>The assistant selects among the tools <em>its role's schema contains</em>. A tool the role lacks is absent, not forbidden — the model cannot even attempt it.</td><td>—</td></tr>
+    <tr><td>3</td><td>The gate</td><td>Each tool call passes the same role/consent/purpose gate a screen does. Sensitive-category records the reader may not see are withheld and counted.</td><td class="mono">disclosure-family events</td></tr>
+    <tr><td>4</td><td>Retrieval</td><td>Gate-released excerpts come back as tool results. Population tools return counts, never lists (the counts-never-lists rule).</td><td>—</td></tr>
+    <tr><td>5</td><td>Drafting</td><td>The foundation model writes the answer from the excerpts, at temperature 0, citing each source. It may not characterize documents it did not retrieve.</td><td>—</td></tr>
+    <tr><td>6</td><td>The answer</td><td>The cited answer renders, including the withholding statement. The reader knows what the answer could not see.</td><td>—</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<p><strong>Failure branches:</strong> a population-wide question pauses for a
+minimum-necessary confirmation before step 3; a request to enumerate a cohort
+is refused with the counts-never-lists rule named; retrieval disabled (Control panel) refuses
+at step 2 with the switch named; a model failure at step 5 reports the error —
+steps 1–4's audit events are already on the chain, so the trail shows exactly
+what was read even for a failed turn.</p>
+</div>
+
+<div class="diagram-frame">
+  <div class="diagram-title">2 · Records arrive (bulk import)</div>
+  {{ diagrams["import"] | safe }}
+</div>
+<p class="diagram-caption">Kickoff → poll → download → encrypt-store-index.
+A kickoff inside the vendor window is refused before the vendor sees it
+(<span class="mono">bulk.refused</span>); only a run that completes every file
+advances the watermark, so a half-arrived extract can never impersonate the
+population.</p>
+
+<div class="doc-prose"><h2 class="wt">Walkthrough</h2></div>
+<div class="tablewrap"><table>
+  <thead><tr><th>#</th><th>Step</th><th>What happens</th><th>Audit event</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Kickoff</td><td><span class="mono">Group/[id]/$export</span> against the source EMR, asynchronous. On Epic the group is a provisioned Group FHIR ID and the window is one run per 24 hours per client.</td><td>—</td></tr>
+    <tr><td>1a</td><td class="v-warn">Rate-limit branch</td><td>A kickoff inside the window is refused <em>by the platform, before the vendor sees it</em>, and the refusal is itself a recorded run in the manager's history.</td><td class="mono">bulk.refused</td></tr>
+    <tr><td>2</td><td>Status poll</td><td>The status URL returns progress until the manifest is ready. Bulk export has no incremental mode on Epic — every run is a full re-extract.</td><td>—</td></tr>
+    <tr><td>3</td><td>Download</td><td>NDJSON files, one resource type per file. An interruption at any file marks the whole run <span class="mono">failed</span>.</td><td>—</td></tr>
+    <tr><td>4</td><td>Encrypt · store · index</td><td>Reference normalization, sensitivity classification at the door, encryption, indexing. Only now, and only for a clean run, does the watermark advance.</td><td class="mono">bulk.completed</td></tr>
+  </tbody>
+</table></div>
+<div class="doc-prose">
+<p><strong>The watermark rule, precisely:</strong> the watermark is the
+timestamp of the last run that completed every file. A failed run leaves it
+untouched, so every downstream consumer — screens, the assistant, analytics —
+can state exactly how fresh its world is, and a half-arrived extract can never
+impersonate the current population. The System Administrator can release the
+24-hour hold from the Control panel; the override writes
+<span class="mono">system.hold_released</span>, because an override that
+leaves no trace is a vulnerability, not a feature.</p>
+</div>
+
+<div class="diagram-frame">
+  <div class="diagram-title">3 · Records leave (export &amp; delivery)</div>
+  {{ diagrams.export | safe }}
+</div>
+<p class="diagram-caption">Scope → consent &amp; redisclosure gate →
+packaging with exclusion counts → delivery on the destination's write surface
+→ acknowledgment. The gate's no is a first-class outcome in the run history
+(<span class="mono">export.refused</span>), exactly where an auditor will
+look.</p>
+
+<div class="doc-prose"><h2 class="wt">Walkthrough</h2></div>
+<div class="tablewrap"><table>
+  <thead><tr><th>#</th><th>Step</th><th>What happens</th><th>Audit event</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>The request</td><td>Scope (full population / cohort / one patient), destination (target EMR, HIE, registry, payer, ROI requester), format (FHIR NDJSON or C-CDA).</td><td>—</td></tr>
+    <tr><td>2</td><td>The consent &amp; redisclosure gate</td><td>Psychotherapy notes are never in scope. Part 2 content without Part 2-specific consent refuses the export. Other sensitive categories are excluded per the data-sharing agreement — excluded, and counted.</td><td>—</td></tr>
+    <tr><td>2a</td><td class="v-warn">Refusal branch</td><td>The gate's no is a first-class outcome: the run appears in history as <span class="mono">refused</span> with its reason, exactly where an auditor will look.</td><td class="mono">export.refused</td></tr>
+    <tr><td>3</td><td>Packaging</td><td>The allowed set is packaged with its exclusion counts recorded — the withheld records are numbers in the run history, never a silent gap the recipient cannot see.</td><td>—</td></tr>
+    <tr><td>4</td><td>Delivery</td><td>On the destination's write surface. A destination with no bulk write path (NextGen) refuses at this step rather than degrading into thousands of unrequested individual writes.</td><td class="mono">export.completed</td></tr>
+    <tr><td>5</td><td>Acknowledgment</td><td>Streaming deliveries track acknowledged vs produced sequence. Held = queued and accounted, retried without regenerating. Paused = a governance decision that accumulates and does not leak.</td><td>—</td></tr>
+  </tbody>
+</table></div>
+
+<div class="diagram-frame">
+  <div class="diagram-title">4 · A draft becomes part of the record (signature &amp; write-back)</div>
+  {{ diagrams.sign | safe }}
+</div>
+<p class="diagram-caption">The one path by which generated content reaches the
+legal record — with a human decision standing in the middle of it
+(<span class="mono">signature.committed</span>), and no path around it.</p>
+
+<div class="doc-prose"><h2 class="wt">Walkthrough</h2></div>
+<div class="tablewrap"><table>
+  <thead><tr><th>#</th><th>Step</th><th>What happens</th><th>Audit event</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>The material</td><td>A visit happens; ambient documentation or a summarization request produces the raw material.</td><td class="mono">query + disclosure events</td></tr>
+    <tr><td>2</td><td>The draft</td><td>The assistant drafts the note from retrieved records, labeled as a draft, carrying its citations.</td><td>—</td></tr>
+    <tr><td>3</td><td>The queue</td><td>The draft waits in the signature queue. It has no write path from here — that is the signature rule, structurally.</td><td>—</td></tr>
+    <tr><td>4</td><td>The human</td><td>A licensed reviewer reads the draft against its citations, edits it, and decides. On signing, the content becomes the signer's — clinically and legally.</td><td class="mono">signature.committed</td></tr>
+    <tr><td>4a</td><td class="v-warn">Return branch</td><td>A draft not accepted is returned or discarded. Drafts never advance by timeout, default, or batch approval.</td><td>—</td></tr>
+    <tr><td>5</td><td>Write-back</td><td>Only the signed note is delivered to the EMR (on Epic, a <span class="mono">DocumentReference</span> create), attributed to the signer. The EMR remains the legal record.</td><td>—</td></tr>
+  </tbody>
+</table></div>
+
+<div class="doc-prose">
+<h2>What never happens, on any of these flows</h2>
+<ul>
+  <li>Data released without a gate evaluating the reader, the record and the
+    purpose — and writing the event.</li>
+  <li>A withholding, exclusion or refusal invisible to the person looking at
+    the result.</li>
+  <li>A partial arrival or delivery presented as complete.</li>
+  <li>Generated content entering the legal record without
+    <span class="mono">signature.committed</span> above it in the chain.</li>
+  <li>Psychotherapy content in any export, to any destination, under any
+    scope.</li>
+</ul>
+</div>
+{# Made by Ryan Gomez & Co. Inc. #}
