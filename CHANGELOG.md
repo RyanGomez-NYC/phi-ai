@@ -5,161 +5,149 @@
 ```text
                          φ(ai)
 
-          PHI AI 1.0 — the first public release
-   The AI-native platform for protected health data
+    ____    __  __  ______      ______  ______
+   /\  _`\ /\ \/\ \/\__  _\    /\  _  \/\__  _\
+   \ \ \L\ \ \ \_\ \/_/\ \/    \ \ \L\ \/_/\ \/
+    \ \ ,__/\ \  _  \ \ \ \     \ \  __ \ \ \ \
+     \ \ \/  \ \ \ \ \ \_\ \__   \ \ \/\ \ \_\ \__
+      \ \_\   \ \_\ \_\/\_____\   \ \_\ \_\/\_____\
+       \/_/    \/_/\/_/\/_____/    \/_/\/_/\/_____/
+
+   THE AI-NATIVE PLATFORM FOR PROTECTED HEALTH DATA
+
+           True AI, securely and compliantly,
+                running in your own cloud.
+
+         Open Source, Free for All · Apache-2.0
+
+                       ── 1.0 ──
 ```
 
-PHI AI 1.0 is the first public release: an open-source,
-bring-your-own-infrastructure AI platform for Protected Health
-Information. You deploy it into your own cloud account, connect it to
-your own EMR, and put a governed frontier model to work on your own
-clinical data — under an encrypted, tamper-evident system of record,
-with the HIPAA Security Rule's technical safeguards enforced
-structurally rather than by policy document.
+**Our mission is to make AI the center of the conversation in health
+care — and to bring the technology closer to the organizations doing
+the work.** PHI AI is not an AI feature bolted onto a records system:
+it is a platform designed from first principles for AI as a governed,
+first-class consumer of the clinical, financial and behavioral-health
+record.
 
-A live demonstration on fully synthetic data runs at
-<https://ryangomez.nyc/phi-ai/>.
+1.0 is the first public release. Deploy it into your own cloud,
+connect it to your own EMR, run it under your own keys — every
+safeguard the HIPAA Security Rule names, enforced in code rather than
+in a policy binder.
 
-### What ships in 1.0
+```text
+┌────────────────┬────────────────┬────────────────┬────────────────┐
+│  COMPLIANT BY  │   YOUR CLOUD   │    MINIMUM     │  HASH-CHAINED  │
+│  CONSTRUCTION  │   YOUR KEYS    │   NECESSARY    │  AUDIT TRAIL   │
+└────────────────┴────────────────┴────────────────┴────────────────┘
+```
 
-**The substrate**
+**See it running on synthetic data, right now:**
+<https://ryangomez.nyc/phi-ai/>
 
-- Encrypted system of record on S3, GCS, or Azure Blob — one
-  envelope-encrypted object per FHIR resource, KMS-backed data keys,
-  and the rule that gives every other structure its meaning: if a
-  derived store ever disagrees with the object store, the object store
-  wins.
-- Hash-chained, tamper-evident audit logging; every read of PHI is
-  recorded as a disclosure before the object is decrypted.
-- Role-gated, minimum-necessary access enforced in code paths.
-- Sensitive-category segmentation at the ingestion door — 42 CFR
-  Part 2, psychotherapy notes (their own store and consent lane), and
-  state-law categories — withheld fail-closed.
+### One pipeline, from EMR to governed AI
 
-**The AI surface**
+```text
+ YOUR EMR ──▶ CLASSIFY ──▶ ENCRYPT ──▶ SYSTEM OF RECORD ──▶ GOVERNED AI
+  FHIR R4     sensitive     per-object   your cloud, your     bounded by
+  6 vendors   categories    data keys,   keys — storage       the asker's
+              fail closed   your KMS     always wins          own role
+```
 
-- A grounded assistant over a retrieval kernel with an attribution
-  hard gate: every claim cited to stored bytes, abstention on empty
-  retrieval, status and negation preserved through chunking,
-  retrieval bounded by the asking user's own role grants. Off by
-  default; three PHI-access tiers, each requiring its own BAA
-  acknowledgement; the only component in the platform with a network
-  path out of the deployment — and on AWS and GCP that path stays
-  inside your own account via Bedrock or Vertex AI.
-- A model-governance kernel: registry and execution gate, fairness
-  screening, ambient consent gating, staged-draft write-back (AI
-  output lands in a signature queue, never directly in the record),
-  patient-output release gates, a constrained action space, and HTI-1
-  source attributes. Every gate refuses rather than degrades.
-- Capability cores: spine summarization, patient-instruction
-  no-new-assertions checking, cited prior-auth packets, recall-biased
-  triage, human-confirmed measure abstraction, trial pre-screening,
-  ingest data-quality QA.
+- **Six EMR connectors, one data-driven client** — Epic, Oracle Health
+  (Cerner), athenahealth, eClinicalWorks, MEDITECH, NextGen — each
+  speaking its vendor's real auth model, each testable end-to-end
+  against a bundled emulator before you ever touch a live system.
+- **An encrypted system of record** — one envelope-encrypted object
+  per FHIR resource. Every index, every analytics layer, every answer
+  traces back to those bytes; if a derived store ever disagrees, the
+  object store wins.
+- **Segmentation at the door** — 42 CFR Part 2, psychotherapy notes,
+  state-law categories: classified on ingestion, withheld fail-closed,
+  released only through their own consent lanes.
 
-**Integration and delivery**
+### An assistant that must show its work
 
-- Six EMR connectors through one data-driven FHIR R4 client — Epic,
-  Oracle Health (Cerner), athenahealth, eClinicalWorks, MEDITECH,
-  NextGen Healthcare — each using its vendor's real auth model, every
-  quirk in a capability-profile table rather than in the client.
-- Two ingestion paths feeding one pipeline: hourly per-type search and
-  daily FHIR Bulk Data Export (the only way to ingest an entire
-  population; vendors without `$export` are refused at startup, not
-  silently downgraded).
-- Per-vendor emulators (ports 9101–9106) reproducing each vendor's
-  real seams, so every connector is testable end-to-end without a
-  live EMR.
-- Records delivery back to a live EMR, and release-of-information
-  productions assembled for human review — withheld records itemized,
-  never silent, Part 2 redisclosure refused without category-specific
-  consent.
+Ask it about a patient and every claim comes back cited to stored
+bytes. Nothing retrieved means nothing asserted — it abstains rather
+than invents. Retrieval is bounded by *your* role grants, so the
+assistant can never become a way to see what you couldn't open
+yourself. And it is the only component in the platform with a network
+path out of the deployment — a path that, on AWS and GCP, never leaves
+your own account.
 
-**Analytics and imaging (opt-in, off by default)**
+### AI that cannot touch the record on its own
 
-- Population analytics that count patients rather than rows, name
-  search in its own separately-enabled store, a guarded read-only SQL
-  tool with every generated query audited verbatim, and an optional
-  OHDSI OMOP CDM layer.
-- DICOM imaging: PACS-export ingestion, one encrypted object per SOP
-  instance, a read-only DICOMweb API serving an unmodified, pinned
-  upstream OHIF viewer on a separate origin.
+```text
+   model drafts ──▶ SIGNATURE QUEUE ──▶ human signs ──▶ the record
 
-**Operations**
+        Nothing an AI writes reaches the chart without a
+              human signature. No exceptions.
+```
 
-- Complete Terraform stacks for AWS, GCP, and Azure.
-- Twenty-four operational runbooks, a non-interactive installer, a
-  guided installer chatbot, a healthcheck that verifies compliance
-  posture rather than mere connectivity, and a cross-flow verification
-  suite with one answer and one exit code.
+The governance kernel treats every model as untrusted by default:
+registry and execution gates, fairness screening, ambient consent
+gating, patient-output release gates, a constrained action space.
+Every gate refuses rather than degrades.
 
-### The numbers behind this release
+### And the rest of the platform
 
-- 818 passing tests, runnable with no cloud at all.
-- All four Terraform stacks validate.
-- §10 evaluation metrics over the synthetic corpus, at their targets:
-  zero silent omissions, zero status inversions, zero attribution
-  false negatives, retrieval recall 1.0, zero abstention failures.
-  These are lower bounds on error — synthetic only — and do not
-  substitute for validation against your own data.
+Population analytics that count patients, not rows. An optional OMOP
+CDM layer for standard tooling. DICOM imaging with the upstream OHIF
+viewer, pinned and unmodified. Release-of-information productions
+where every withheld record is itemized, never silent. Complete
+Terraform for AWS, GCP, and Azure. Twenty-four runbooks, an installer
+chatbot, and a healthcheck that verifies compliance posture — not just
+connectivity.
 
 ### What 1.0 is not
 
-Software that manages PHI must not overstate itself, so the limits
-ship in the same release notes as the features:
+```text
+   ╔═════════════════════[ THE HONESTY BOX ]═════════════════════╗
+   ║  Software that manages PHI must not overstate itself.       ║
+   ╚═════════════════════════════════════════════════════════════╝
+```
 
 - **No storage-level immutability.** Retention is recorded, not
   enforced; integrity is detective, not preventive.
-- **No live EMR validation.** Every integration is exercised against
-  the emulators; Epic is the only vendor also run against a live
-  sandbox. Registration with each vendor is still required.
+- **No live EMR validation.** Everything is exercised against the
+  emulators; Epic alone has also run against a live sandbox.
 - **Not a compliance determination.** The software implements
-  controls; it does not certify anyone against HIPAA, and operating on
-  real PHI lawfully remains the implementing organization's
-  responsibility.
-- **OCR is printed text only.**
-- **Not yet audited.** Before any production or PHI workload this
-  needs a formal HIPAA security risk assessment and, ideally,
-  third-party security review by someone other than the code's own
-  author.
+  controls; operating on real PHI lawfully remains yours.
+- **Not yet audited.** Run your own HIPAA security risk assessment —
+  and get review from someone other than the code's own author —
+  before any production workload.
 
-### Known gaps
-
-- Three ingested resource types are not yet mapped into OMOP
-  (`DocumentReference`, `AllergyIntolerance`, `ExplanationOfBenefit`),
-  and the OHDSI standardized vocabulary is a separately licensed
-  download this project cannot bundle.
-- The clouds are not identical: GCP's Cloud SQL IAM model constrains
-  database role separation differently, Azure's only deletion
-  protection is a 7-day soft-delete window, and the
-  independent-audit-trail cross-check exists on AWS only. Each setup
-  runbook's "Known gaps" section is the authority.
-- The Azure Terraform stack validates with provider deprecation
-  warnings that will need attention before the provider's v5.
-
-### Getting started
+### Try it in the next five minutes
 
 ```bash
 git clone https://github.com/RyanGomez-NYC/phi-ai && cd phi-ai
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest tests/ -q     # proves the platform on your machine, no cloud needed
+python -m pytest tests/ -q     # the whole platform proves itself, no cloud needed
 ```
 
-Then follow the README's five-step "Getting started, in detail" — the
-emulators let you exercise everything locally before you provision
-anything.
+The bundled emulators let you exercise every connector locally before
+you provision a single cloud resource. The README's "Getting started,
+in detail" takes it from there.
 
-### License and attribution
+### Keep the code, keep the credit
 
-Apache License 2.0, chosen for its explicit patent grant. Attribution
-is a condition of use: per Section 4(d), the notices in `NOTICE` and
-the copyright headers in the source files travel with every
-redistribution and derivative work. Keep the code, keep the credit.
+```text
+        ╔═══════════════════════════════════════════════════╗
+        ║   APACHE-2.0  ·  KEEP THE CODE, KEEP THE CREDIT   ║
+        ╠═══════════════════════════════════════════════════╣
+        ║   PHI AI — Copyright 2026 Ryan Gomez & Co. Inc.   ║
+        ║   Created by Ryan Gomez  ·  www.ryangomez.nyc     ║
+        ╚═══════════════════════════════════════════════════╝
+```
+
+Apache 2.0, chosen for its explicit patent grant. Per Section 4(d),
+the notices in `NOTICE` and the source-file headers travel with every
+redistribution and derivative work.
 
 ---
 
-PHI AI is created by **Ryan Gomez & Co. Inc.** — built by one person
-working with a frontier model. To err is human; to completely blow
-stuff up is to AI. We can make mistakes: see something, say something,
-and report an issue. Feedback, questions and criticisms:
-<https://www.ryangomez.nyc>.
+Built by one person working with a frontier model. To err is human; to
+completely blow stuff up is to AI. See something, say something —
+report an issue. <https://www.ryangomez.nyc>
