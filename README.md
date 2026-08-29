@@ -1,5 +1,5 @@
 ```text
-                     φ  (  a  i  )
+                         φ(ai)
 
     ____    __  __  ______      ______  ______
    /\  _`\ /\ \/\ \/\__  _\    /\  _  \/\__  _\
@@ -13,15 +13,10 @@
              https://ryangomez.nyc/phi-ai
 
 
-                      █
-                ▄▄▄███████▄▄▄
-            ▄██▀▀     █     ▀▀██▄
-          ██          █          ██       True AI, securely and
-          ██          █          ██       compliantly, running in
-          ██          █          ██       your own cloud.
-            ▀██▄▄     █     ▄▄██▀
-                ▀▀▀███████▀▀▀             Open Source, Free for All.
-                      █
+          True AI, securely and compliantly,
+              running in your own cloud.
+
+              Open Source, Free for All.
 ```
 
 # PHI AI
