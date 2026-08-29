@@ -1,22 +1,30 @@
 ```text
-        ██████╗ ██╗  ██╗██╗    █████╗ ██╗
-        ██╔══██╗██║  ██║██║   ██╔══██╗██║
-        ██████╔╝███████║██║   ███████║██║
-        ██╔═══╝ ██╔══██║██║   ██╔══██║██║
-        ██║     ██║  ██║██║   ██║  ██║██║
-        ╚═╝     ╚═╝  ╚═╝╚═╝   ╚═╝  ╚═╝╚═╝
+══════════════════════════════════════════════════════════════════════════
 
-              _____     ___       _   __
-             / _ \ \   / (_)     (_) /  |
-            | |_| |\ \_/ / _ __ _ _  |  |    φ(ai)
-            |  ___| \   / | '__(_|_) |  |
-            | |      | |  | |  _ _ _ |  |    THE AI-NATIVE PLATFORM FOR
-            |_|      |_|  |_| (_|_|_)|__|    PROTECTED HEALTH DATA
+       ▄███████▄    ▄█    █▄     ▄█          ▄████████  ▄█
+      ███    ███   ███    ███   ███         ███    ███ ███
+      ███    ███   ███    ███   ███▌        ███    ███ ███▌
+      ███    ███  ▄███▄▄▄▄███▄▄ ███▌        ███    ███ ███▌
+    ▀█████████▀  ▀▀███▀▀▀▀███▀  ███▌      ▀███████████ ███▌
+      ███          ███    ███   ███         ███    ███ ███
+      ███          ███    ███   ███         ███    ███ ███
+     ▄████▀        ███    █▀    █▀          ███    █▀  █▀
 
-   ══════════════════════════════════════════════════════════════════
-    True AI, securely and compliantly, running in your own cloud.
-                     Open Source, Free for All.
-   ══════════════════════════════════════════════════════════════════
+                      █
+                ▄▄▄███████▄▄▄
+            ▄██▀▀     █     ▀▀██▄           THE AI-NATIVE PLATFORM
+          ██          █          ██         FOR PROTECTED HEALTH DATA
+          ██          █          ██
+          ██          █          ██         True AI, securely and compliantly,
+            ▀██▄▄     █     ▄▄██▀           running in your own cloud.
+                ▀▀▀███████▀▀▀
+                      █                     Open Source, Free for All.
+                  φ ( a i )
+
+            ╱╲                                ╱╲
+───────────╱  ╲─────╲  ╱────────────────────╱  ╲─────╲  ╱─────────────────
+                     ╲╱                            ╲╱
+══════════════════════════════════════════════════════════════════════════
 ```
 
 # PHI AI
@@ -59,10 +67,10 @@ and the difference matters enough that `docs/COMPLIANCE.md` →
 "Retention and integrity" is worth reading before the rest of this file.
 
 ```text
-   ┌──────────────────────────────────────────────────────────────┐
-   │  ♥ compliant by construction   ☁ your cloud, your keys       │
-   │  ⚖ minimum necessary, by role  ⛓ hash-chained audit trail    │
-   └──────────────────────────────────────────────────────────────┘
+┌────────────────┬────────────────┬────────────────┬────────────────┐
+│  COMPLIANT BY  │   YOUR CLOUD   │    MINIMUM     │  HASH-CHAINED  │
+│  CONSTRUCTION  │   YOUR KEYS    │   NECESSARY    │  AUDIT TRAIL   │
+└────────────────┴────────────────┴────────────────┴────────────────┘
 ```
 
 ## Features
@@ -72,20 +80,24 @@ frontier model operates through, or the substrate that makes doing so
 defensible.
 
 ```text
-  ╔═ THE SUBSTRATE ══════════════════════════════════════════════════╗
-  ║                                                                  ║
-  ║  Encrypted system of record   One encrypted object per FHIR      ║
-  ║                               resource; storage always wins       ║
-  ║  Envelope encryption          KMS-backed, per-object data keys   ║
-  ║  Tamper-evident audit         Hash-chained log; every read of    ║
-  ║                               PHI recorded before decryption     ║
-  ║  Role-gated access            Minimum necessary enforced in      ║
-  ║                               code paths, not policy documents   ║
-  ║  Sensitivity segmentation     42 CFR Part 2, psychotherapy       ║
-  ║                               notes, state-law categories —       ║
-  ║                               withheld fail-closed               ║
-  ║                                                                  ║
-  ╚══════════════════════════════════════════════════════════════════╝
+  ╔════════════════════ T H E   S U B S T R A T E ═════════════════════╗
+  ║                                                                    ║
+  ║  Encrypted system of record  One encrypted object per FHIR         ║
+  ║                              resource; storage always wins         ║
+  ║                                                                    ║
+  ║  Envelope encryption         KMS-backed, per-object data keys      ║
+  ║                                                                    ║
+  ║  Tamper-evident audit        Hash-chained log; every read of       ║
+  ║                              PHI recorded before decryption        ║
+  ║                                                                    ║
+  ║  Role-gated access           Minimum necessary enforced in         ║
+  ║                              code paths, not policy documents      ║
+  ║                                                                    ║
+  ║  Sensitivity segmentation    42 CFR Part 2, psychotherapy notes,   ║
+  ║                              state-law categories — withheld       ║
+  ║                              fail-closed                           ║
+  ║                                                                    ║
+  ╚════════════════════════════════════════════════════════════════════╝
 ```
 
 - **Grounded AI assistant** (`core/assistant/`, `core/rag/`) — a
@@ -175,15 +187,15 @@ to a cache.
  │  ███ ENCRYPTED SYSTEM OF RECORD ███         core/storage/ + crypto/   │
  │  S3 / GCS / Azure Blob — one encrypted object per resource            │
  │  psychotherapy notes: separate store, separate consent lane           │
- │                    ⛓ hash-chained audit trail ⛓                       │
+ │        o═o═o═o  hash-chained audit trail  o═o═o═o                     │
  └───────┬───────────────┬───────────────┬───────────────┬───────────────┘
          ▼               ▼               ▼               ▼
- ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────────┐
- │ Postgres     │ │ OMOP CDM    │ │ imaging     │ │ name search  │
- │ index        │ │ (opt-in)    │ │ index       │ │ (opt-in)     │
- │ (derived)    │ │ (derived)   │ │ (opt-in)    │ │ (derived)    │
- └──────┬───────┘ └──────┬──────┘ └──────┬──────┘ └──────┬───────┘
-        ▼                ▼               ▼               ▼
+  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐
+  │  Postgres  │  │  OMOP CDM  │  │  imaging   │  │    name    │
+  │   index    │  │   layer    │  │   index    │  │   search   │
+  │  derived   │  │   opt-in   │  │   opt-in   │  │   opt-in   │
+  └──────┬─────┘  └──────┬─────┘  └──────┬─────┘  └──────┬─────┘
+         ▼               ▼               ▼               ▼
  ┌───────────────────────────────────────────────────────────────────────┐
  │  GOVERNED SURFACES                          all role-gated, audited   │
  │  web UI & JSON API · grounded assistant (RAG) · analytics & cohorts   │
@@ -229,7 +241,7 @@ the repository layout below.
         ▼                                           ▼
   answer ◀── attribution hard gate ◀── model (in YOUR cloud account)
              every claim cited to stored bytes;
-             empty retrieval ⇒ abstention, never invention
+             empty retrieval => abstention, never invention
 ```
 
 **3 · AI output back to the record — staged drafts only**
@@ -350,9 +362,11 @@ extensions and must be namespaced to **your** organization from day one.
 ## Read this before believing any of the above
 
 ```text
-   ┌────────────────────────── HONESTY BOX ──────────────────────────┐
-   │ Software that manages PHI must not overstate itself. So:        │
-   └─────────────────────────────────────────────────────────────────┘
+╔══════════════════════[ THE HONESTY BOX ]═══════════════════════════╗
+║                                                                    ║
+║     Software that manages PHI must not overstate itself. So:       ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
 ```
 
 - **No storage-level immutability.** No WORM, no Object Lock, no Bucket
@@ -457,12 +471,12 @@ phi-ai/
 ## License & attribution
 
 ```text
-   ┌─────────────────────────────────────────────────────────────────┐
-   │            Apache-2.0 · keep the code, keep the credit          │
-   │                                                                 │
-   │   PHI AI — Copyright 2026 Ryan Gomez & Co. Inc.                 │
-   │   Created by Ryan Gomez · https://www.ryangomez.nyc             │
-   └─────────────────────────────────────────────────────────────────┘
+        ╔═══════════════════════════════════════════════════╗
+        ║   APACHE-2.0  ·  KEEP THE CODE, KEEP THE CREDIT   ║
+        ╠═══════════════════════════════════════════════════╣
+        ║   PHI AI — Copyright 2026 Ryan Gomez & Co. Inc.   ║
+        ║   Created by Ryan Gomez  ·  www.ryangomez.nyc     ║
+        ╚═══════════════════════════════════════════════════╝
 ```
 
 Apache 2.0 (see `LICENSE`). Chosen for its explicit patent grant, which
