@@ -91,6 +91,13 @@ Cerner, athenahealth, eClinicalWorks, MEDITECH and NextGen. See
 
 ## Roles
 
+**Assigning them is its own procedure: `runbooks/RUNBOOK_IDENTITY_MAPPING.md`.**
+This section describes how roles arrive and what they mean; that runbook is
+the step-by-step for mapping your EMR and directory populations onto them,
+with the full nine-role crosswalk, the purpose-of-use expectations per role,
+and how to verify the mapping before anyone relies on it. A signed-in person
+who carries no role can reach nothing, so this is not optional work.
+
 Mapped from the IdP group claim in the groups header. Group names may be
 namespaced (`phi-ai-him`, `role:him`) — the trailing segment is
 matched, so your IdP's naming convention does not have to change. (Those

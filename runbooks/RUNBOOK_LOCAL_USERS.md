@@ -10,6 +10,11 @@ everything in this document is the exception to it.
 
 ---
 
+**Which role each account should get is not decided here.** The crosswalk
+from job function to role, and the reasoning behind each grant, is in
+`runbooks/RUNBOOK_IDENTITY_MAPPING.md` — it applies unchanged to local
+accounts, minus the directory that would otherwise own the lifecycle.
+
 ## Why this exists
 
 Not every organisation with a legal obligation to retain PHI runs an

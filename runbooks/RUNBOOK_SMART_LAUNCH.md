@@ -133,6 +133,10 @@ Two paths, both delegating the actual authentication elsewhere:
 | HIM, compliance, records staff | Reverse proxy → your IdP (`RUNBOOK_WEB_UI.md`) |
 | Clinicians launching from a chart | SMART launch → the EMR's authorization server |
 
+A SMART launch establishes *who* and the patient context; it does not
+carry PHI AI roles. Those still come from your directory group mapping —
+`runbooks/RUNBOOK_IDENTITY_MAPPING.md`.
+
 A completed SMART launch wins over proxy headers when both are present:
 the clinician explicitly launched in a patient's context, and that is the
 more specific statement of who is asking.

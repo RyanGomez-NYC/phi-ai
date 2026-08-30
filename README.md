@@ -348,6 +348,7 @@ and refuses vendors whose profile records no `$export` support.
 | Surface | Where to read first | Why it is opt-in |
 |---|---|---|
 | Web UI & API | `core/web/` (auth via reverse proxy) | your front door |
+| Users, roles & permissions | `runbooks/RUNBOOK_IDENTITY_MAPPING.md` | a signed-in person with no mapped role reaches nothing; mapping who gets which role is the access control |
 | AI assistant | `runbooks/RUNBOOK_AI_ASSISTANT.md` | only outbound network path; PHI tiers need BAA acknowledgements |
 | Postgres index | `core/db/schema.sql` header | derived, rebuildable |
 | OMOP CDM layer | `runbooks/RUNBOOK_OMOP_SETUP.md` | identified PHI, broader surface |
@@ -458,8 +459,8 @@ phi-ai/
 │                        SPEC · SCALING · COST · TESTDATA · more
 ├── emulators/          One emulator per EMR vendor (ports 9101-9106)
 ├── install/            install.sh + guided installer chatbot
-├── runbooks/           Fourteen operational runbooks (setup per cloud,
-│                        incident response, HIM verification, ...)
+├── runbooks/           25 operational runbooks (setup per cloud, identity
+│                        and role mapping, incident response, ...)
 ├── scripts/            Keypair generation, mock Epic server, corpus
 │                        generation, eval metrics, smoke tests
 ├── tests/              The full suite - runs with no cloud at all
