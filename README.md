@@ -34,7 +34,15 @@ verification, encryption — enforced structurally rather than by policy
 document.
 
 **Live demonstration** (synthetic data, no real patients):
-<https://ryangomez.nyc/phi-ai/>
+<https://ryangomez.nyc/phi-ai/> — the governed surfaces running end to end
+over a 33,311-patient synthetic corpus: a grounded assistant that cites
+every claim to stored bytes, vision reads over synthetic imaging, patient
+instructions held behind a no-new-assertions release gate, ambient capture
+behind a state-law consent gate, an ingest-QA sweep across the whole store,
+a subgroup fairness screen, model preflight, and release-of-information
+productions that itemise what they withhold. Every model run there is
+audited, and nothing an AI drafts reaches the record without a human
+signature.
 
 > **Compliance responsibility:** HIPAA compliance belongs to the
 > organization that owns or manages the PHI, not to this software. See
