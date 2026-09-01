@@ -297,10 +297,11 @@ with your AI provider</strong>.</p>
 <h3>11.2 Bring, build and extend your own models</h3>
 <p>The registry is not only for language models. Nine model kinds are
 first-class — foundation, retrieval, deterministic, predictive, classifier,
-imaging, optimization, mapper, custom — and fifteen capability slots wire
+imaging, optimization, mapper, custom — and thirteen capability slots wire
 them into the product: assistant, claims, prior-auth, coding, ROI, no-show,
-segmentation, ambient (the self-hosted speech listener), triage,
-scheduling, ingest, imaging, trials, measures, and other.
+segmentation, scheduling, ingest, imaging, trials, measures, and other.
+A model registered against a slot outside that set is recorded as
+<code>other</code> rather than silently inventing a slot.
 Activate your own denial-risk model into the claims slot and the Claims
 &amp; billing screen scores with <em>your</em> model; the built-in core
 steps aside but stays registered, one click from reinstatement. Every model

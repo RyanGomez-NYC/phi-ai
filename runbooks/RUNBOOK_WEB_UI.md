@@ -13,8 +13,8 @@
 > Service Authentication), and it was chosen because hand-rolling password
 > storage, sessions, MFA and recovery for a PHI system would be strictly
 > worse than delegating to an IdP your organization already runs and
-> audits. Every competitor in `docs/COMPETITIVE_ANALYSIS.md` integrates
-> with SSO for the same reason. But the failure mode is total, so it gets
+> audits. Products in this category integrate with SSO for the same
+> reason. But the failure mode is total, so it gets
 > a warning box rather than a footnote.
 
 
@@ -55,8 +55,9 @@ python -m core.web
 
 The interface is built on one stylesheet, `core/web/static/app.css`, with
 no build step and no JavaScript. To retune the look, edit the token block
-at the top of that file — `docs/DESIGN_SYSTEM.md` explains the tokens and
-the component classes that read from them.
+at the top of that file, which is the source of truth for every value —
+`docs/DESIGN_SYSTEM.md` explains what each token family is for and which
+rules are load-bearing, without duplicating the values.
 
 Two things about it are operational rather than cosmetic:
 
@@ -301,9 +302,9 @@ differently-numbered one would read as a second destruction.
 
 ## Break-the-glass: why there isn't one
 
-314e publishes break-the-glass access. This deliberately does not
-implement it, and the reason is worth stating rather than leaving as an
-unexplained gap.
+Products in this category commonly publish break-the-glass access. This
+deliberately does not implement it, and the reason is worth stating
+rather than leaving as an unexplained gap.
 
 Roles here come from the IdP. An in-application emergency override would
 be a **second, parallel privilege system** that grants access the identity
@@ -328,8 +329,8 @@ discussion, not a feature to add quietly.
 Stated plainly rather than left for discovery.
 
 - **No per-requester-type print templates.** One production format is
-  used for every requester. Harmony varies formatting by requester type
-  (patient, attorney, payer, employer).
+  used for every requester. Some products in this category vary
+  formatting by requester type (patient, attorney, payer, employer).
 - **Scope is by date and record type only.** Not by encounter, episode of
   care, or clinical category.
 - **Certificates are not yet generated automatically by `purge.py`.** The

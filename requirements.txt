@@ -43,9 +43,9 @@ pdf2image>=1.17    # PDF -> page images; needs the poppler-utils binary
 # Web interface (core/web/)
 #
 # FastAPI rather than Flask because the interface serves an HTML UI and a
-# JSON API from ONE implementation - every competitor offers programmatic
-# access alongside the UI, and a second code path for it is how the two
-# drift apart. python-multipart is required for form posts and document
+# JSON API from ONE implementation - products in this category offer
+# programmatic access alongside the UI, and a second code path for it is
+# how the two drift apart. python-multipart is required for form posts and document
 # uploads; without it FastAPI raises at import of the upload route, not
 # at request time.
 fastapi>=0.110

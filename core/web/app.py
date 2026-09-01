@@ -4,9 +4,9 @@
 Web interface for the PHI AI Platform.
 
 Serves both an HTML UI and a JSON API from one implementation, so the
-two cannot drift - every competitor in docs/COMPETITIVE_ANALYSIS.md
-offers programmatic access alongside the UI, and maintaining a second
-code path for it is how they disagree.
+two cannot drift - products in this category offer programmatic access
+alongside the UI, and maintaining a second code path for it is how the
+two come to disagree.
 
 THREE RULES ENFORCED HERE, each mirroring a decision already made
 elsewhere in this codebase rather than inventing a new one:

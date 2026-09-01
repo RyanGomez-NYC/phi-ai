@@ -1,6 +1,6 @@
 # Architecture
 
-## DICOM imaging and AI (optional)
+## DICOM imaging (optional)
 
 Off by default. When enabled, imaging is stored one encrypted object per
 SOP instance under `dicom/{study}/{series}/{sop}.dcm`, in the same bucket

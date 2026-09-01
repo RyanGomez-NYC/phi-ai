@@ -17,8 +17,12 @@ policy is what enforces the ingest/restore/auditor separation described in
 `deploy/aws/README.md`. Without it, "the ingestion service cannot decrypt
 patient data" stops being true.
 
-So: **$1.00/month is the floor**, and the recommended configuration is
-$2.00/month rising to ~$6.00/month after two years of key rotation.
+So: **$1.00/month is the KMS floor**, and it is only the floor with
+`enable_db = false`. The default configuration provisions RDS, which
+adds ~$12-15/month once the free-tier window closes. KMS itself goes
+$1.00 -> $2.00 with a separate audit key, and rises toward ~$6.00 only
+where key rotation is on - which is the production configuration, not
+dev.
 
 ## What the free tier actually is now
 
@@ -49,6 +53,7 @@ something is wrong.
 | S3 PUT/GET | $0.005 / $0.0004 per 1,000 | Credit-funded | One PUT per resource, plus one per audit event. |
 | CloudTrail management events | $0 first copy per region | **Yes, first trail** | $2.00/100k for any *additional* trail in the same region. |
 | CloudTrail **data** events | $0.10 per 100,000 | **No** | Billed from the first event. No free copy. |
+| RDS Postgres index (`enable_db = true`, the default) | ~$12-15/month | 12mo, then **No** | `deploy/aws/outputs.tf:224`: billing starts AUTOMATICALLY when the window ends. Set `enable_db = false` to skip `rds.tf` entirely - the store works identically via S3 alone. |
 | S3 versioning | $0 | n/a | The feature is free; the stored versions are not. **Object Lock is not enabled on any bucket in this stack** - see `deploy/aws/README.md`. |
 | AWS Budgets | $0 for first two | Yes | |
 | DynamoDB state lock | - | - | **Removed.** Now uses S3-native locking (Terraform 1.10+). |
@@ -125,7 +130,7 @@ versions; Azure's 7-day soft-delete window is the one place it self-limits.
 
 ## Configurations
 
-### Free-tier dev - ~$1.00/month
+### Free-tier dev - ~$1.00/month, then ~$13-16/month
 `terraform.tfvars.free-tier.example`. One shared KMS key, no rotation, no
 data events, no transitions.
 
@@ -138,7 +143,7 @@ Same, but `separate_audit_key = true` and `cloudtrail_data_events = true`.
 Preserves the actual security architecture. The extra dollar is the
 cheapest part of this project.
 
-### Production - ~$6.00/month fixed, plus usage
+### Production - ~$18-21/month fixed, plus usage
 Two keys with rotation at steady state, data events on. Usage scales with
 object-store size and access volume; at 100M stored resources expect
 storage and KMS request charges to dominate the fixed key cost by orders

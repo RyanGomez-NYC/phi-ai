@@ -12,10 +12,9 @@ WHY, since this is the single largest design decision in the interface:
 hand-rolling password storage, session management, MFA, lockout and
 recovery for a system holding PHI would be strictly worse than delegating
 to an identity provider the deploying organisation already runs and
-already audits. Every competitor in docs/COMPETITIVE_ANALYSIS.md
-integrates with SSO/LDAP rather than maintaining its own user directory,
-and for the same reason. A hospital has an IdP; it does not want another
-credential store.
+already audits. Products in this category integrate with SSO/LDAP rather
+than maintaining their own user directory, and for the same reason. A
+hospital has an IdP; it does not want another credential store.
 
 WHAT THAT COSTS, stated plainly: if this application is reachable
 WITHOUT the proxy in front of it, anyone who can reach it is whoever

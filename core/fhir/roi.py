@@ -3,8 +3,8 @@
 """
 Release of information: request, fulfil, disclose.
 
-The workflow every product in docs/COMPETITIVE_ANALYSIS.md is built
-around, and the one HIM staff actually spend their day in. Retrieving a
+The workflow products in this category are built around, and the one HIM
+staff actually spend their day in. Retrieving a
 record is not the same thing as releasing one: a release has a requester,
 a stated authority, a defined scope, a produced record set, and a
 disclosure that must remain accountable for six years under 45 CFR

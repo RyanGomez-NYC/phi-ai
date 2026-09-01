@@ -234,6 +234,13 @@ _ARCH = {
          "toSide": "l", "dur": 3400},
         {"from": "store", "to": "gates", "kind": "read", "fromSide": "b",
          "toSide": "t"},
+        # Psychotherapy content IS readable - by the psychotherapy role,
+        # through the same gates, recorded as a disclosure. Drawing it as
+        # a store nothing reads understated the surface, which on a
+        # governance diagram is the wrong direction to be wrong in. What
+        # it cannot do is leave: there is still no psych -> export edge.
+        {"from": "psych", "to": "gates", "kind": "read", "fromSide": "b",
+         "toSide": "r", "label": "confirmed disclosure", "dur": 4200},
         {"from": "gates", "to": "rag", "kind": "read", "label": "scoped tools"},
         {"from": "rag", "to": "people", "kind": "read",
          "label": "cited answers"},

@@ -37,5 +37,11 @@ testdata/
 tfplan*
 **/tfplan*
 tfboot
-www-demo/public/cache/
-www-demo/var/
+# Generated imaging frames. Ignored except for the deny rule, which is
+# protection and belongs in the repo - see www-demo/var/ below.
+www-demo/public/cache/*
+!www-demo/public/cache/.htaccess
+# Runtime state - caches, generated frames, uploaded audio. Ignored except
+# for the deny rule itself, which is protection and belongs in the repo.
+www-demo/var/*
+!www-demo/var/.htaccess

@@ -3,10 +3,8 @@
 """
 Certificates of destruction for disposed records.
 
-Adopted from the one competitor feature docs/COMPETITIVE_ANALYSIS.md
-identified as a genuinely good idea this project lacked: Harmony's proof
-of purge, which records that a record existed at some point in the
-system, and the reason, date and time it was destroyed.
+Proof of purge: a durable record that a record existed at some point in
+the system, and the reason, date and time it was destroyed.
 
 WHY IT IS NOT REDUNDANT WITH THE AUDIT LOG. The audit log already records
 every disposal, and it is hash-chained, so it is arguably better
