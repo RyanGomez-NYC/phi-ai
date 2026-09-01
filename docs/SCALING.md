@@ -52,8 +52,12 @@ layout while existing ones stay put. Choose before ingesting.
 |---|---|---|
 | Storage objects | 20,000,000,000 | **40,000,000** |
 | Index rows | 20 billion | **40 million** |
-| Index size | 7.3 TB | **15 GB** |
+| Index size | 8.0 TB | **16 GB** |
 | One-time PUT cost | $100,000 | **$200** |
+
+Assuming ~500 resources per `(patient, type)` bundle. Index sizes use the
+~400 bytes/row from *Sizing the index* below; PUT cost is $0.005 per 1,000
+requests (S3 Standard, the rate `docs/COST.md` cites).
 
 **500× fewer objects**, and the index returns to something a single
 Postgres instance handles.
@@ -82,9 +86,11 @@ mean constant rewrites and `small` would be correct at any size.
 
 The type set is small, known and stable, so the partition list is bounded
 and readable. Retention and disposal are already expressed per type, so
-partitions line up with the operations that scan ranges. Verified against
-Postgres 16: a type-scoped query prunes to a single partition, and
-uniqueness constraints hold within partitions.
+partitions line up with the operations that scan ranges. By design a
+type-scoped query prunes to a single partition and uniqueness constraints
+hold within partitions — but `core/db/schema_partitioned.sql` is not
+executed by the test suite, so verify this against your own Postgres
+before relying on it at scale.
 
 The cost: restore-by-patient touches every partition rather than one. Each
 is a fraction of the size with its own patient index. The alternative —
@@ -115,8 +121,10 @@ transition targets a lifecycle rule takes:
 | Glacier Instant Retrieval | ~$410 |
 | Glacier Deep Archive | ~$101 |
 
-Ingest of 110 million document-sized objects takes under an hour at S3's
-per-prefix rate. Object storage itself has no practical ceiling.
+Ingest is bound by request rate per prefix, not by bytes. At AWS's
+documented 3,500 PUT/s per prefix, 110 million document-sized objects take
+**~8.7 hours** on a single prefix; clearing an hour needs ~9 prefixes
+written in parallel. Object storage itself has no practical ceiling.
 
 **The lifecycle default is wrong for large deployments, and correct for
 small ones.** Transitions are off because Standard-IA and Glacier IR bill

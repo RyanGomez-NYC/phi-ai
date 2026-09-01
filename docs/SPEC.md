@@ -444,7 +444,7 @@ The guidance notes that **automation bias intensifies in time-critical situation
 
 ## 9. Cost model
 
-Parameterized rather than priced: unit prices change and a spec that hardcodes them goes stale silently. The operator supplies current unit costs; the platform ships this as a calculator in the install runbook.
+Parameterized rather than priced: unit prices change and a spec that hardcodes them goes stale silently. The operator supplies current unit costs and applies the formulas below. `docs/COST.md` carries the AWS line items with their rates and the date they were checked; no calculator ships with the platform.
 
 **Corpus and embedding.** Chunks ≈ *P* patients × *R* resources/patient × *C* chunks/resource. One-time embedding cost = chunks × mean tokens/chunk (budget ~250) × embed unit price. **The dominant recurring term is re-embedding on serialization-template revision**, which is a full-corpus cost each time — so template version churn is a budget line, not a refactor detail, and batching template changes into scheduled revisions is a cost control worth designing for.
 

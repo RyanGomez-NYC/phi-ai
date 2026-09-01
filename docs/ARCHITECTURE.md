@@ -154,10 +154,12 @@ configuration. Available as a terminal session (`python -m
 core.assistant`, which works before any infrastructure exists) and as a
 page in the web interface.
 
-Architecturally it is a **read-only satellite**: nothing else imports it,
-and it reaches the object store only through the same narrow
-`RecordReader` seam `core/web` uses, for aggregates. Removing the
-package would leave every other component unchanged.
+Architecturally it is a **read-only satellite in its data path**: it
+reaches the object store only through the same narrow `RecordReader` seam
+`core/web` uses, for aggregates, and it never writes. It is not, however,
+detachable — `core/web/app.py` imports it at module scope (lines 49-51),
+so removing the package stops the web application from starting. The
+storage, audit and verification paths are unaffected by it.
 
 It is also the only component with a network path off the deployment,
 which shapes its whole design:

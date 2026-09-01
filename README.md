@@ -105,9 +105,10 @@ defensible.
   stored bytes, abstention on empty retrieval, status and negation
   preserved through chunking, temporal weighting, grant-bounded
   retrieval so the assistant can never see what the asking user's role
-  does not permit. Off by default; three PHI-access tiers, each needing
-  its own BAA acknowledgement. The only component with a network path
-  out of the deployment.
+  does not permit. Off by default; three PHI-access tiers (`none`,
+  `in_context`, `lookup`); any tier above `none` requires the deployment
+  to set PHI_AI_ASSISTANT_PHI_ACKNOWLEDGED. The assistant is the only
+  component with a network path to a third party.
 - **Model governance kernel** (`core/governance/`) — a model registry
   and execution gate enforcing SPEC Invariants 13–19: fairness
   screening, sensitive-category segmentation, ambient consent gating,
@@ -151,7 +152,7 @@ defensible.
 - **Multi-cloud Terraform** (`deploy/aws|gcp|azure/`) — complete stacks
   for all three clouds: versioned storage, KMS-backed envelope
   encryption, role-separated IAM/RBAC, optional Postgres index + OMOP.
-- **Operable by hospital IT** — install scripts, fourteen runbooks, a
+- **Operable by hospital IT** — install scripts, twenty-five runbooks, a
   guided installer chatbot, a healthcheck that verifies compliance
   posture rather than mere connectivity, and a verification suite with
   one answer and one exit code.
@@ -202,9 +203,10 @@ to a cache.
  │  DICOM viewer (OHIF) · records delivery → EMR · ROI productions       │
  └───────────────────────────────────────────────────────────────────────┘
         ▲
-        │  the ONLY outbound network path in the platform:
-        │  the assistant's model call — Bedrock / Vertex in YOUR account
-        │  under YOUR cloud BAA (Azure: Anthropic API), off by default
+        │  the only path to a THIRD PARTY: the assistant's model
+        │  call — Bedrock / Vertex in YOUR account under YOUR cloud
+        │  BAA (Azure: Anthropic API), off by default. The EMR
+        │  connectors also egress — to YOUR EMR, under your own BAA.
 ```
 
 Deeper treatment with the full module map: `docs/ARCHITECTURE.md`, and
@@ -270,7 +272,7 @@ the repository layout below.
 
 ### 0. Prerequisites
 
-- Python 3.11+, `git`, and for cloud deployment Terraform ≥ 1.5 and an
+- Python 3.11+, `git`, and for cloud deployment Terraform ≥ 1.10 and an
   AWS / GCP / Azure account you control.
 - No GitHub Actions, no hosted CI, no telemetry: everything runs on
   your machines. Local pre-push gates: `scripts/pre_push_gates.sh`
@@ -324,7 +326,7 @@ places, each runbook's "Known gaps" section says where.
 python3 install/installer_chatbot.py   # walks you through registration details
 ```
 
-Set `PHI_AI_EMR_VENDOR` to one of `epic`, `oracle_health`,
+Set `PHI_AI_EMR_VENDOR` to one of `epic`, `cerner`,
 `athenahealth`, `eclinicalworks`, `meditech`, `nextgen`. Per-vendor
 registration, auth, scopes, bulk-export behavior and write surfaces:
 `docs/EMR_CONNECTORS.md`. No live EMR yet? Point it at the matching

@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 — 2026-08-29
+## 1.0.0-rc1 — 2026-08-29
 
 ```text
                          φ(ai)
@@ -88,7 +88,7 @@ Population analytics that count patients, not rows. An optional OMOP
 CDM layer for standard tooling. DICOM imaging with the upstream OHIF
 viewer, pinned and unmodified. Release-of-information productions
 where every withheld record is itemized, never silent. Complete
-Terraform for AWS, GCP, and Azure. Twenty-four runbooks, an installer
+Terraform for AWS, GCP, and Azure. Twenty-five runbooks, an installer
 chatbot, and a healthcheck that verifies compliance posture — not just
 connectivity.
 
