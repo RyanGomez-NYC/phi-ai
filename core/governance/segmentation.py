@@ -47,6 +47,15 @@ class SensitiveCategory(Enum):
     GENETIC = "genetic"  # Alaska Stat. §18.13.010
     MENTAL_HEALTH = "mental_health"  # 740 ILCS 110; Tex. ch. 611; Cal. §56.104
     MINOR_CONSENTED = "minor_consented"  # state consent-age matrix (unresearched)
+    # Added 2026-09-01. The reference demonstration served 735 rows of
+    # "Victim of intimate partner abuse (finding)" to every role holding
+    # patient:read, in charts, in AI answers, and printed into a
+    # patient-facing instruction sheet, because no category for it existed
+    # anywhere in the taxonomy. This enum had the same hole. Absence of a
+    # category is not a judgement that the data is ordinary; it is a
+    # judgement nobody made.
+    DOMESTIC_VIOLENCE = "domestic_violence"  # IPV, stalking, sexual assault
+    ABUSE_NEGLECT = "abuse_neglect"  # child / elder / vulnerable adult, trafficking
 
 
 #: HL7 ActCode InformationSensitivityPolicy tokens -> category, for the
@@ -69,6 +78,15 @@ SECURITY_LABEL_MAP: dict[str, SensitiveCategory] = {
     "GDIS": SensitiveCategory.GENETIC,
     "SICKLE": SensitiveCategory.GENETIC,
     "ADOL": SensitiveCategory.MINOR_CONSENTED,
+    # ActCode InformationSensitivityPolicy carries these three; without the
+    # mapping they were "unmapped token" exclusions, which is the right
+    # OUTCOME reached for the wrong REASON - the engine could not say what
+    # it had withheld, so an operator reading the counters saw an
+    # unexplained exclusion rather than a domestic-violence one.
+    "DVD": SensitiveCategory.DOMESTIC_VIOLENCE,  # all domestic violence info
+    "DVSTAT": SensitiveCategory.DOMESTIC_VIOLENCE,  # DV status
+    "SEV": SensitiveCategory.DOMESTIC_VIOLENCE,  # sexual assault / violence
+    "ABUSE": SensitiveCategory.ABUSE_NEGLECT,
 }
 
 #: Confidentiality codes (the other half of the security-labels value

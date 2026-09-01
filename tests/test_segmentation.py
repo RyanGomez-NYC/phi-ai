@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.audit.log import AuditLog  # noqa: E402
 from core.governance.segmentation import (  # noqa: E402
+    SECURITY_LABEL_MAP,
     CategoryValueSets,
     SegmentationStats,
     SensitiveCategory,
@@ -169,4 +170,50 @@ def test_geo_gate_passes_in_state_and_non_ab352_content():
     assert evaluate_geo_gate(categories, "CA").allowed
     assert evaluate_geo_gate((SensitiveCategory.HIV,), "TX").allowed
     assert evaluate_geo_gate(categories, "TX", record_state="NY").allowed
+
+def test_every_category_has_a_security_label_route():
+    """A category nobody can label is a category nobody can protect.
+
+    The reference demonstration served 735 intimate-partner-abuse findings
+    to every role that could open a chart, because no category for them
+    existed anywhere in the taxonomy - not in the enum, not in the label
+    map, not in the value sets. The engine was fail-closed on labels it did
+    not recognise and wide open on a category it had never been told about,
+    which are not the same property.
+
+    This test fails when a category is added to the enum without a way to
+    put a resource into it. It cannot prove the value sets are complete -
+    nothing can - but it does stop the specific failure that happened:
+    adding the name of a protection without adding the protection.
+    """
+    routable = set(SECURITY_LABEL_MAP.values())
+    # Categories reachable only through curated value sets or the
+    # department signal, by deliberate design, are listed here. Anything
+    # NOT here must have at least one ActCode that lands on it.
+    valueset_only = {
+        SensitiveCategory.PART2_SUD,       # 42 CFR Part 2 program membership
+        SensitiveCategory.MINOR_CONSENTED, # consent-age matrix, per deployment
+    }
+    unroutable = set(SensitiveCategory) - routable - valueset_only
+    assert not unroutable, (
+        "categories with no security-label route and no documented "
+        f"value-set-only exemption: {sorted(c.value for c in unroutable)}"
+    )
+
+
+def test_domestic_violence_and_abuse_are_classifiable():
+    """The specific hole, closed, and named so it cannot reopen quietly."""
+    for token in ("DVD", "DVSTAT", "SEV"):
+        assert SECURITY_LABEL_MAP[token] is SensitiveCategory.DOMESTIC_VIOLENCE
+    assert SECURITY_LABEL_MAP["ABUSE"] is SensitiveCategory.ABUSE_NEGLECT
+
+    resource = {
+        "resourceType": "Condition",
+        "meta": {"security": [{"system": ACTCODE, "code": "DVD"}]},
+    }
+    decision = classify(resource, CategoryValueSets())
+    assert not decision.include
+    assert SensitiveCategory.DOMESTIC_VIOLENCE in decision.categories
+
+
 # Made by Ryan Gomez & Co. Inc.
