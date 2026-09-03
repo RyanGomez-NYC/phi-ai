@@ -43,6 +43,15 @@ echo "pre-push gate 2/3: synthetic-fixture gates (SPEC §7.1 R2/R4)"
 "$PYTHON" scripts/check_fixtures.py
 
 echo "pre-push gate 3/3: full test suite"
+# tests/test_e2e_matrix.py binds every emulator on its DEFAULT_PORTS port
+# (9101-9115 today) and fails the session if one is held - by a
+# long-running `python -m emulators`, say. The pinned proof runs on those
+# ports; on a machine where they are legitimately busy, export
+# E2E_MATRIX_PORT_OFFSET=N before running this gate as the documented
+# fallback (the proof document then states the shifted ports).
+if [ -n "${E2E_MATRIX_PORT_OFFSET:-}" ]; then
+  echo "  (E2E_MATRIX_PORT_OFFSET=${E2E_MATRIX_PORT_OFFSET}: the e2e matrix runs on DEFAULT_PORTS + ${E2E_MATRIX_PORT_OFFSET})"
+fi
 "$PYTHON" -m pytest tests/ -q
 
 echo "pre-push gates passed"

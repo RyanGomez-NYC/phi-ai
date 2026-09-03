@@ -3,9 +3,10 @@
 {% block body %}
 <h1>Source &amp; target EMRs</h1>
 <p class="lede">Where records come from and where they deliver to. Each of the
-six supported vendors is shown with its real seams — auth method, bulk
-capability, write surface — so a connection is configured with the vendor's
-actual limits in view. Saving writes <span class="mono">config.changed</span>.</p>
+{{ vendors|length }} profiled vendors is shown with its real seams — auth
+method, bulk capability, write surface — so a connection is configured with
+the vendor's actual limits in view. Saving writes
+<span class="mono">config.changed</span>.</p>
 
 {% if saved %}
 <div class="callout"><div><strong>Saved.</strong> The change was recorded in the

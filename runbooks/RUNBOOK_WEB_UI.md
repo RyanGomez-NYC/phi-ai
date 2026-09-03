@@ -84,8 +84,8 @@ sized and why the mark is narrower than the sub-line beneath it.
 ## Clinician access from the EMR
 
 Staff reach the platform through the proxy above. Clinicians reach it
-from inside their EMR, in a patient's context, via SMART on FHIR — Epic,
-Cerner, athenahealth, eClinicalWorks, MEDITECH and NextGen. See
+from inside their EMR, in a patient's context, via SMART on FHIR — every
+EMR profiled in `core/fhir/emr_profiles.py`. See
 `RUNBOOK_SMART_LAUNCH.md`.
 
 ---

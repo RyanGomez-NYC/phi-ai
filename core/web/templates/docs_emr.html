@@ -15,8 +15,8 @@ than assumed; the full research record lives in the repository's
 sources.</p>
 
 <h2>1. The standards baseline</h2>
-<p>All six connectors build on the same published standards, referenced
-throughout the vendor chapters below:</p>
+<p>All {{ vendors|length }} connectors build on the same published standards,
+referenced throughout the vendor chapters below:</p>
 <ul>
   <li><a href="https://hl7.org/fhir/R4/" rel="noopener">HL7 FHIR R4</a> — the
     resource model every vendor's certified API exposes.</li>
@@ -204,8 +204,8 @@ explicit about vendor-confirmed versus certification-baseline facts.</p>
     profile says so in its notes rather than pretending confirmation.
     Verified from the public explorer: operations live under
     <span class="mono">…/v2/uscore/R4/</span>, and the surface is US Core
-    FHIR R4 for USCDI data — the narrowest published surface of the six,
-    which is why the platform's profile is deliberately the narrowest to
+    FHIR R4 for USCDI data — a deliberately narrow published surface,
+    which is why the platform's profile is deliberately narrow to
     match.</li>
   <li><strong>As a source — bulk export</strong>: verified as documented —
     "Bulk Data" is a topic in the Greenfield explorer, and MEDITECH appears
@@ -252,7 +252,32 @@ onboarding.</p>
     capability is confirmed per practice before relying on it.</li>
 </ul>
 
-<h2>8. SSO &amp; authentication capabilities, system by system</h2>
+<h2>8. The other profiled vendors, from the capability table</h2>
+<p>The chapters above are the vendors with a full research chapter on this
+page. Every other vendor the platform profiles is listed here from the same
+capability table the connectors read
+(<span class="mono">core/fhir/emr_profiles.py</span>): its auth model,
+bulk-export posture and write surface, each recorded from <em>that vendor's
+own documentation</em>, which remains the source of truth for every fact
+about it — the full chapter with citations and a "Setting it up" walk-through
+is in <span class="mono">docs/EMR_CONNECTORS.md</span>. Nothing here is
+carried over from another vendor.</p>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Vendor</th><th>Auth model</th><th>Bulk export</th><th>Write surface</th></tr></thead>
+  <tbody>
+    {# The vendors with a hand-written research chapter ABOVE on this page
+       - a property of this page, set once here; every other PROFILES key
+       renders from the capability table. #}
+    {% set chaptered = ('epic', 'cerner', 'athenahealth', 'eclinicalworks', 'meditech', 'nextgen') %}
+    {% for key, v in vendors.items() if key not in chaptered %}
+    <tr><td>{{ v.name }}</td><td style="font-size:12px">{{ v.auth }}</td><td style="font-size:12px">{{ v.bulk }}</td><td style="font-size:12px">{{ v.writes }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+<div class="doc-prose">
+
+<h2>9. SSO &amp; authentication capabilities, system by system</h2>
 <p>Two different kinds of sign-on meet at this platform, and they must never
 be confused: <strong>system-to-system SSO</strong> — how the platform itself
 authenticates to an EMR to move records — and <strong>user-facing
@@ -264,17 +289,20 @@ vendor.</p>
   <thead><tr><th>System</th><th>System-to-system auth</th><th>Credential artifact</th><th>Token lifetime</th><th>Scope model</th><th>User-facing SMART launch</th></tr></thead>
   <tbody>
     <tr><td>Epic</td><td>SMART Backend Services — RS384-signed JWT client assertion</td><td>RSA private key; public half at your JWK Set URL — no secret exists</td><td>Access token ≤ 60 min (assertion exp ≤ 5 min, single-use jti)</td><td><span class="mono">system/*.read</span> honored; write scopes enabled per-resource <em>and per-flavor</em>, per health system</td><td>Yes — EHR launch and standalone; the platform accepts Epic as a launch issuer on the allowlist</td></tr>
-    <tr><td>Oracle Health</td><td>SMART Backend Services — JWT assertion (documented path for bulk); client-credentials-with-secret also documented</td><td>RSA private key (JWT mode) or client secret (basic mode)</td><td>Short-lived bearer token</td><td><strong>Explicit scopes only</strong> — every <span class="mono">system/&lt;Resource&gt;.read</span> requested by name; wildcards unsupported</td><td>Yes — SMART on FHIR launch supported</td></tr>
+    <tr><td>Oracle Health (Cerner)</td><td>SMART Backend Services — JWT assertion (documented path for bulk); client-credentials-with-secret also documented</td><td>RSA private key (JWT mode) or client secret (basic mode)</td><td>Short-lived bearer token</td><td><strong>Explicit scopes only</strong> — every <span class="mono">system/&lt;Resource&gt;.read</span> requested by name; wildcards unsupported</td><td>Yes — SMART on FHIR launch supported</td></tr>
     <tr><td>athenahealth</td><td>OAuth2 client credentials</td><td>Client ID + client secret — the one profiled vendor whose flow is a secret</td><td>Short-lived bearer token</td><td>Scoped per API registration</td><td>Yes — SMART launch per its g(10) surface</td></tr>
     <tr><td>eClinicalWorks</td><td>SMART Backend Services — JWT assertion, same asymmetric model as Epic</td><td>RSA private key; no secret</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
-    <tr><td>MEDITECH</td><td>SMART Backend Services (g(10) baseline; token request flagged for portal confirmation)</td><td>RSA private key</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
-    <tr><td>NextGen</td><td>SMART Backend Services (g(10) baseline; backend flow flagged for portal confirmation)</td><td>RSA private key</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
+    <tr><td>MEDITECH Expanse</td><td>SMART Backend Services (g(10) baseline; token request flagged for portal confirmation)</td><td>RSA private key</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
+    <tr><td>NextGen Healthcare</td><td>SMART Backend Services (g(10) baseline; backend flow flagged for portal confirmation)</td><td>RSA private key</td><td>Short-lived bearer token</td><td>System scopes per registration</td><td>Per g(10) certification surface</td></tr>
+    {% for key, v in vendors.items() if key not in chaptered %}
+    <tr><td>{{ v.name }}</td><td>{{ v.auth }}</td><td>{% if v.auth_flow == 'oauth2_client_credentials' %}Client ID + client secret{% else %}{{ 'EC P-384' if v.assertion_algorithm == 'ES384' else 'RSA' }} private key; public half registered with the vendor — no secret in this flow{% endif %}</td><td><em>not recorded in the profile — confirm in the vendor's own documentation</em></td><td>{% if 'explicit system scopes' in v.auth %}Explicit <span class="mono">system/&lt;Resource&gt;</span> scopes in the token request{% else %}Per registration{% endif %}</td><td><em>not recorded in the profile — confirm in the vendor's own documentation</em></td></tr>
+    {% endfor %}
     <tr><td><em>The platform itself (users)</em></td><td>Reverse-proxy SSO (your IdP: SAML/OIDC in front), SMART launch from the EMR, or local accounts as the fallback</td><td>Held by your IdP — the platform stores a credential only in local-accounts mode</td><td>Your IdP's session policy; platform sessions are signed cookies</td><td>Roles asserted by your identity source of truth; the platform enforces, it does not own them</td><td>—</td></tr>
   </tbody>
 </table></div>
 <div class="doc-prose">
 
-<h2>9. Two systems, two SSO configurations — source and target</h2>
+<h2>10. Two systems, two SSO configurations — source and target</h2>
 <p><strong>Topology first — and the default is one system.</strong> By
 default the source system <em>is</em> the target system: the platform ingests
 from your EMR and signed documentation writes back to that same chart of

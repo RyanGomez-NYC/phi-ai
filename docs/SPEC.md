@@ -112,13 +112,13 @@ Natural-language questions scoped to a patient and optionally an encounter. Retr
 
 **Retrieval design.**
 
-*a. Structured-first serialization.* Chunk unit is a clinically coherent unit — one encounter's medication list, one lab panel at one effective time, one note section — rendered through a deterministic versioned template carrying subject reference, encounter reference, effective date/period, code system + code + display, and the storage object key. Serialization is idempotent; template version is stored with the vector so a partial re-embed is detectable.
+*a. Structured-first serialization.* Chunk unit is a clinically coherent unit — one encounter's medication list, one lab panel at one effective time, one note section — rendered through a deterministic versioned template carrying subject reference, encounter reference, effective date/period, code system + code + display, and the storage object key. Where the deployment records it, the chunk also carries the provenance of the record: the system that disclosed it, the run that carried it, and when. The storage key answers where a fact is kept, which is not the question asked when a disclosure is challenged; under N-to-M exchange, many sources hydrating one store and that store feeding many targets, only provenance can name who handed a record over. Serialization is idempotent; template version is stored with the vector so a partial re-embed is detectable.
 
 *b. Sensitive-category exclusion at serialization time*, never at retrieval. Delegated to §6.1.
 
 *c. Hybrid retrieval.* Dense plus BM25/lexical, fused. Clinical queries carry exact tokens — drug names, LOINC codes, "A1c", "EF" — that dense embeddings blur. Query expansion through RxNorm (ingredient ↔ brand ↔ clinical drug), SNOMED CT subsumption, and LOINC value sets.
 
-*d. Grant-bounded pre-filters inside the index scan.* Patient, encounter, date range, resource type, and the caller's grant are WHERE-clause predicates evaluated within the search. This is a relevance mechanism as much as an access-control one: a top-k drawn from the whole corpus and then filtered returns fewer usable results than a top-k drawn from the permitted scope.
+*d. Grant-bounded pre-filters inside the index scan.* Patient, encounter, date range, resource type, the caller's grant, and, where the deployment records origin, the permitted source systems are WHERE-clause predicates evaluated within the search. Origin is evaluated before the clinical predicates: a record that cannot be shown to have been lawfully ingested should not be reasoned about at all, and checking it last would make matching on everything else the cheapest way past it. A deployment that has not recorded origin is unaffected; requiring it is a declared posture, not a default. This is a relevance mechanism as much as an access-control one: a top-k drawn from the whole corpus and then filtered returns fewer usable results than a top-k drawn from the permitted scope.
 
 *e. Temporal weighting.* Weight by effective date against the question's time anchor. A resolved 2019 problem must never outrank the active list.
 

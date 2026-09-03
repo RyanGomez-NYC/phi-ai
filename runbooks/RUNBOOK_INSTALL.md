@@ -25,9 +25,10 @@ from a cloud that was actually fully supported.
 ## Audience
 Operator with admin access to the target cloud account and to your EMR
 vendor's developer console (Epic's `fhir.epic.com`, Oracle Health's
-console, the athenahealth, eClinicalWorks or NextGen portals, or the
-MEDITECH Greenfield Workspace - see `docs/EMR_CONNECTORS.md` for each
-vendor's registration path).
+console, the MEDITECH Greenfield Workspace, and so on - see
+`docs/EMR_CONNECTORS.md` for every profiled vendor's registration path;
+the chapters from ModMed onward spell it out step by step under
+"Setting it up").
 
 ## Prerequisites
 
@@ -44,10 +45,14 @@ vendor's registration path).
       half hosted at a JWK Set URL. **Epic backend services auth does
       not use a client secret** - it uses a signed JWT client assertion
       instead (RFC 7523); there is no shared secret to provision or
-      leak. The other SMART Backend Services vendors (Oracle Health,
-      eClinicalWorks, MEDITECH, NextGen) use the same keypair model
-      through their own portals; athenahealth issues a client secret
-      instead. See `docs/EMR_CONNECTORS.md` for each vendor's chapter
+      leak. The other SMART Backend Services vendors use the same keypair
+      model through their own portals - an RSA key where the vendor
+      accepts RS384, an EC P-384 key where the vendor documents ES384
+      only (each profile's `assertion_algorithm` in
+      `core/fhir/emr_profiles.py` says which); athenahealth issues a
+      client secret instead, and TruBridge and Netsmart document both
+      grants. See
+      `docs/EMR_CONNECTORS.md` for each vendor's chapter
       and `runbooks/RUNBOOK_AWS_SETUP.md` Step 6 for the full Epic
       registration walkthrough.
 - [ ] Docker and Docker Compose installed on the target host.
@@ -92,10 +97,10 @@ python3 install/installer_chatbot.py
 Answer the prompts - cloud provider, storage/KMS values (from Step 1's
 Terraform outputs), EMR connection details, and retention settings
 including the retention period. If your source EMR is not Epic, also set
-`PHI_AI_EMR_VENDOR` in `.env` to the vendor key (`epic`, `cerner`,
-`athenahealth`, `eclinicalworks`, `meditech`, or `nextgen`; default
-`epic`) - it selects the vendor's capability profile, and it is
-validated at startup against the profile table, so a typo refuses to
+`PHI_AI_EMR_VENDOR` in `.env` to the vendor's key in `PROFILES`
+(`core/fhir/emr_profiles.py`; default `epic` - the installer's vendor
+menu is built from the same table) - it selects the vendor's capability
+profile, and it is validated at startup against the profile table, so a typo refuses to
 start next to its cause rather than surfacing as a confusing
 authentication failure mid-run. This writes a `.env` file (mode 600, not
 committed to version control). If `.env` already has values from Step

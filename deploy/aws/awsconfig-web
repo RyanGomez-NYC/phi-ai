@@ -1,0 +1,10 @@
+# Project-local AWS config for the web interface process ONLY - passed
+# via AWS_CONFIG_FILE by scripts/run_web_dev.sh so nothing in the
+# operator's own ~/.aws is touched. See
+# scripts/restore_role_credential_process.sh for why the web app runs as
+# a tagged restore-role session.
+[profile phi-ai-web-restore]
+# Via a spaceless wrapper: credential_process splits on whitespace, so
+# it cannot reference this repo's space-bearing path directly.
+credential_process = /path/to/your/home/.phi-ai/restore-role-creds.sh
+region = us-east-1

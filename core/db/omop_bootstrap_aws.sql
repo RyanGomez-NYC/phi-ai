@@ -200,7 +200,7 @@ GRANT SELECT ON vocab.concept TO omop_analyst;
 -- versa - the two schemas' role sets are deliberately disjoint.
 --
 -- cdm.measurement and cdm.observation are DELIBERATELY EXCLUDED from
--- this REVOKE, unlike the other five tables - omop_etl genuinely does
+-- this REVOKE, unlike the other OMOP tables above - omop_etl genuinely does
 -- hold DELETE there (granted above, H7e), needed for the cross-table
 -- Observation cleanup _execute_upsert_with_cross_table_cleanup()
 -- performs. Listing them here would silently undo that grant, since

@@ -56,8 +56,33 @@ class GrantScope:
     date_from: Optional[str] = None  # ISO, inclusive, on chunk.effective
     date_to: Optional[str] = None
     resource_types: Optional[frozenset[str]] = None
+    # --- the ingestion boundary (SPEC §5.1 d, h) ---------------------------
+    # 5.1(d) makes "the caller's grant" a predicate inside the scan, and
+    # 5.1(h) says purpose-of-use bounds retrieval scope. Both were carried
+    # through the pipeline and the audit and neither reached this scope, so
+    # the boundary enforced here was patient/encounter/type/date only.
+    #
+    # `permitted_sources` bounds an answer to records that came from named
+    # systems - the disclosure question, not the storage question.
+    # `require_provenance` refuses a chunk that cannot say where it came
+    # from at all. Both default off: a deployment that has not yet recorded
+    # origin keeps working exactly as before, and turning them on is a
+    # deliberate posture, not an accident of upgrade order.
+    permitted_sources: Optional[frozenset[str]] = None
+    require_provenance: bool = False
 
     def admits(self, chunk: Chunk) -> bool:
+        # Origin is checked FIRST, before subject. A record nobody can show
+        # was lawfully brought in should not be reasoned about at all, and
+        # ordering it after the clinical predicates would mean the cheapest
+        # way to pass this gate was to match on everything else.
+        if self.require_provenance and chunk.provenance is None:
+            return False
+        if self.permitted_sources is not None:
+            if chunk.provenance is None:
+                return False
+            if chunk.provenance.source_system not in self.permitted_sources:
+                return False
         if chunk.subject_reference != self.patient_reference:
             return False
         if (

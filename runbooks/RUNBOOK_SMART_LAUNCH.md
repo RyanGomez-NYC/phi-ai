@@ -5,9 +5,18 @@ and arrives **already signed in, already on that patient's record**. No
 second login, no re-searching for the patient they were just looking at.
 
 That is the difference between a system people use and one they avoid,
-and it is the same standard — SMART App Launch — across all six target
-EMRs: **Epic, Oracle Health (Cerner), athenahealth, eClinicalWorks,
-MEDITECH and NextGen Healthcare**. One implementation, not six.
+and it is the same standard — SMART App Launch — across every target
+EMR this platform profiles (every entry in `core/fhir/emr_profiles.py`
+`PROFILES`; the list is read from there, never repeated here). One
+implementation, not one per vendor. A vendor with its own dialect entry
+in `core/web/smart/vendors.py` (registration, scope grammar, client
+type) launches through that entry; every other profiled vendor is
+routed through the `generic` profile - the plain SMART App Launch
+sequence - which holds exactly as far as that vendor documents standard
+SMART App Launch for user-facing apps, and which no test in this
+repository has exercised against a vendor without an entry. Register
+the launch app with that vendor as its own launch documentation says,
+and treat the first launch as the confirmation.
 
 ---
 
@@ -74,6 +83,15 @@ in the allowlist.
 | eClinicalWorks | [Developer programme](https://fhir.eclinicalworks.com/ecwopendev) |
 | MEDITECH | [Greenfield Workspace](https://ehr.meditech.com/ehr-solutions/greenfield-workspace-resources) — no self-service sandbox; MEDITECH issues credentials and endpoints, and provider-facing launch support should be confirmed with them per site |
 | NextGen | [Developer portal](https://www.nextgen.com/api-and-developer-portal) |
+| ModMed | [MMI vendor dashboard](https://fhir-vendor-dashboard.kube.prod.mmicse.com/) — self-service; a **Provider** app type for EHR launch (ModMed reviews and enables non-Bulk apps daily); the practice must activate use |
+| Altera Digital Health | [Altera Developer Program](https://developer.adp.ahcentral.com/) — register a provider/user app; the client organisation activates it in its License Management Portal; EHR-launch testing needs RDS credentials except on TouchWorks |
+| Greenway Health | [Developer Platform](https://devplatform.greenwayhealth.com/developer/registration) — launch type **EHR embedded**; published after Greenway's review, then per-site written permission |
+| Veradigm | [developer.veradigm.com](https://developer.veradigm.com/Account/RegisterSelf) — user/provider app type; Veradigm Connect approves, each client activates it in its License Management Portal (EHR-launch sandbox testing is Integrator-tier) |
+| Practice Fusion | [PDS API Partner Registration](https://pfpds.practicefusion.com/s/Registration) — **Provider** application type; a practice administrator approves each app inside the EHR; provider apps are not supported in the sandbox |
+| TruBridge | E-mail `info@trubridge.com` per the [developer portal](https://fhir-developer.plt.trubridge.com/) (`?page=api/ehr-launch`) — no self-service console; each facility approves in writing |
+| MEDHOST | [yourcareinteract.medhost.com](https://yourcareinteract.medhost.com/) — provider-facing app type; weekly MEDHOST review (submit by Monday), then facility approval |
+| Netsmart | [CareConnect developer portal](https://fhir.netsmartcloud.com/developers) (preview: `fhirtest.`) — Practitioner Access app; the tenant owner approves; one tenant per application |
+| Nextech | [Developers portal](https://www.nextech.com/developers-portal) connection request form — SMART app for user-facing launch; the practice must have activated its FHIR services |
 
 Register the redirect URI as **exactly** the value of
 `PHI_AI_WEB_SMART_REDIRECT_URI`. Authorization servers reject a
@@ -295,16 +313,16 @@ leaving as an unexplained omission:
 - **It requires JavaScript.** This interface ships `script-src 'none'`,
   which removes script injection as a delivery route outright. Trading
   that for a return button is a poor exchange on a PHI interface.
-- **Support across the six targets is uneven**, and the capability must
+- **Support across the targets is uneven**, and the capability must
   be negotiated at launch rather than assumed. **This runbook does not
-  record which of the six implement it** - that has not been established
+  record which of them implement it** - that has not been established
   here, and a per-vendor tally nobody has verified would be worse than
   admitting the gap. MEDITECH is the clearest illustration of why: per
   the registration table above it has no self-service sandbox, so its
   support cannot be looked up and has to be confirmed with them per site.
   The shape of the risk does not depend on the exact split. A return
   mechanism that works on some EMRs and silently does nothing on the rest
-  is worse than a plain link that works on all six, because the failure
+  is worse than a plain link that works on every target, because the failure
   is invisible to the person hitting it: the button is there, they press
   it, and nothing happens.
 

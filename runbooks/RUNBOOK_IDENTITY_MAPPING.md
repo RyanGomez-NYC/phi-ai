@@ -52,8 +52,10 @@ being incomplete. Step H is how you catch it before they do.
 Start from your EMR: that is where your workforce is already segmented,
 and the segmentation is usually right. The concept has a different name
 per vendor — Epic: user **Template / SubTemplate** and security classes;
-Oracle Health: **position** and its privileges; athenahealth,
-eClinicalWorks, MEDITECH, NextGen: **role** or **permission group**.
+Oracle Health: **position** and its privileges; the other profiled
+vendors (athenahealth, eClinicalWorks, MEDITECH, NextGen and the rest of
+`core/fhir/emr_profiles.py`): **role** or **permission group**, under
+whatever name that vendor uses.
 
 Two rules keep this tractable:
 

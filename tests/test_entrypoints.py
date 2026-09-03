@@ -235,10 +235,21 @@ class _StubAuditSink:
 def stub_infrastructure(monkeypatch, tmp_path):
     """Stub only the edges: cloud storage, KMS, audit sink, Postgres."""
     key = tmp_path / "epic.pem"
-    # Deliberately NOT shaped like a PEM. Settings.from_env() only reads
-    # the bytes; writing a realistic-looking key header here would trip
-    # repository secret scanners for no benefit.
-    key.write_bytes(b"not-a-key: this file exists only so the path check passes")
+    # A real, throwaway RSA-2048 key generated in-process for this test
+    # alone: Settings.from_env() now checks that the key can sign the
+    # vendor profile's assertion algorithm (RS384 for epic), so placeholder
+    # bytes are refused at build time. Never written anywhere but tmp_path,
+    # never registered with anything.
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key.write_bytes(
+        rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
 
     for name, value in {
         "PHI_AI_CLOUD_PROVIDER": "aws",

@@ -36,8 +36,9 @@ Every box reports to the audit trail — including the gates' refusals.</p>
 <h2>2. Component reference</h2>
 <h3>2.1 Source EMRs</h3>
 <ul>
-  <li><strong>Role:</strong> data planes into the AI-native platform — Epic,
-Oracle Health, athenahealth, eClinicalWorks, MEDITECH, NextGen. Records
+  <li><strong>Role:</strong> data planes into the AI-native platform — every
+vendor profiled in <span class="mono">core/fhir/emr_profiles.py</span>
+({{ vendor_names }}). Records
 arrive from them; signed documentation delivers back to them (the chart of
 legal record, as the law requires — the intelligence, governance and AI-ready
 data model live in this platform).</li>
@@ -55,7 +56,9 @@ silently ages.</li>
   <li><strong>Role:</strong> population-scale arrival over the FHIR Bulk Data
 API.</li>
   <li><strong>Honors:</strong> each vendor's real seams — Epic's one-run-per-24h
-group export with no incremental mode, NextGen's absence of bulk entirely.</li>
+group export with no incremental mode, Group-only export where a vendor
+documents only that, the absence of bulk entirely where a profile records
+none (NextGen today).</li>
   <li><strong>Emits:</strong> <span class="mono">bulk.completed</span> /
 <span class="mono">bulk.refused</span>.</li>
   <li><strong>Key property:</strong> the

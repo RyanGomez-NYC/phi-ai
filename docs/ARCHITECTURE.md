@@ -48,11 +48,13 @@ See `runbooks/RUNBOOK_DICOM_IMAGING.md`.
   is deletable by any principal an IAM policy allows. The property is
   detection, not prevention. See `docs/COMPLIANCE.md` → "Retention and
   integrity".
-- **One ingestion model, six vendors.** Vendor-specific integration is
-  isolated behind a FHIR R4 client and an `EMRProfile` per vendor (Epic,
-  Oracle Health/Cerner, athenahealth, eClinicalWorks, MEDITECH, NextGen)
-  describing that vendor's actual auth model, resource support and bulk
-  export capability; the platform core only ever deals with FHIR
+- **One ingestion model, one profile per vendor.** Vendor-specific
+  integration is isolated behind a FHIR R4 client and an `EMRProfile`
+  per vendor - every entry in `PROFILES` (`core/fhir/emr_profiles.py`),
+  from Epic and Oracle Health/Cerner to Netsmart and Nextech -
+  describing that vendor's actual auth model (grant and client-assertion
+  signing algorithm), resource support and bulk export capability; the
+  platform core only ever deals with FHIR
   resources and raw document attachments. The deployment picks its
   vendor with `PHI_AI_EMR_VENDOR`, and each connector is testable
   against a per-vendor emulator (`emulators/`). See
@@ -61,9 +63,10 @@ See `runbooks/RUNBOOK_DICOM_IMAGING.md`.
 ## High-level flow
 
 ```
- Source EMR (FHIR R4 API - Epic, Cerner, athenahealth, eCW, MEDITECH, NextGen)
-        │  SMART Backend Services (RS384 JWT client assertion) or, for
-        │  athenahealth, OAuth2 client secret; TLS 1.2+
+ Source EMR (FHIR R4 API - any vendor profiled in core/fhir/emr_profiles.py)
+        │  SMART Backend Services (JWT client assertion, RS384 or ES384
+        │  per profile) or, where the profile records it (athenahealth),
+        │  OAuth2 client secret; TLS 1.2+
         ▼
  FHIR Ingestion Service ──► Envelope Encryption (KMS) ──► Object Storage
         │                                                     (S3 / GCS /
@@ -82,9 +85,11 @@ See `runbooks/RUNBOOK_DICOM_IMAGING.md`.
 
 ### 1. FHIR Ingestion Service (`core/fhir`)
 Connects to a customer's EMR FHIR R4 endpoint using the auth flow that
-vendor actually implements - a signed JWT client assertion for the SMART
-Backend Services vendors, a client secret for athenahealth, with the
-choice data-driven from the vendor's `EMRProfile` (see
+vendor actually implements - a signed JWT client assertion (RS384, or
+ES384 where the vendor documents it) for the SMART Backend Services
+vendors, a client secret where the profile records that flow
+(athenahealth), with the choice data-driven from the vendor's
+`EMRProfile` (see
 `docs/EMR_CONNECTORS.md`) - and pages through the requested resource types
 (Patient, Encounter, Observation, DocumentReference, etc.), and hands
 each resource to the storage layer for ingestion. Designed to be
@@ -194,7 +199,8 @@ See `runbooks/RUNBOOK_AI_ASSISTANT.md` and the compliance discussion in
 ## What's intentionally NOT in the core
 
 - No multi-tenant SaaS mode. This is single-tenant, BYOI software.
-- No EMRs beyond the six profiled FHIR R4 vendors, and no proprietary
+- No EMRs beyond the FHIR R4 vendors profiled in
+  `core/fhir/emr_profiles.py`, and no proprietary
   EMR protocol support (HL7v2 batch feeds, direct DB extracts) either.
   Both are possible future work or professional-services engagements
   layered on top of the FHIR-first core, not current scope - see

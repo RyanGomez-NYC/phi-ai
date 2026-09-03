@@ -43,8 +43,10 @@ set -a; source "$ENV_FILE"; set +a
 # running container instead.
 #
 # PHI_AI_FHIR_CLIENT_SECRET now exists as a VENDOR-CONDITIONAL setting
-# (required exactly when PHI_AI_EMR_VENDOR is a client-secret vendor -
-# athenahealth). It is deliberately not in this list: settings.py itself
+# (required exactly when PHI_AI_EMR_VENDOR selects a profile whose
+# auth_flow is oauth2_client_credentials - athenahealth as shipped; see
+# core/fhir/emr_profiles.py PROFILES). It is deliberately not in this
+# list: settings.py itself
 # validates the combination at startup with a clearer error than this
 # pre-flight could give, and duplicating conditional logic here is how
 # the two drift apart.

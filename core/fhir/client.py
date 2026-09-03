@@ -8,12 +8,28 @@ Services and hands each resource to the storage/crypto/audit layers to be
 stored.
 
 AUTH: Epic backend services does NOT use a client secret. It uses
-asymmetric JWT client assertion (RFC 7523): the app holds an RSA private
-key, signs a short-lived JWT with it, and presents that signed JWT to
-Epic's token endpoint. Epic verifies the signature against the public key
-that was registered for this client ID on open.epic.com. There is no
-shared secret to leak, and Epic's docs are explicit that a client secret
-does not work for this flow - see docs/EMR_CONNECTORS.md.
+asymmetric JWT client assertion (RFC 7523): the app holds a private key,
+signs a short-lived JWT with it, and presents that signed JWT to Epic's
+token endpoint. Epic verifies the signature against the public key that
+was registered for this client ID on open.epic.com. There is no shared
+secret to leak, and Epic's docs are explicit that a client secret does
+not work for this flow - see docs/EMR_CONNECTORS.md.
+
+THE SIGNING ALGORITHM IS PER VENDOR, never assumed. SMART App Launch's
+client-confidential-asymmetric profile ("Underlying Standards") requires
+the CLIENT to support both RS384 and ES384 but lets a server validate
+"at least one" of them - so which one a given vendor accepts is that
+vendor's documented choice. build_client_assertion() signs with the
+algorithm it is given, and authenticate() hands it the profile's
+EMRProfile.assertion_algorithm - recorded there, per vendor, from that
+vendor's own documentation (Epic documents RS384). The key
+family follows from the algorithm, by RFC 7518: §3.3 defines RS384 as
+RSASSA-PKCS1-v1_5, so it needs an RSA key; §3.4 defines ES384 as ECDSA on
+P-384, so it needs an EC key on secp384r1. check_private_key_signs()
+below detects the mounted key's family with the cryptography library and
+refuses one that cannot produce the algorithm BEFORE any signing happens;
+core/config/settings.py runs the same check at startup, so a mismatch is
+reported next to its cause with the vendor and the variable named.
 
 DEBUG LOGGING: authenticate() logs full REQUEST detail (headers, body,
 claims) at logging.DEBUG. Two things are never logged at any level: the
@@ -138,6 +154,99 @@ def _stored_sha256_hex(nonce: bytes, ciphertext: bytes) -> str:
     return hashlib.sha256(nonce + ciphertext).hexdigest()
 
 
+class ClientAssertionKeyError(ValueError):
+    """
+    The private key handed to build_client_assertion() cannot sign the
+    requested algorithm: wrong family (an RSA key for ES384, an EC key for
+    RS384), wrong curve (ES384 needs secp384r1 / P-384), a
+    password-protected PEM, or bytes that are not a PEM private key at
+    all. Raised by check_private_key_signs() before anything is signed.
+    core/config/settings.py runs the same check at startup and wraps this
+    in a ConfigError that names the vendor and the environment variable.
+    """
+
+
+def describe_private_key(private_key_pem: bytes) -> str:
+    """
+    What the key IS, for error text and debug logs: "an RSA key
+    (2048-bit)", "an EC key on curve secp384r1 (P-384)", "a
+    password-protected PEM", ... Detected with the cryptography library -
+    the one PyJWT signs with underneath - from the loaded key object's
+    type and, for EC keys, its curve. Never includes, hashes, or logs the
+    key material: the description is family and size only.
+    """
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, rsa
+
+    try:
+        key = serialization.load_pem_private_key(private_key_pem, password=None)
+    except TypeError:
+        # cryptography's signal for an encrypted PEM loaded with no password.
+        return "a password-protected PEM (the key must be unencrypted)"
+    except ValueError:
+        return "bytes that are not a PEM private key"
+    if isinstance(key, rsa.RSAPrivateKey):
+        return f"an RSA key ({key.key_size}-bit)"
+    if isinstance(key, ec.EllipticCurvePrivateKey):
+        p384 = " (P-384)" if isinstance(key.curve, ec.SECP384R1) else ""
+        return f"an EC key on curve {key.curve.name}{p384}"
+    return f"a {type(key).__name__}"
+
+
+def _algorithm_needs(signer) -> str:
+    """
+    The key family a PyJWT signing-algorithm object requires, read off
+    the object itself - its class, and for ECDSA the expected_curve PyJWT
+    registered it with - rather than from a table kept here that could
+    drift from PyJWT's own registry.
+    """
+    from jwt.algorithms import ECAlgorithm, RSAAlgorithm
+
+    if isinstance(signer, ECAlgorithm):
+        curve = getattr(signer, "expected_curve", None)
+        return f"an EC key on curve {curve.name}" if curve is not None else "an EC key"
+    if isinstance(signer, RSAAlgorithm):
+        return "an RSA key"
+    return f"a key {type(signer).__name__} can sign with"
+
+
+def check_private_key_signs(algorithm: str, private_key_pem: bytes) -> None:
+    """
+    Refuse, with a ClientAssertionKeyError naming both sides, when
+    `private_key_pem` cannot sign a JWT with `algorithm`.
+
+    Asked of the signer rather than re-derived here:
+    jwt.get_algorithm_by_name(algorithm).prepare_key() is exactly what
+    pyjwt.encode() runs before signing - PEM parse, key-family check, and
+    for the ES* algorithms the curve check - so this project keeps no
+    second algorithm-to-key-family table that could drift from PyJWT's.
+    PyJWT would refuse the same key on its own, but only at the first
+    token request, and its 2.13 family-mismatch message renders a
+    generator object where the expected type should be; this says what
+    was found and what was needed.
+    """
+    import jwt as pyjwt
+
+    try:
+        signer = pyjwt.get_algorithm_by_name(algorithm)
+    except NotImplementedError as exc:
+        raise ClientAssertionKeyError(
+            f"{algorithm!r} is not an algorithm PyJWT can sign with - it must be a JWS "
+            "algorithm name such as RS384 or ES384 (see EMRProfile.assertion_algorithm)"
+        ) from exc
+    try:
+        signer.prepare_key(private_key_pem)
+    except (pyjwt.InvalidKeyError, ValueError, TypeError) as exc:
+        # Observed with PyJWT 2.13 / cryptography 50: InvalidKeyError for
+        # a wrong family or curve (and for non-PEM bytes under RS*),
+        # ValueError for non-PEM bytes under ES*, TypeError for an
+        # encrypted PEM. All three mean the same thing to a caller.
+        raise ClientAssertionKeyError(
+            f"{algorithm} signs with {_algorithm_needs(signer)}, but the key provided is "
+            f"{describe_private_key(private_key_pem)}"
+        ) from exc
+
+
 class FHIRIngestionClient:
     def __init__(
         self,
@@ -238,10 +347,11 @@ class FHIRIngestionClient:
         token_url: str,
         private_key_pem: bytes,
         jwt_kid: Optional[str] = None,
+        algorithm: str = "RS384",
     ) -> str:
         """
-        Build the signed JWT client assertion Epic's backend services flow
-        requires in place of a client secret.
+        Build the signed JWT client assertion the SMART Backend Services
+        flow requires in place of a client secret.
 
         Epic's stated requirements (see docs/EMR_CONNECTORS.md for the
         source): RS384 signature, `iss` and `sub` both set to the client
@@ -249,8 +359,28 @@ class FHIRIngestionClient:
         and an expiry no more than 5 minutes out. This assertion is
         single-use and short-lived by design - it authenticates one token
         request, not a session.
+
+        `algorithm` is the JWS "alg" the assertion is signed with AND
+        labelled with in its header. It defaults to RS384 - what this
+        builder always signed with before it became a parameter, and
+        Epic's documented requirement - so every existing caller is
+        unchanged; authenticate() passes the vendor profile's
+        assertion_algorithm. The key must be of the family the algorithm
+        signs with (RFC 7518 §3.3: RSA for RS384; §3.4: EC on P-384 for
+        ES384); a mismatch is a ClientAssertionKeyError before anything
+        is signed.
         """
         import jwt as pyjwt
+
+        # Load the PEM and detect its family (RSA vs EC, and the curve)
+        # first: refuse a key that cannot produce `algorithm` BEFORE
+        # signing, naming both sides, rather than letting PyJWT refuse
+        # with a message that names neither. Same check settings.py runs
+        # at startup; this one also covers callers that never go through
+        # Settings.from_env() (hand-built Settings, the delivery entry
+        # point).
+        key_description = describe_private_key(private_key_pem)
+        check_private_key_signs(algorithm, private_key_pem)
 
         now = int(time.time())
         claims = {
@@ -262,7 +392,12 @@ class FHIRIngestionClient:
             "nbf": now,
             "exp": now + 240,  # comfortably under Epic's 5-minute ceiling
         }
-        headers = {"alg": "RS384", "typ": "JWT"}
+        # PyJWT signs with headers["alg"] in preference to the algorithm=
+        # argument (jwt/api_jws.py: "Prefer headers values if present to
+        # function parameters"), so BOTH the header below and the encode()
+        # call come from the one `algorithm` value - setting only one of
+        # them would silently keep the other.
+        headers = {"alg": algorithm, "typ": "JWT"}
         if jwt_kid:
             # Only needed if the public key was registered via a JWK Set
             # URL rather than uploaded directly. Most direct-upload
@@ -275,11 +410,12 @@ class FHIRIngestionClient:
         # scrollback.
         key_fingerprint = hashlib.sha256(private_key_pem).hexdigest()[:16]
         log.debug(
-            "Building client assertion: header=%s claims=%s private_key_sha256_prefix=%s",
-            headers, claims, key_fingerprint,
+            "Building client assertion: header=%s claims=%s private_key=%s "
+            "private_key_sha256_prefix=%s",
+            headers, claims, key_description, key_fingerprint,
         )
 
-        assertion = pyjwt.encode(claims, private_key_pem, algorithm="RS384", headers=headers)
+        assertion = pyjwt.encode(claims, private_key_pem, algorithm=algorithm, headers=headers)
         log.debug("Assertion built, length=%d chars", len(assertion))
         return assertion
 
@@ -293,10 +429,14 @@ class FHIRIngestionClient:
     ) -> None:
         """
         SMART Backend Services token request using a signed JWT client
-        assertion in place of a client secret. Requires the RSA private
-        key whose matching public key was uploaded for this client ID on
-        open.epic.com - see runbooks/RUNBOOK_AWS_SETUP.md and
-        scripts/generate_epic_keypair.sh for the one-time setup.
+        assertion in place of a client secret. Requires the private key
+        whose matching public key was registered for this client ID with
+        the vendor (Epic: uploaded on open.epic.com - see
+        runbooks/RUNBOOK_AWS_SETUP.md and scripts/generate_epic_keypair.sh
+        for the one-time setup). The assertion is signed with this
+        client's profile's assertion_algorithm, so the key must be of
+        that algorithm's family - RSA for RS384, EC P-384 for ES384 - or
+        build_client_assertion() refuses it.
 
         `scope` defaults to None (omitted entirely) rather than a preset
         value: Epic's own "Step 2: POSTing the JWT to Token Endpoint"
@@ -308,7 +448,10 @@ class FHIRIngestionClient:
         """
         import requests
 
-        assertion = self.build_client_assertion(client_id, token_url, private_key_pem, jwt_kid)
+        assertion = self.build_client_assertion(
+            client_id, token_url, private_key_pem, jwt_kid,
+            algorithm=self.profile.assertion_algorithm,
+        )
 
         data = {
             "grant_type": "client_credentials",

@@ -3,11 +3,19 @@
 """
 EMR vendor profiles for SMART on FHIR EHR launch.
 
-All five targets - Epic, Oracle Health (Cerner), athenahealth,
-eClinicalWorks and NextGen - implement the SMART App Launch Framework,
-which is the entire reason this is one implementation rather than five.
-The launch sequence, the discovery document, PKCE, and the `patient`
-context in the token response are the same everywhere.
+Every vendor with an entry here implements the SMART App Launch
+Framework, which is the entire reason this is one implementation rather
+than one per vendor. The launch sequence, the discovery document, PKCE,
+and the `patient` context in the token response are the same everywhere.
+
+This registry is DELIBERATELY separate from core/fhir/emr_profiles.py
+PROFILES and does not mirror it: an entry exists only where a vendor's
+own launch documentation gives it a dialect of its own (registration,
+scope grammar, client type). Every other profiled vendor launches
+through the `generic` entry (core/web/smart/launch.py), which is the
+plain SMART App Launch sequence - a claim that holds exactly as far as
+that vendor documents standard SMART App Launch, and one that no test in
+this repository exercises against a vendor without an entry here.
 
 What differs is registration, scope dialect, and client type. Those are
 data, in the same spirit as core/fhir/emr_profiles.py: vendor quirks

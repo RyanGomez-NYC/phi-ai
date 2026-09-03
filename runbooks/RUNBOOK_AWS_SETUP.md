@@ -1,8 +1,9 @@
 # Runbook: AWS dev setup
 
 End-to-end setup for a **development** PHI AI Platform deployment on AWS,
-ingesting from Epic - the default vendor; for the other five profiled
-EMRs the only steps that change are registration (Step 6, per that
+ingesting from Epic - the default vendor; for every other vendor in
+`core/fhir/emr_profiles.py` the only steps that change are registration
+(Step 6, per that
 vendor's chapter in `docs/EMR_CONNECTORS.md`) and setting
 `PHI_AI_EMR_VENDOR` in `.env`. Use synthetic data only. See "Promoting to
 production" at the bottom for what changes.
@@ -188,13 +189,15 @@ if you'd rather skip it, `pip install -r requirements.txt
 
 ## Step 6 - Register with Epic and add connection details
 
-(Written for Epic. Ingesting from Oracle Health, athenahealth,
-eClinicalWorks, MEDITECH or NextGen instead? Register through that
-vendor's own path - each chapter of `docs/EMR_CONNECTORS.md` covers it -
-and set `PHI_AI_EMR_VENDOR` in `.env`. The SMART Backend Services
-vendors reuse the same keypair generated below; athenahealth takes a
-client secret instead. Everything else in this runbook is
-vendor-agnostic.)
+(Written for Epic. Ingesting from any other profiled vendor instead?
+Register through that vendor's own path - each chapter of
+`docs/EMR_CONNECTORS.md` covers it, and the chapters from ModMed onward
+end with a step-by-step "Setting it up" - and set `PHI_AI_EMR_VENDOR`
+in `.env`. The SMART Backend Services vendors whose profile signs RS384
+use the same RSA keypair model generated below; ModMed and Greenway
+document ES384 only and need an EC P-384 key (their chapters give the
+`openssl ecparam` commands); athenahealth takes a client secret instead.
+Everything else in this runbook is vendor-agnostic.)
 
 Epic backend services auth uses a signed JWT client assertion, not a
 client secret - generate the keypair first:

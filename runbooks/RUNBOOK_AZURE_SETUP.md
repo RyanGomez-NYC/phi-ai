@@ -1,8 +1,9 @@
 # Runbook: Azure dev setup
 
 End-to-end setup for a **development** PHI AI Platform deployment on
-Azure, ingesting from Epic - the default vendor; for the other five
-profiled EMRs see `RUNBOOK_AWS_SETUP.md` Step 6's note and
+Azure, ingesting from Epic - the default vendor; for every other vendor
+in `core/fhir/emr_profiles.py` see `RUNBOOK_AWS_SETUP.md` Step 6's note
+and
 `docs/EMR_CONNECTORS.md`, and set `PHI_AI_EMR_VENDOR` in `.env`. Use
 synthetic data only. Mirrors `runbooks/RUNBOOK_AWS_SETUP.md`'s structure
 closely, but this is not a line-by-line port - several steps differ

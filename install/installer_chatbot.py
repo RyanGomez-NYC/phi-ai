@@ -86,6 +86,24 @@ BANNER = r"""
 """
 
 
+
+def _key_guidance(algorithm: str) -> tuple[str, str]:
+    """(key family in words, the command that generates it) for a JWS
+    algorithm, asked of PyJWT's algorithm object - the same rule
+    core/fhir/client.check_private_key_signs() enforces - so the
+    installer never says 'RSA' for a vendor whose profile says ES384."""
+    import jwt as pyjwt
+    from jwt.algorithms import ECAlgorithm, RSAAlgorithm
+
+    signer = pyjwt.get_algorithm_by_name(algorithm)
+    if isinstance(signer, ECAlgorithm):
+        curve = getattr(signer, "expected_curve", None)
+        name = curve.name if curve is not None else "an EC curve"
+        return (f"an EC key on {name}", f"./scripts/generate_keypair.sh --alg {algorithm}")
+    if isinstance(signer, RSAAlgorithm):
+        return ("an RSA key (2048-bit or larger)", f"./scripts/generate_keypair.sh --alg {algorithm}")
+    return (f"a key {type(signer).__name__} signs with", f"./scripts/generate_keypair.sh --alg {algorithm}")
+
 def ask(
     prompt: str,
     default: str | None = None,
@@ -227,12 +245,13 @@ def main() -> None:
 
     print("\n-- Source EMR --")
     print(
-        "Six EMR vendors are integrated, each with its own capability profile\n"
-        "(core/fhir/emr_profiles.py) recording its real auth model, resource\n"
-        "surface and bulk-export support - see docs/EMR_CONNECTORS.md for the\n"
-        "per-vendor registration walk-through. Pick the vendor this deployment's\n"
-        "source EMR runs; registration is per customer/practice for every one of\n"
-        "them, so have your registration details from that walk-through at hand.\n"
+        f"{len(PROFILES)} EMR vendors are integrated, each with its own capability profile\n"
+        "(core/fhir/emr_profiles.py) recording its real auth model, signing\n"
+        "algorithm, resource surface and bulk-export support - see\n"
+        "docs/EMR_CONNECTORS.md for the per-vendor 'Setting it up' walk-through.\n"
+        "Pick the vendor this deployment's source EMR runs; registration is per\n"
+        "customer/practice for every one of them, so have your registration\n"
+        "details from that walk-through at hand.\n"
     )
     # Epic first (the deepest integration and the common case), the rest
     # in stable alphabetical order. Labels come from the profile table so
@@ -244,15 +263,22 @@ def main() -> None:
     ]
     profile = PROFILES[emr_vendor]
     uses_client_secret = profile.auth_flow == "oauth2_client_credentials"
+    # The key family follows the profile's assertion_algorithm, read off
+    # the profile - never assumed to be RSA. RS384 signs with an RSA key,
+    # ES384 with an EC key on P-384; scripts/generate_keypair.sh --alg
+    # makes either, and Settings.from_env() refuses the wrong family at
+    # startup, so the guidance here must match or the install cannot boot.
+    algorithm = profile.assertion_algorithm
+    key_family, keygen = _key_guidance(algorithm)
 
     print(f"\n-- {profile.name} FHIR connection --")
     if emr_vendor == "epic":
         print(
-            "Epic backend services does NOT use a client secret - it uses an RS384\n"
-            "JWT signed with a private key whose public half is registered on\n"
+            f"Epic backend services does NOT use a client secret - it uses an {algorithm}\n"
+            f"JWT signed with {key_family} whose public half is registered on\n"
             "open.epic.com. If you haven't generated that keypair yet, run this in\n"
             "another terminal first, then come back:\n"
-            "    ./scripts/generate_epic_keypair.sh\n"
+            f"    {keygen}\n"
         )
         fhir_base_url = ask(
             "Epic FHIR R4 base URL for this customer instance "
@@ -273,12 +299,13 @@ def main() -> None:
         )
     else:
         print(
-            f"{profile.name} uses SMART Backend Services auth: an RS384-signed JWT\n"
-            "client assertion, no client secret. The public half of your keypair\n"
-            "is registered with the vendor (typically as a JWKS) during app\n"
-            "registration. If you don't have a keypair yet, run this in another\n"
-            "terminal first, then come back:\n"
-            "    ./scripts/generate_epic_keypair.sh   # works for any RS384 vendor\n"
+            f"{profile.name} uses SMART Backend Services auth: an {algorithm}-signed JWT\n"
+            f"client assertion ({key_family}), no client secret. The public half of\n"
+            "your keypair is registered with the vendor (typically as a JWKS) during\n"
+            "app registration - its chapter in docs/EMR_CONNECTORS.md, 'Setting it\n"
+            "up', walks through it. If you don't have a keypair yet, run this in\n"
+            "another terminal first, then come back:\n"
+            f"    {keygen}\n"
         )
         if emr_vendor == "cerner":
             print(
@@ -318,12 +345,13 @@ def main() -> None:
             "\nA private key file is still required: core/config/settings.py\n"
             "validates the key path at startup for every vendor, and other flows\n"
             "(records delivery to a JWT vendor, a later vendor switch) use it.\n"
-            "Generate one with ./scripts/generate_epic_keypair.sh if you have\n"
+            f"Generate one with `{keygen}` if you have\n"
             "none - for this vendor it is never sent anywhere."
         )
     private_key_path = ask(
-        "Path to the RS384 private key file (from generate_epic_keypair.sh)",
-        default="./epic_private_key.pem",
+        f"Path to the private key file ({key_family}, for {algorithm}; from "
+        f"`{keygen}`)",
+        default="./private_key.pem",
     )
     private_key_file = Path(private_key_path).resolve()
     if not private_key_file.is_file():

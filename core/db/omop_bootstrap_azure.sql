@@ -121,7 +121,7 @@ GRANT SELECT ON vocab.concept TO omop_etl;
 -- where they necessarily collapse into one identity.
 --
 -- cdm.measurement and cdm.observation are DELIBERATELY EXCLUDED from
--- this REVOKE, unlike the other five tables - omop_etl genuinely does
+-- this REVOKE, unlike the other OMOP tables above - omop_etl genuinely does
 -- hold DELETE there (granted above, H7e). See
 -- omop_bootstrap_aws.sql's identical REVOKE for the full reasoning on
 -- why listing them here would silently undo that grant.

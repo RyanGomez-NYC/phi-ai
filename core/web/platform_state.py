@@ -43,34 +43,49 @@ MODEL_SLOTS = ("assistant", "claims", "priorauth", "coding", "roi", "noshow",
                "segmentation", "scheduling", "ingest", "imaging", "trials",
                "measures", "other")
 
-#: The vendor seams the integration screens honor - the same facts the
-#: demo ships, sourced from docs/EMR_CONNECTORS.md.
-EMR_VENDORS = {
-    "epic": {"name": "Epic",
-             "auth": "SMART backend services — RS384-signed JWT",
-             "bulk": "Group $export, one run per group per 24h, full re-extract only",
-             "writes": "Signed notes via DocumentReference; MedicationRequest is read/search only"},
-    "oracle": {"name": "Oracle Health",
-               "auth": "System account, explicit scopes per resource",
-               "bulk": "Supported",
-               "writes": "Scoped writes"},
-    "athenahealth": {"name": "athenahealth",
-                     "auth": "OAuth2 client credentials",
-                     "bulk": "Supported",
-                     "writes": "Via proprietary + FHIR APIs"},
-    "eclinicalworks": {"name": "eClinicalWorks",
-                       "auth": "OAuth2 client credentials",
-                       "bulk": "Supported",
-                       "writes": "Limited"},
-    "meditech": {"name": "MEDITECH",
-                 "auth": "OAuth2 client credentials",
-                 "bulk": "Supported",
-                 "writes": "Limited"},
-    "nextgen": {"name": "NextGen",
-                "auth": "OAuth2 client credentials",
-                "bulk": "NO bulk export — per-patient only",
-                "writes": "No bulk writes"},
-}
+def _emr_vendors_from_profiles() -> dict:
+    """The vendor seams the integration screens honor, DERIVED from
+    core/fhir/emr_profiles.py PROFILES - the declared source of truth -
+    keyed by the profile key (`cerner`, never a second spelling), so the
+    screens can never offer a vendor the platform does not profile, nor
+    describe a vendor's grant differently from its profile. Each field is
+    prose rendered from the profile's own flags; the citation for every
+    flag is that vendor's chapter in docs/EMR_CONNECTORS.md."""
+    from core.fhir.emr_profiles import PROFILES
+
+    vendors = {}
+    for key, profile in PROFILES.items():
+        if profile.auth_flow == "oauth2_client_credentials":
+            auth = "OAuth2 client credentials — client ID and client secret"
+        else:
+            auth = (f"SMART Backend Services — {profile.assertion_algorithm}-signed JWT "
+                    "client assertion")
+        if profile.requires_token_scopes:
+            auth += "; explicit system scopes required on the token request"
+        bulk = ("Bulk Data $export recorded in the profile"
+                if profile.supports_bulk_export
+                else "NO Bulk Data Export in the profile — the bulk scheduler refuses this "
+                     "vendor rather than degrading")
+        writable = tuple(profile.writable_resources)
+        writes = (", ".join(writable) + " (create advertised per the vendor's own documentation)"
+                  if writable else
+                  "None over FHIR — the profile records no writable resource type; the "
+                  "delivery writer refuses every type")
+        vendors[key] = {
+            "name": profile.name,
+            "auth": auth,
+            "bulk": bulk,
+            "writes": writes,
+            "auth_flow": profile.auth_flow,
+            "assertion_algorithm": profile.assertion_algorithm,
+            "supports_bulk_export": profile.supports_bulk_export,
+            "writable_resources": writable,
+        }
+    return vendors
+
+
+#: Keyed by PROFILES key; see _emr_vendors_from_profiles().
+EMR_VENDORS = _emr_vendors_from_profiles()
 
 _CONFIG_DEFAULTS = {
     "source_vendor": "epic",

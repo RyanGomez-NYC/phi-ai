@@ -26,10 +26,10 @@ everywhere:
          `script-src 'none'`, which removes script injection as a delivery
          route outright. Trading that for a "return" button is a poor
          exchange on a PHI interface.
-       - Support across the five targets is uneven, and the capability
-         must be negotiated at launch. A feature that works on one EMR and
-         silently does nothing on four is worse than a link that works on
-         all five.
+       - Support across the vendors with a dialect entry in vendors.py is
+         uneven, and the capability must be negotiated at launch. A
+         feature that works on one EMR and silently does nothing on the
+         rest is worse than a link that works on every one of them.
 
      If a deployment needs true panel-close behaviour, that is a
      deliberate decision to relax the CSP for one narrow script, and it

@@ -271,12 +271,179 @@ def test_a_dry_run_writes_no_audit_entry():
 # EMR profiles
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("vendor", ["epic", "cerner", "athenahealth",
-                                    "eclinicalworks", "meditech", "nextgen"])
+@pytest.mark.parametrize("vendor", sorted(PROFILES))
 def test_every_target_emr_has_an_ingestion_profile(vendor):
+    """Parametrized over PROFILES itself, so a profile added to the
+    registry is covered without anyone extending a list here."""
     profile = profile_for(vendor)
     assert profile.supported_resources
     assert profile.auth_flow in ("smart_backend_services", "oauth2_client_credentials")
+
+
+# ---------------------------------------------------------------------------
+# The delivery CLI authenticates on the DESTINATION's profile
+# ---------------------------------------------------------------------------
+# core/fhir/delivery/__main__.py is the one code path that writes into a
+# live EMR. Its token request used to be built on the Epic profile
+# regardless of --vendor (so every destination was signed RS384 with no
+# scope), and a stray PHI_AI_DELIVERY_CLIENT_SECRET in the environment
+# silently switched a JWT vendor onto the secret path. These pin the
+# dispatch per profile against a recording stand-in for the client.
+
+class _RecordingClient:
+    """Stands in for FHIRIngestionClient: records how it was built and
+    which grant was called with what."""
+
+    instances: list = []
+
+    def __init__(self, base_url, profile, storage, encryptor, audit, retention_years):
+        self.base_url = base_url
+        self.profile = profile
+        self.calls: list[tuple] = []
+        self.access_token = "recorded-token"
+        _RecordingClient.instances.append(self)
+
+    def authenticate(self, client_id, private_key_pem, token_url, jwt_kid=None, scope=None):
+        self.calls.append(("assertion", client_id, token_url, jwt_kid, scope, private_key_pem))
+
+    def authenticate_client_secret(self, client_id, client_secret, token_url, scope=None):
+        self.calls.append(("secret", client_id, client_secret, token_url, scope))
+
+
+def _rsa_pem():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
+def _ec_p384_pem():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    return ec.generate_private_key(ec.SECP384R1()).private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
+_PEM_FOR = {"RS384": _rsa_pem, "ES384": _ec_p384_pem}
+
+
+@pytest.fixture
+def delivery_env(monkeypatch, tmp_path):
+    """The delivery credentials as the environment carries them, with the
+    real client swapped for the recorder. Returns a helper that sets the
+    key file for an algorithm and clears the stray-secret variable."""
+    import core.fhir.client as client_module
+
+    monkeypatch.setattr(client_module, "FHIRIngestionClient", _RecordingClient)
+    _RecordingClient.instances.clear()
+    monkeypatch.delenv("PHI_AI_DELIVERY_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("PHI_AI_DELIVERY_CLIENT_ID", "delivery-client")
+    monkeypatch.setenv("PHI_AI_DELIVERY_TOKEN_URL", "https://dest.example/oauth2/token")
+    monkeypatch.delenv("PHI_AI_DELIVERY_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("PHI_AI_DELIVERY_JWT_KID", raising=False)
+
+    def with_key(algorithm):
+        key = tmp_path / f"{algorithm}.pem"
+        key.write_bytes(_PEM_FOR[algorithm]())
+        monkeypatch.setenv("PHI_AI_DELIVERY_PRIVATE_KEY_PATH", str(key))
+        return key
+
+    return monkeypatch, with_key
+
+
+class _Args:
+    destination = "https://dest.example/fhir/r4"
+
+
+@pytest.mark.parametrize("vendor", sorted(PROFILES))
+def test_the_delivery_token_request_is_built_on_the_destination_profile(vendor, delivery_env):
+    """profile=<the destination's>, the grant the profile's auth_flow
+    names, and - where the profile requires explicit scopes and records
+    writable types - one system/{Type}.write per writable type."""
+    from core.fhir.delivery.__main__ import _access_token, delivery_scope
+
+    monkeypatch, with_key = delivery_env
+    profile = PROFILES[vendor]
+    if profile.auth_flow == "oauth2_client_credentials":
+        monkeypatch.setenv("PHI_AI_DELIVERY_CLIENT_SECRET", "s3cret")
+    else:
+        with_key(profile.assertion_algorithm)
+
+    token = _access_token(_Args(), profile)
+
+    assert token == "recorded-token"
+    (client,) = _RecordingClient.instances
+    assert client.profile is profile, f"{vendor}: the token client was built on {client.profile.name}"
+    assert client.base_url == _Args.destination
+    (call,) = client.calls
+    expected_scope = delivery_scope(profile)
+    if profile.requires_token_scopes and profile.writable_resources:
+        assert expected_scope == " ".join(f"system/{t}.write" for t in profile.writable_resources)
+    else:
+        assert expected_scope is None
+    if profile.auth_flow == "oauth2_client_credentials":
+        assert call[0] == "secret" and call[2] == "s3cret" and call[4] == expected_scope
+    else:
+        assert call[0] == "assertion" and call[4] == expected_scope, call[:5]
+
+
+@pytest.mark.parametrize("vendor", sorted(k for k in PROFILES
+                                          if PROFILES[k].auth_flow != "oauth2_client_credentials"))
+def test_a_stray_delivery_client_secret_is_refused_for_a_jwt_vendor(vendor, delivery_env):
+    """A secret left in the environment from another vendor's run must not
+    swap this destination onto the secret path: refused, naming the
+    vendor and the variable, before any request."""
+    from core.fhir.delivery.__main__ import _access_token
+
+    monkeypatch, with_key = delivery_env
+    with_key(PROFILES[vendor].assertion_algorithm)
+    monkeypatch.setenv("PHI_AI_DELIVERY_CLIENT_SECRET", "stale-from-another-run")
+    with pytest.raises(SystemExit, match="does not accept a client secret"):
+        _access_token(_Args(), PROFILES[vendor])
+    assert _RecordingClient.instances[0].calls == []
+
+
+@pytest.mark.parametrize("vendor", sorted(k for k in PROFILES
+                                          if PROFILES[k].auth_flow != "oauth2_client_credentials"))
+def test_a_key_of_the_wrong_family_is_named_before_any_network_call(vendor, delivery_env):
+    """check_private_key_signs() runs against the DESTINATION's algorithm:
+    an EC key for an RS384 destination, an RSA key for an ES384 one, is
+    refused with both sides named, before authenticate() is reached."""
+    from core.fhir.delivery.__main__ import _access_token
+
+    _, with_key = delivery_env
+    profile = PROFILES[vendor]
+    wrong = "ES384" if profile.assertion_algorithm == "RS384" else "RS384"
+    with_key(wrong)
+    with pytest.raises(SystemExit, match=profile.assertion_algorithm):
+        _access_token(_Args(), profile)
+    assert _RecordingClient.instances[0].calls == []
+
+
+@pytest.mark.parametrize("vendor", sorted(k for k in PROFILES
+                                          if PROFILES[k].auth_flow == "oauth2_client_credentials"))
+def test_a_secret_vendor_without_a_secret_is_refused(vendor, delivery_env):
+    from core.fhir.delivery.__main__ import _access_token
+
+    with pytest.raises(SystemExit, match="PHI_AI_DELIVERY_CLIENT_SECRET"):
+        _access_token(_Args(), PROFILES[vendor])
+
+
+def test_the_vendor_argument_is_every_profile_key():
+    """--vendor's choices are PROFILES' keys - derived, never hand-listed."""
+    import core.fhir.delivery.__main__ as cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["--destination", "https://d.example", "--vendor", "allscripts",
+                  "--identity-map", "x.csv", "--purpose-of-use", "p", "--patient", "q"])
 
 
 def test_an_unknown_vendor_does_not_silently_fall_back_to_epic():

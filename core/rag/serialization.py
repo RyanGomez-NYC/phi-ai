@@ -52,6 +52,29 @@ TEMPLATE_VERSION = "2"
 
 
 @dataclass(frozen=True)
+class Provenance:
+    """Where a chunk came from, as opposed to where it is stored.
+
+    SPEC §5.1(a) has the chunk carry its storage object key, which answers
+    "where do I find this again". In an N-to-M exchange - many source EMRs
+    hydrating one store, then feeding many targets - that is not the same
+    question as "which system handed this over, when, and under which run".
+    A storage key cannot answer the second, and the second is the one a
+    covered entity is asked when a disclosure is challenged.
+
+    `run` is the exchange that carried the record in. It is deliberately a
+    plain string rather than an int: an on-demand hydration and a named bulk
+    exchange are both legitimate origins, and forcing them into one numeric
+    space loses that distinction.
+    """
+
+    source_system: str
+    ingested_at: Optional[str] = None  # ISO 8601
+    run: Optional[str] = None
+    source_record_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class Chunk:
     storage_key: str
     resource_type: str
@@ -63,6 +86,12 @@ class Chunk:
     codes: tuple[tuple[str, str, str], ...]  # (system, code, display)
     template_version: str
     text: str
+    # Optional on the model, because a deployment may index a corpus whose
+    # origin was never recorded and refusing to represent it would just push
+    # the gap somewhere less visible. Whether that absence is ADMISSIBLE is
+    # not decided here - GrantScope.require_provenance decides it, at the
+    # boundary, where the caller's posture is known.
+    provenance: Optional[Provenance] = None
 
 
 @dataclass(frozen=True)
@@ -238,6 +267,7 @@ def serialize_resource(
     value_sets: CategoryValueSets,
     *,
     source_department: Optional[str] = None,
+    provenance: Optional[Provenance] = None,
 ) -> SerializationResult:
     """
     One resource in, one chunk or one counted exclusion out.
@@ -272,6 +302,7 @@ def serialize_resource(
         codes=fields["codes"],
         template_version=TEMPLATE_VERSION,
         text=_render(fields),
+        provenance=provenance,
     )
     return SerializationResult(chunk=chunk)
 # Made by Ryan Gomez & Co. Inc.

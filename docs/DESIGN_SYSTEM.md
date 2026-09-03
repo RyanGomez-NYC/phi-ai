@@ -73,11 +73,3 @@ files from the previous design system. Nothing references them — `app.css`
 mentions neither family. They are dead weight on every deployment that copies
 the static directory and can be removed once someone confirms no downstream
 template pulls them directly.
-
-## The demo's stylesheet is a separate thing
-
-`www-demo/public/assets/app.css` is the public demonstration's own stylesheet.
-It shares the vocabulary above but is not this file, and it carries rules that
-do not exist here — notably the dark palette used by the System section, whose
-contrast is measured rather than eyeballed. Do not edit one expecting the
-other to follow.

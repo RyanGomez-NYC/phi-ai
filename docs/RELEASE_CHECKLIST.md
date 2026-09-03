@@ -124,9 +124,9 @@ more than it gains. Keep these visible:
 - **No storage-level immutability.** Retention is recorded, not enforced.
   Integrity is detective, not preventive — see `docs/COMPLIANCE.md`.
 - **No live EMR validation.** Every integration is exercised against the
-  emulators in `emulators/`, not a real Epic, Cerner, athenahealth,
-  eClinicalWorks, MEDITECH or NextGen instance. Registration is per
-  customer and still required.
+  emulators in `emulators/`, not a real instance of any vendor profiled in
+  `core/fhir/emr_profiles.py`. Registration is per customer and still
+  required.
 - **Not a compliance determination.** The software implements controls; it
   does not certify anyone against HIPAA.
 - **OCR is printed text only.** Tesseract is not built for handwriting.

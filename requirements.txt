@@ -1,4 +1,4 @@
-PyJWT>=2.8  # Epic backend services: RS384 client assertion signing
+PyJWT>=2.8  # SMART Backend Services client assertions, signed with the vendor profile's algorithm (RS384 or ES384 per core/fhir/emr_profiles.py)
 psycopg[binary]>=3.1  # Postgres index on AWS/Azure; IAM auth token generated via boto3/azure-identity, no password dependency
 PyYAML>=6.0  # Retention ruleset files (core/config/retention_rules.py) - human-editable, comment-friendly, unlike raw JSON
 

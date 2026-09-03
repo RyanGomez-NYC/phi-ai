@@ -54,9 +54,8 @@ PURPOSE_OF_USE = "operations"
 
 _SYSTEM_PROMPT = """\
 You are the assistant built into the PHI AI Platform, an open-source platform \
-that connects to an organisation's EMR (Epic, Oracle Health, athenahealth, \
-eClinicalWorks, MEDITECH or NextGen) and makes that data usable on \
-infrastructure the organisation controls. Its stored scope is the EMR's FHIR \
+that connects to an organisation's EMR ({emr_vendors}) and makes that data \
+usable on infrastructure the organisation controls. Its stored scope is the EMR's FHIR \
 surface across the designated record set - clinical resources AND the EMR's \
 claims/billing surface (ExplanationOfBenefit: adjudicated claims, billed \
 services, payer adjudication), where the deployment's vendor exposes it. You \
@@ -268,8 +267,14 @@ class AssistantSession:
         # and the tool_result that answers it - which the API rejects.
         self._turn_starts: list[int] = list(turn_starts or [])
 
+        # The vendor list is DERIVED from PROFILES at prompt assembly, so
+        # the assistant can never tell a user fewer vendors are supported
+        # than the platform profiles (no hand-maintained list).
+        from core.fhir.emr_profiles import PROFILES
+
         system_text = _SYSTEM_PROMPT.format(
-            phi_rules=_PHI_RULES[getattr(settings, "phi_access", "none")]
+            phi_rules=_PHI_RULES[getattr(settings, "phi_access", "none")],
+            emr_vendors=", ".join(p.name for p in PROFILES.values()),
         )
         # Driven off the toolbox rather than off configuration, so the
         # prompt cannot promise a capability the caller's role did not

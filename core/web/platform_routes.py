@@ -175,16 +175,23 @@ def register(app, page, require, current_identity, record, reader) -> None:
         require(identity, "admin:config")
         s = state()
         tv = s.config_get("target_vendor", "epic")
-        vendor = EMR_VENDORS.get(tv, EMR_VENDORS["epic"])["name"]
-        if tv == "nextgen":
+        entry = EMR_VENDORS.get(tv, EMR_VENDORS["epic"])
+        vendor = entry["name"]
+        if not entry["writable_resources"]:
+            # Derived from the target's PROFILE, never from a key literal:
+            # a vendor whose profile records no writable resource type has
+            # no write surface to deliver into, and the export is refused
+            # with that vendor's own seam named.
             s.add_bulk_export(started_at=_now(), finished_at=_now(),
                               destination=f"Target EMR ({vendor})",
                               format="FHIR NDJSON", scope="full population",
                               status="refused", resources=0, withheld=0,
-                              note="NextGen exposes no bulk write surface. The "
-                                   "export is refused with the seam named, not "
-                                   "degraded into thousands of individual "
-                                   "writes nobody asked for.")
+                              note=f"{vendor}'s profile records no writable "
+                                   "resource type (its own documentation: "
+                                   f"{entry['writes']}). The export is refused "
+                                   "with the seam named, not degraded into "
+                                   "thousands of individual writes nobody "
+                                   "asked for.")
             record(identity, "export.refused", "export/target-emr", "operations")
         else:
             total = _platform_resource_total()
@@ -457,8 +464,37 @@ def register(app, page, require, current_identity, record, reader) -> None:
         if section == "system":
             diagrams = docs_content.dataflow_svgs()
             diagrams["arch"] = docs_content.architecture_svg()
+        # Every vendor table, count and port range the documentation pages
+        # print is rendered from the registries - PROFILES (via
+        # EMR_VENDORS), the emulator VENDORS and DEFAULT_PORTS - never
+        # typed into a template, so a profile added to the platform shows
+        # up on its own docs pages without anyone remembering to add a row.
+        from emulators.vendors import DEFAULT_PORTS, VENDORS
+
+        ports = sorted(DEFAULT_PORTS.values())
+        contiguous = ports and ports[-1] - ports[0] + 1 == len(ports)
+        emulator_rows = [
+            {"key": key, "name": VENDORS[key].name, "port": DEFAULT_PORTS[key],
+             "fhir_path": VENDORS[key].fhir_path,
+             "grants": " or ".join(g for g, ok in (
+                 ("JWT assertion", VENDORS[key].accepts_jwt_assertion),
+                 ("client secret", VENDORS[key].accepts_client_secret)) if ok),
+             "algorithms": "/".join(VENDORS[key].assertion_algorithms)
+                           if VENDORS[key].accepts_jwt_assertion else "",
+             "scopes_required": VENDORS[key].requires_token_scope,
+             "wildcards_refused": VENDORS[key].refuses_wildcard_scope,
+             "export": VENDORS[key].supports_bulk_export,
+             "creatable": ", ".join(VENDORS[key].creatable) or "nothing"}
+            for key in sorted(VENDORS, key=DEFAULT_PORTS.__getitem__)
+        ]
         return page(request, f"docs_{section}.html", identity, active=None,
                     docs_sections=_docs_allowed(identity), docs_active=section,
                     diagrams=diagrams, screen_ref="DOCS",
-                    screen_title=label)
+                    screen_title=label,
+                    vendors=EMR_VENDORS, vendor_keys=", ".join(sorted(EMR_VENDORS)),
+                    vendor_names=", ".join(v["name"] for v in EMR_VENDORS.values()),
+                    emulator_rows=emulator_rows, emulator_count=len(VENDORS),
+                    emulator_port_range=(f"{ports[0]}–{ports[-1]}" if contiguous
+                                         else ", ".join(str(p) for p in ports)),
+                    first_emulator_port=ports[0] if ports else None)
 # Made by Ryan Gomez & Co. Inc.

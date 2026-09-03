@@ -872,7 +872,7 @@ td form { display: inline-block; }
 }
 
 /* ─────────────────────────────────────────────────────────────
-   φ(ai) interface kit — append to www-demo/public/assets/app.css
+   φ(ai) interface kit
    ─────────────────────────────────────────────────────────────
    Fonts: Inter 400/500/600 + 400 italic, IBM Plex Mono 400/500.
    Vendor them locally as latin + latin-ext woff2 subsets and keep

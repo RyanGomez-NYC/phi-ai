@@ -30,6 +30,7 @@ from core.web.smart.launch import (  # noqa: E402
     make_pkce,
     normalise_issuer,
 )
+from core.web.smart.vendors import VENDORS as SMART_VENDORS  # noqa: E402
 from core.web.smart.vendors import VENDORS, baseline_scopes  # noqa: E402
 
 ISSUER = "https://fhir.example-hospital.org/api/FHIR/R4"
@@ -150,11 +151,12 @@ def test_only_patient_read_is_requested_and_no_offline_access():
     assert not any("write" in s or ".w" in s.split(".")[-1] for s in scopes)
 
 
-@pytest.mark.parametrize("vendor_key", ["epic", "cerner", "athenahealth",
-                                        "eclinicalworks", "nextgen"])
+@pytest.mark.parametrize("vendor_key", sorted(k for k in SMART_VENDORS if k != "generic"))
 def test_every_named_emr_produces_a_usable_authorization_request(vendor_key):
-    """All five targets implement SMART App Launch - which is why this is
-    one implementation rather than five."""
+    """Every vendor with its own dialect entry in core/web/smart/vendors.py
+    (derived from that registry, never hand-listed) implements SMART App
+    Launch - which is why this is one implementation rather than one per
+    vendor; everything else launches through `generic`."""
     service = _service(issuers=[_registered(vendor_key=vendor_key)])
     params = _authorize_params(service)
     scopes = params["scope"][0].split()

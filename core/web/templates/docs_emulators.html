@@ -5,7 +5,7 @@
 <div class="doc-prose">
 <h1>Emulators &amp; the non-PHI version of the system</h1>
 <p class="lede"><strong>The EMR emulators were created to test and demonstrate
-this software.</strong> Registering with six vendors takes weeks each, and
+this software.</strong> Registering with {{ emulator_count }} vendors takes weeks each, and
 sandboxes are not always obtainable at all (MEDITECH has no self-service
 sandbox). The emulators are synthetic stand-ins for every profiled vendor, so
 the entire integration — auth, bulk export, writes, in-context launch — can be
@@ -24,23 +24,25 @@ so there is exactly one synthetic dataset in the repository.</p>
 <div class="tablewrap"><table>
   <thead><tr><th>Vendor emulator</th><th>Port</th><th>Auth it accepts</th><th><span class="mono">$export</span></th><th>Creatable</th></tr></thead>
   <tbody>
-    <tr><td>Epic</td><td class="mono">9101</td><td>JWT assertion</td><td>yes</td><td class="mono">DocumentReference</td></tr>
-    <tr><td>Oracle Health (Cerner)</td><td class="mono">9102</td><td>JWT assertion <strong>or</strong> Basic secret; explicit scopes required</td><td>yes</td><td class="mono">DocumentReference, Condition, Observation</td></tr>
-    <tr><td>athenahealth</td><td class="mono">9103</td><td><strong>client secret</strong></td><td>yes</td><td class="mono">DocumentReference</td></tr>
-    <tr><td>eClinicalWorks</td><td class="mono">9104</td><td>JWT assertion</td><td>yes</td><td>nothing</td></tr>
-    <tr><td>NextGen</td><td class="mono">9105</td><td>JWT assertion</td><td><strong>no</strong> — refuses with an OperationOutcome</td><td class="mono">DocumentReference</td></tr>
-    <tr><td>MEDITECH</td><td class="mono">9106</td><td>JWT assertion</td><td>yes</td><td>nothing</td></tr>
+    {# One row per entry in emulators/vendors.py VENDORS, ordered by DEFAULT_PORTS - rendered, never typed. #}
+    {% for e in emulator_rows %}
+    <tr><td>{{ e.name }}</td><td class="mono">{{ e.port }}</td>
+      <td>{{ e.grants }}{% if e.algorithms %} ({{ e.algorithms }}){% endif %}{% if e.scopes_required %}; explicit scopes required{% endif %}{% if e.wildcards_refused %}; wildcards refused{% endif %}</td>
+      <td>{% if e.export %}yes{% else %}<strong>no</strong> — refuses with an OperationOutcome{% endif %}</td>
+      <td{% if e.creatable != 'nothing' %} class="mono"{% endif %}>{{ e.creatable }}</td></tr>
+    {% endfor %}
   </tbody>
 </table></div>
 <div class="doc-prose">
 
 <h2>2. Usage</h2>
 <p>Start them all, or one vendor:</p>
-<pre class="mono" style="background:var(--wash-2); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:11.5px; overflow-x:auto">python -m emulators                    # all six (ports 9101–9106)
-python -m emulators --vendor cerner    # one vendor</pre>
+<pre class="mono" style="background:var(--wash-2); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:11.5px; overflow-x:auto">python -m emulators                    # all {{ emulator_count }} (ports {{ emulator_port_range }})
+python -m emulators --vendor cerner    # one vendor
+python -m emulators --client-jwks ./jwks.json   # register your public JWK Set so signatures are verified</pre>
 <p>Point the platform at an emulator exactly as at a real EMR — that is the
 point. Set the FHIR base URL to the emulator
-(<span class="mono">http://127.0.0.1:9101/api/FHIR/R4</span> for Epic), select
+(<span class="mono">http://127.0.0.1:{{ first_emulator_port }}/api/FHIR/R4</span> for Epic), select
 the vendor profile, and run the bulk import: kickoff, a genuinely
 asynchronous status poll (the first poll returns
 <span class="mono">202</span>, as every real implementation does), NDJSON
@@ -49,7 +51,7 @@ accepted <strong>only for loopback</strong> (127.0.0.1, ::1, localhost) — the
 same carve-out RFC 8252 makes — and a remote http issuer is refused
 outright.</p>
 <p><strong>In-context launch, end to end</strong>: open
-<span class="mono">http://127.0.0.1:9101/emulator/launch</span> — a stand-in
+<span class="mono">http://127.0.0.1:{{ first_emulator_port }}/emulator/launch</span> — a stand-in
 for a clinician viewing a chart — and it sends a SMART EHR launch at the
 platform (<span class="mono">python -m emulators --record-url
 http://127.0.0.1:8080/smart/launch</span>). The launch is honest: the
@@ -74,7 +76,17 @@ honestly, <em>including the unhelpful behaviors</em>:</p>
   <li><strong>Cerner demands explicit system scopes</strong> at the token
     endpoint — a scope-less request (Epic's normal shape) or a wildcard gets
     <span class="mono">invalid_scope</span>, exactly as Oracle Health
-    documents — and it also accepts the Basic-header secret mode.</li>
+    documents — and it also accepts the Basic-header secret mode. Every
+    other scope-requiring emulator (ModMed, Altera, Greenway, Practice
+    Fusion, TruBridge, Netsmart, Nextech per their own documentation)
+    refuses a scope-less request the same way; only Oracle Health, which
+    documents it, refuses a wildcard.</li>
+  <li><strong>ModMed and Greenway refuse an RS384 assertion</strong> with
+    <span class="mono">invalid_client</span> — each documents ES384 only —
+    and every emulator refuses an assertion in an algorithm its vendor does
+    not list, an unsigned one, one whose audience or expiry is wrong, and
+    (once your public JWK Set is registered) one signed by an unregistered
+    key.</li>
   <li><strong>NextGen refuses <span class="mono">$export</span></strong> with
     an OperationOutcome, not an empty result — "unsupported" must never be
     mistakable for "no data".</li>
@@ -129,8 +141,8 @@ development runs on:</p>
   <li><strong>Enable the assistant</strong> against the synthetic corpus —
     the full RAG loop, citations, withholding and refusals all demonstrate
     with zero PHI exposure.</li>
-  <li><strong>Exercise every seam</strong>: the emulators for all six
-    vendors, the streaming and export managers' seeded specimens, the
+  <li><strong>Exercise every seam</strong>: the emulators for all
+    {{ emulator_count }} vendors, the streaming and export managers' seeded specimens, the
     consent gate, the Part 2 refusal, the audit chain verification.</li>
   <li><strong>Say what it is.</strong> A non-PHI deployment should label
     itself synthetic on every page — a fixed banner stating no real patients

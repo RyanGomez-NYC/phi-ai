@@ -23,7 +23,10 @@
 
 An open-source, bring-your-own-infrastructure AI platform for Protected
 Health Information (PHI). It connects to your EMR — Epic, Oracle Health
-(Cerner), athenahealth, eClinicalWorks, MEDITECH, or NextGen Healthcare —
+(Cerner), athenahealth, eClinicalWorks, MEDITECH, NextGen Healthcare,
+ModMed, Altera Digital Health, Greenway Health, Veradigm, Practice
+Fusion, TruBridge, MEDHOST, Netsmart or Nextech; every vendor profiled
+in `core/fhir/emr_profiles.py` —
 and makes that clinical data usable on infrastructure you already own and
 control: a grounded AI assistant, population analytics and cohort
 counting, imaging with an embedded viewer, records delivery back to a
@@ -116,17 +119,26 @@ defensible.
   directly in the record), patient-output release gates, a constrained
   action space, HTI-1 source attributes. Every module refuses rather
   than degrades.
-- **Six EMR connectors, one data-driven client** (`core/fhir/`) — Epic,
-  Oracle Health (Cerner), athenahealth, eClinicalWorks, MEDITECH,
-  NextGen Healthcare. Each vendor's real auth model (RS384 JWT client
-  assertions for the SMART Backend Services vendors, client secret for
-  athenahealth, explicit system scopes for Oracle Health); every quirk
-  in a capability profile table, not in the client. Per-type search
-  hourly and FHIR Bulk Data Export daily, feeding one pipeline.
-- **Per-vendor EMR emulators** (`emulators/`, ports 9101–9106) — every
-  connector exercised end-to-end against an emulator reproducing that
-  vendor's real seams (auth accepted, `$export` present or absent, what
-  is creatable), so integration is testable without a live EMR.
+- **One EMR connector per profiled vendor, one data-driven client**
+  (`core/fhir/`) — every entry in `PROFILES`: Epic, Oracle Health
+  (Cerner), athenahealth, eClinicalWorks, MEDITECH, NextGen Healthcare,
+  ModMed, Altera Digital Health, Greenway Health, Veradigm, Practice
+  Fusion, TruBridge, MEDHOST, Netsmart, Nextech. Each vendor's real auth
+  model (JWT client assertions signed with the algorithm the vendor
+  documents — `assertion_algorithm` per profile, ES384 where the
+  profile says so — for the SMART Backend Services vendors, a client
+  secret for athenahealth,
+  explicit system scopes wherever the vendor's token request requires
+  them); every quirk in a capability profile table, not in the client.
+  Per-type search hourly and FHIR Bulk Data Export daily, feeding one
+  pipeline.
+- **Per-vendor EMR emulators** (`emulators/`, one port per vendor from
+  `DEFAULT_PORTS`, 9101–9115) — every connector exercised end-to-end
+  against an emulator reproducing that vendor's real seams (which grant
+  and which assertion algorithm are accepted, `$export` present or
+  absent, what is creatable), so integration is testable without a
+  live EMR; `tests/test_e2e_matrix.py` drives every emulator as a
+  source and as a delivery target in one matrix.
 - **Records delivery & release of information** (`core/fhir/delivery/`,
   ROI queue in the web UI) — stored records delivered back to a live
   EMR, identity-mapped; ROI productions assembled for human review with
@@ -170,6 +182,8 @@ to a cache.
  ┌───────────────────────────────────────────────────────────────────────┐
  │                        YOUR EMR  (FHIR R4)                            │
  │   Epic · Oracle Health · athenahealth · eCW · MEDITECH · NextGen      │
+ │   ModMed · Altera · Greenway · Veradigm · Practice Fusion · TruBridge │
+ │   MEDHOST · Netsmart · Nextech  — every profile in emr_profiles.py    │
  └──────────────────────────────────┬────────────────────────────────────┘
         per-type search (hourly)    │    Bulk Data $export (daily)
                                     ▼
@@ -289,8 +303,11 @@ python -m pytest tests/ -q          # the full suite runs without any cloud
 ```
 
 Every EMR connector can be exercised locally against the bundled
-emulators (`emulators/`, ports 9101–9106) — see
-`runbooks/RUNBOOK_EMULATORS.md`. The installer chatbot and the
+emulators (`emulators/`, ports 9101–9115 from `DEFAULT_PORTS`) — see
+`runbooks/RUNBOOK_EMULATORS.md`; `tests/test_e2e_matrix.py` runs every
+emulator as a source and as a delivery target in one matrix
+(`docs/EMR_CONNECTORS.md`, "Proof of integration"). The installer
+chatbot and the
 assistant's documentation tier also work before any infrastructure
 exists:
 
@@ -322,13 +339,15 @@ places, each runbook's "Known gaps" section says where.
 ### 3. Connect your EMR
 
 ```bash
-./scripts/generate_epic_keypair.sh     # one-time, SMART Backend Services vendors
+./scripts/generate_keypair.sh --alg RS384   # one-time keypair; --alg ES384 (EC P-384) where the profile's assertion_algorithm says so
 python3 install/installer_chatbot.py   # walks you through registration details
 ```
 
-Set `PHI_AI_EMR_VENDOR` to one of `epic`, `cerner`,
-`athenahealth`, `eclinicalworks`, `meditech`, `nextgen`. Per-vendor
-registration, auth, scopes, bulk-export behavior and write surfaces:
+Set `PHI_AI_EMR_VENDOR` to the vendor's key in `PROFILES`
+(`core/fhir/emr_profiles.py`; startup validates it and names every
+valid key on a typo, and the installer chatbot offers the same list).
+Per-vendor registration, auth, scopes, bulk-export behavior, write
+surfaces and a zero-to-first-ingest "Setting it up" walkthrough:
 `docs/EMR_CONNECTORS.md`. No live EMR yet? Point it at the matching
 emulator and everything downstream behaves identically.
 
@@ -377,9 +396,11 @@ extensions and must be namespaced to **your** organization from day one.
   detective, not preventive. `docs/COMPLIANCE.md` sets out what remains
   per cloud once that is true.
 - **No live EMR validation.** Every integration is exercised against
-  the emulators, not a real Epic, Cerner, athenahealth, eCW, MEDITECH
-  or NextGen instance (Epic is the only vendor also run against a live
-  sandbox). Registration is per customer and still required.
+  the emulators, not a real instance of any profiled vendor (Epic is
+  the only vendor also run against a live sandbox; the unauthenticated
+  conformance reads of other vendors' public endpoints recorded in
+  `docs/EMR_CONNECTORS.md` are observations, not validation).
+  Registration is per customer and still required.
 - **Not a compliance determination.** The software implements controls;
   it does not certify anyone against HIPAA. Neither this code nor its
   documentation is legal advice.
@@ -453,13 +474,13 @@ phi-ai/
 │   ├── db/             Optional Postgres queryable index + optional
 │   │                    OMOP CDM analytics layer
 │   ├── fhir/           EMR FHIR R4 clients + schedulers + per-vendor
-│   │                    capability profiles (six vendors)
+│   │                    capability profiles (one per vendor in PROFILES)
 │   └── healthcheck.py  Verifies compliance posture, not just connectivity
 ├── config/             Deployer-owned templates (retention ruleset, ...)
 ├── deploy/             Terraform per cloud: aws/ gcp/ azure/
 ├── docs/               ARCHITECTURE · COMPLIANCE · EMR_CONNECTORS ·
 │                        SPEC · SCALING · COST · TESTDATA · more
-├── emulators/          One emulator per EMR vendor (ports 9101-9106)
+├── emulators/          One emulator per EMR vendor (DEFAULT_PORTS, 9101-9115)
 ├── install/            install.sh + guided installer chatbot
 ├── runbooks/           25 operational runbooks (setup per cloud, identity
 │                        and role mapping, incident response, ...)

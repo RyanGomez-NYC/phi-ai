@@ -11,14 +11,21 @@ immediately.
 - [ ] Revoke the suspected-compromised credential at the source. What
       that means depends on the EMR connection's auth model
       (`core/fhir/emr_profiles.py`): for the SMART Backend Services
-      vendors (Epic, Oracle Health, eClinicalWorks, MEDITECH, NextGen)
+      vendors (every profile whose `auth_flow` is
+      `smart_backend_services` — Epic, Oracle Health and the rest)
       there is no client secret to revoke — auth is a signed JWT client
       assertion (RFC 7523), so containment means generating a new
-      keypair (`scripts/generate_epic_keypair.sh`), registering the new
-      public key on the client ID at the vendor's console (fhir.epic.com
-      for Epic; System Account Management for Oracle Health; each
-      vendor's own portal otherwise), and updating
-      `PHI_AI_FHIR_PRIVATE_KEY_PATH`. An athenahealth deployment
+      keypair (RSA via `scripts/generate_epic_keypair.sh`, or EC P-384
+      for the ES384 vendors ModMed and Greenway — each chapter's
+      "Setting it up" in `docs/EMR_CONNECTORS.md` has the commands),
+      registering the new public key on the client ID at the vendor's
+      console (fhir.epic.com for Epic; System Account Management for
+      Oracle Health; for the vendors that fetch a hosted JWKS URL,
+      publishing the new key at that URL and **removing the old one** —
+      Altera and Veradigm pick the change up in a nightly job, so the
+      compromised key keeps working until it is gone from the file),
+      and updating `PHI_AI_FHIR_PRIVATE_KEY_PATH`. An athenahealth
+      deployment
       DOES hold a client secret — revoke and reissue it through the
       athenahealth portal. For a compromised cloud IAM credential or KMS
       access, revoke/rotate at the cloud IAM console. Either way — do
@@ -103,7 +110,9 @@ Work with your Privacy/Security Officer and counsel to determine, per
 - [ ] Rotate all credentials: a new EMR keypair (see Step 1 — for the
       SMART Backend Services vendors there is no client secret to
       rotate, only the private key and its registered public
-      counterpart; athenahealth's client secret is the exception),
+      counterpart; athenahealth's client secret is the exception, as is
+      any deployment that chose a documented secret grant — TruBridge,
+      Netsmart),
       cloud IAM keys, KMS key (create
       new, re-encrypt going forward — do not re-encrypt already-stored
       objects. Nothing blocks that any more now that Object Lock is gone,

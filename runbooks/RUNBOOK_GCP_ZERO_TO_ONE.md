@@ -253,7 +253,7 @@ gcloud beta services identity create --service=sqladmin.googleapis.com --project
 
 **7.5 Retention** (B6). Add `retention_policy` to the store and audit buckets. Bucket Lock is irreversible: the period can be increased but never decreased, and the bucket cannot be deleted until every object ages out. That is the point of it, and it is also why you set the value deliberately rather than copying a default.
 
-**7.6 The five missing service accounts.** The GCP bootstrap SQL expects `{IMAGING_IAM_USER}`, `{SEARCH_IAM_USER}`, `{PSYCH_IAM_USER}`, `{DISPOSITION_IAM_USER}`, `{OPS_IAM_USER}` — Terraform creates only ingest, restore, and auditor. Add the other five as service accounts, `google_sql_user` entries, and IAM bindings, or the bootstrap SQL fails on substitution.
+**7.6 The five missing service accounts.** The GCP bootstrap SQL expects `{IMAGING_IAM_USER}`, `{SEARCH_IAM_USER}`, `{PSYCH_IAM_USER}`, `{DISPOSITION_IAM_USER}`, `{OPS_IAM_USER}` — Terraform creates only ingest, restore, and auditor. Add each of those as a service account, `google_sql_user` entries, and IAM bindings, or the bootstrap SQL fails on substitution.
 
 **7.7 Audit log config in Terraform.** Add `google_project_iam_audit_config` so Phase 5 is reproducible rather than a one-time console action.
 

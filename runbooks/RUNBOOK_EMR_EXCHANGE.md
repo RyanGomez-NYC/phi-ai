@@ -83,13 +83,29 @@ Four directions, and they are not equally safe.
 | Oracle Health (Cerner) | SMART Backend Services (JWT **or** Basic secret; explicit system scopes required) | yes | DocumentReference, Condition, Observation |
 | athenahealth | **OAuth client secret** | yes | DocumentReference only |
 | eClinicalWorks | SMART Backend Services (private-key JWT) | yes | none by default (Create APIs are a contracted add-on) |
-| MEDITECH | SMART Backend Services (g(10) baseline - confirm with MEDITECH) | yes | none published (view-only surface) |
-| NextGen | SMART Backend Services | **no** | DocumentReference only |
+| MEDITECH Expanse | SMART Backend Services (g(10) baseline - confirm with MEDITECH) | yes | none published (view-only surface) |
+| NextGen Healthcare | SMART Backend Services | **no** | DocumentReference only |
+| ModMed | SMART Backend Services (private-key JWT, **ES384**; explicit `system/{Type}.rs` scopes required) | yes (system, Patient and Group level) | none — "Read, Search, and Bulk operations" only; writes are the separate Proprietary API |
+| Altera Digital Health | SMART Backend Services (private-key JWT against a registered JWKS URL; explicit scopes required) | yes (Group level) | none — "read-only access and not write-backs"; writes are the Unity API |
+| Greenway Health | SMART Backend Services (private-key JWT, **ES384**; explicit scopes required) | yes (Group level; `_since` defaults to the last 24 hours) | none — "read operations only"; writes are GAPI |
+| Veradigm | SMART Backend Services (private-key JWT, RSA JWKS; documented scope `system/*.read`) | yes (Group level) | none — "limited to read-only access"; writes are Unity |
+| Practice Fusion | SMART Backend Services (private-key JWT, RS384 or ES384, `kid` required; explicit scopes required) | yes (Patient and Group level; groups of at most 1,000) | none — "cannot change or write over EHR data" |
+| TruBridge | SMART Backend Services (private-key JWT) **or** client secret — both documented; explicit scopes required | yes (system, Group and Patient level) | none documented ("read-only access") — the live CapabilityStatement over-advertises `create`; do not confirm a delivery |
+| MEDHOST | SMART Backend Services (private-key JWT, RS384 or ES384) | yes (Group level only; 5,000 patients per Group, Group created by MEDHOST Support) | none — every documented operation is GET |
+| Netsmart | SMART Backend Services (private-key JWT) **or** client secret — both documented; explicit scopes required | yes (Group level; `Retry-After: 120`) | DocumentReference, DiagnosticReport |
+| Nextech | SMART Backend Services (private-key JWT, RS384 or ES384; explicit scopes required; 15-minute tokens) | yes (Patient, Group and system level; Select 16.9+) | DocumentReference only (Select/NexCloud); none (IntelleChartPRO) |
+
+The rows follow `core/fhir/emr_profiles.py` `PROFILES`, which is the
+source of truth - one row per profile, under the profile's display name,
+and `tests/test_emr_profiles_coverage.py` fails when a profile has no
+row here or a row names no profile; each vendor's chapter in
+`docs/EMR_CONNECTORS.md` carries the citation for every cell.
 
 Two things in that table change project plans, so read them before
 committing to a timeline:
 
-- **NextGen has no published Bulk Data Export.** A full history must be
+- **NextGen has no published Bulk Data Export** — the only profiled
+  vendor recorded without one. A full history must be
   pulled per resource type through the paged search API. For a large
   practice that is materially longer and more rate-limited than a
   `$export`. Budget for it rather than discovering it mid-migration -
@@ -223,7 +239,7 @@ the host:
 |---|---|
 | `PHI_AI_DELIVERY_ACCESS_TOKEN` | a token you already hold |
 | `PHI_AI_DELIVERY_CLIENT_ID` + `_TOKEN_URL` | either flow |
-| `PHI_AI_DELIVERY_CLIENT_SECRET` | athenahealth |
+| `PHI_AI_DELIVERY_CLIENT_SECRET` | athenahealth (or any profile switched to `oauth2_client_credentials` — TruBridge and Netsmart document a secret as an alternative grant) |
 | `PHI_AI_DELIVERY_PRIVATE_KEY_PATH` | SMART Backend Services vendors |
 
 Every delivered record is audited as `record.deliver` before the write,
@@ -255,8 +271,9 @@ writing into anyone's chart.
   broken link, and choosing between those is a migration decision.
   Rewriting a whole reference graph across systems is a project, not a
   side effect of an export.
-- **FHIR `$import`.** Draft, and not commercially supported by any of the
-  six. Recorded so the answer is visible rather than rediscovered.
+- **FHIR `$import`.** Draft, and not commercially supported by any
+  profiled vendor (every profile records `supports_bulk_import=False`).
+  Recorded so the answer is visible rather than rediscovered.
 
 Delivery confirmation is now available — see `RUNBOOK_VERIFICATION.md`.
 It searches the destination on `meta.source` to confirm each record it

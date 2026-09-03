@@ -39,8 +39,7 @@ infrastructure <strong>you bring</strong>:</p>
     account; registered and governed through the model registry's
     <span class="mono">ambient</span> slot.</li>
   <li><strong>An EMR connection</strong> — a backend app registered with your
-    vendor (Epic, Oracle Health, athenahealth, eClinicalWorks, MEDITECH,
-    NextGen).</li>
+    vendor ({{ vendor_names }}).</li>
 </ul>
 
 <h2>2. Bring your own infrastructure — the matrix</h2>
@@ -218,9 +217,9 @@ details and retention settings, and writes <span class="mono">.env</span>
 <span class="mono">terraform output env_fragment</span> are preserved, not
 discarded. If your source EMR is not Epic, set
 <span class="mono">PHI_AI_EMR_VENDOR</span> to one of
-<span class="mono">epic · cerner · athenahealth · eclinicalworks · meditech ·
-nextgen</span> — it selects the vendor capability profile and is validated at
-startup, so a typo refuses to start next to its cause.</p>
+<span class="mono">{{ vendor_keys }}</span> — it selects the vendor
+capability profile and is validated at startup, so a typo refuses to start
+next to its cause.</p>
 
 <h2>8. Step 4 — register with your EMR</h2>
 <ol>
@@ -234,12 +233,16 @@ startup, so a typo refuses to start next to its cause.</p>
     for bulk export. Each health system must mark the app ready for production
     and sign Epic's API subscription agreement; write APIs are enabled
     per-resource <em>and per-flavor</em>, so enumerate each one.</li>
-  <li><strong>Oracle Health / eClinicalWorks / MEDITECH / NextGen</strong>:
-    same keypair model through their own portals; Oracle requires each
-    resource scope granted explicitly (verify conformance per-resource).
-    NextGen has no bulk export — population ingestion falls back to
-    per-patient reads, and the platform's managers refuse bulk operations
-    against it by design.</li>
+  <li><strong>Every other SMART Backend Services vendor</strong>: the same
+    keypair model through that vendor's own portal, with the key family its
+    profile's <span class="mono">assertion_algorithm</span> names (RSA for
+    RS384, EC P-384 for ES384 — <span class="mono">scripts/generate_keypair.sh
+    --alg</span>), and explicit system scopes in the token request wherever
+    the profile records them as required. Each vendor's chapter in
+    <span class="mono">docs/EMR_CONNECTORS.md</span> ends with a "Setting it
+    up" walk-through from that vendor's own documentation. A vendor whose
+    profile records no bulk export (NextGen today) is refused by the bulk
+    managers by design.</li>
   <li><strong>athenahealth</strong>: OAuth2 client credentials — the one
     vendor that issues a client secret; store it in
     <span class="mono">.env</span> only.</li>

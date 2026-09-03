@@ -4,6 +4,11 @@
 #
 #   ./scripts/generate_epic_keypair.sh
 #
+# RSA (RS384) only, with Epic's file names. For any profile whose
+# assertion_algorithm is not RS384 (core/fhir/emr_profiles.py records ES384
+# where a vendor documents only that), use scripts/generate_keypair.sh
+# --alg <algorithm>, which generates the family the algorithm signs with.
+#
 # Epic backend services does not use a client secret. Instead you generate
 # a keypair, register the PUBLIC key with Epic on open.epic.com under your
 # client ID, and keep the PRIVATE key yourself - it signs the JWT client

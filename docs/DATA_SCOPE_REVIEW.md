@@ -57,8 +57,8 @@ review it calls for is an organizational judgement about whether a given
 deployment's compliance posture requires each type - not something the
 codebase decides. Their presence in `emr_profiles.py` reflects that
 decision having been made for this deployment; it is not a claim that
-every deployment needs all six. Second, and more concretely: **none of
-the six has been confirmed against a real Epic instance's
+every deployment needs every one of them. Second, and more concretely:
+**none of them has been confirmed against a real Epic instance's
 `CapabilityStatement` or registered as an Incoming API on a real Epic
 app.** They are exercised against the mock server only. Until that
 registration happens, a live instance will return 403 for each - which

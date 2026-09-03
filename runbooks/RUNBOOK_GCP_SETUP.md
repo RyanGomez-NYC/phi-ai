@@ -200,8 +200,8 @@ Identical across all three clouds - see `docs/EMR_CONNECTORS.md` and
 `RUNBOOK_AWS_SETUP.md`'s own account of this step if you haven't done it
 before. Nothing about Epic's SMART Backend Services registration or the
 RS384 JWT client-assertion flow changes based on which cloud stores
-the resulting data. (Ingesting from one of the other five
-profiled vendors instead? Register per that vendor's chapter in
+the resulting data. (Ingesting from any other vendor profiled in
+`core/fhir/emr_profiles.py` instead? Register per that vendor's chapter in
 `docs/EMR_CONNECTORS.md` and set `PHI_AI_EMR_VENDOR` in `.env` -
 also cloud-independent.)
 

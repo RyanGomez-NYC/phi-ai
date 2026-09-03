@@ -242,17 +242,22 @@ class Settings:
     psychotherapy_kms_key_id: Optional[str] = None
 
     # Which EMR vendor the FHIR connection below points at - a key into
-    # core/fhir/emr_profiles.PROFILES ("epic", "cerner", "athenahealth",
-    # "eclinicalworks", "meditech", "nextgen"). Selects the vendor's
-    # capability profile (auth flow, supported resources, bulk export,
-    # paging); validated at load time so a typo fails at startup, next to
-    # its cause, rather than as a confusing auth error mid-run.
+    # core/fhir/emr_profiles.PROFILES. That dict is the list of valid
+    # values and is deliberately not repeated here: from_env() validates
+    # against it and names its keys in the error, so a typo fails at
+    # startup, next to its cause, rather than as a confusing auth error
+    # mid-run. Selects the vendor's capability profile (auth flow,
+    # assertion algorithm, supported resources, bulk export, paging).
     emr_vendor: str = "epic"
 
     # Source EMR FHIR connection - see docs/EMR_CONNECTORS.md for the
     # per-vendor registration and auth details. For SMART Backend
-    # Services vendors this is the RS384 JWT client-assertion flow, not a
-    # client secret.
+    # Services vendors this is the signed-JWT client-assertion flow, not
+    # a client secret. The signing algorithm - and so the family of key
+    # fhir_private_key_pem must hold - is the vendor profile's
+    # assertion_algorithm (RS384 needs an RSA key, ES384 an EC key on
+    # P-384; RFC 7518 §3.3/§3.4); from_env() refuses a key of the wrong
+    # family at startup.
     fhir_base_url: str = ""
     fhir_token_url: str = ""
     fhir_client_id: str = ""
@@ -592,6 +597,31 @@ class Settings:
                 "does not accept a signed JWT assertion - see its profile notes in "
                 "core/fhir/emr_profiles.py and docs/EMR_CONNECTORS.md."
             )
+
+        # Same startup-not-mid-run reasoning: a key that cannot sign the
+        # vendor's assertion algorithm - an RSA key where the profile says
+        # ES384, an EC key where it says RS384, an encrypted PEM, or no
+        # parseable key at all - is refused here, naming the vendor and
+        # the variable, rather than by PyJWT at the first token request.
+        # Only for vendors that sign an assertion at all, mirroring the
+        # dispatch in FHIRIngestionClient.authenticate_from_settings():
+        # a client-secret vendor never uses the key, so its family is
+        # irrelevant there. Lazy import for the same reason PROFILES is.
+        profile = PROFILES[emr_vendor]
+        if profile.auth_flow != "oauth2_client_credentials":
+            from core.fhir.client import ClientAssertionKeyError, check_private_key_signs
+
+            try:
+                check_private_key_signs(profile.assertion_algorithm, private_key_pem)
+            except ClientAssertionKeyError as exc:
+                raise ConfigError(
+                    f"{ENV_PREFIX}EMR_VENDOR={emr_vendor!r} ({profile.name}) signs its client "
+                    f"assertion with {profile.assertion_algorithm}, but "
+                    f"{ENV_PREFIX}FHIR_PRIVATE_KEY_PATH ({key_path!r}) cannot: {exc}. Mount a "
+                    "key of the family that algorithm signs with. The algorithm is recorded "
+                    "per vendor in core/fhir/emr_profiles.py from that vendor's own "
+                    "documentation."
+                ) from exc
 
         return cls(
             cloud_provider=provider,

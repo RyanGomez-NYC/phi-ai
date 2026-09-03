@@ -28,6 +28,15 @@ use core/fhir/bulk_export.py instead. It produces NDJSON in the standard
 FHIR Bulk Data shape, needs no destination credentials, and no
 identity mapping, because it is not writing into anyone's chart.
 
+The destination token request follows the DESTINATION's profile:
+its auth_flow (assertion or secret), its assertion_algorithm (the key in
+PHI_AI_DELIVERY_PRIVATE_KEY_PATH must be of that family), its kid
+(PHI_AI_DELIVERY_JWT_KID, when the registration pinned one) and, where
+the profile records explicit scopes as mandatory, one
+system/{Type}.write scope per writable resource type - see
+delivery_scope(). A secret set for a vendor whose profile takes none is
+refused, never silently used.
+
 EVERY VARIABLE HERE IS READ THROUGH env_var(). PHI_AI_SOURCE_EMR_URLS is
 the one that matters most: it extends the list EMRWriter refuses to write
 into (assert_not_source_system()). A read that misses it does not fail -
@@ -74,15 +83,41 @@ def _build(args):
     return settings, reader, audit, profile_for(args.vendor)
 
 
+def delivery_scope(profile) -> Optional[str]:
+    """The scope string the destination token request carries, derived
+    from the DESTINATION profile the way authenticate_from_settings()
+    derives the ingestion one: where the profile records explicit scopes
+    as mandatory, one system/{Type}.write per writable resource type
+    (SMART v1 grammar, the same family as the .read scopes the ingestion
+    side sends); otherwise no scope parameter at all. A profile that
+    requires scopes but is writable for nothing gets no scope and the
+    writer refuses every type on the CapabilityStatement anyway.
+    """
+    if profile.requires_token_scopes and profile.writable_resources:
+        return " ".join(f"system/{rtype}.write" for rtype in profile.writable_resources)
+    return None
+
+
 def _access_token(args, profile) -> str:
-    """Obtain a token for the destination.
+    """Obtain a token for the DESTINATION, authenticating the way the
+    destination's own profile documents: the client is built on that
+    profile (so the assertion is signed with its assertion_algorithm and
+    the key is checked against that family first), the grant is the
+    profile's auth_flow, and a client secret is refused loudly for a
+    vendor whose profile does not take one - mirroring
+    authenticate_from_settings() and Settings.from_env() on the ingestion
+    side, so a stale PHI_AI_DELIVERY_CLIENT_SECRET in the environment
+    can never silently swap a JWT vendor onto the secret path.
 
     Reads the secret from the environment, never an argument: a client
     secret on a command line lands in shell history and in every process
     listing on the host.
     """
-    from core.fhir.client import FHIRIngestionClient
-    from core.fhir.emr_profiles import EPIC
+    from core.fhir.client import (
+        ClientAssertionKeyError,
+        FHIRIngestionClient,
+        check_private_key_signs,
+    )
 
     token = env_var("DELIVERY_ACCESS_TOKEN")
     if token:
@@ -94,25 +129,46 @@ def _access_token(args, profile) -> str:
         raise SystemExit(
             "No destination credentials. Set PHI_AI_DELIVERY_ACCESS_TOKEN, or "
             "PHI_AI_DELIVERY_CLIENT_ID + PHI_AI_DELIVERY_TOKEN_URL with either "
-            "PHI_AI_DELIVERY_CLIENT_SECRET (athenahealth) or "
+            "PHI_AI_DELIVERY_CLIENT_SECRET (a vendor whose profile records "
+            "auth_flow=oauth2_client_credentials) or "
             "PHI_AI_DELIVERY_PRIVATE_KEY_PATH (SMART backend services)."
         )
 
     client = FHIRIngestionClient(
-        base_url=args.destination, profile=EPIC, storage=None, encryptor=None,
+        base_url=args.destination, profile=profile, storage=None, encryptor=None,
         audit=None, retention_years=0,
     )
+    scope = delivery_scope(profile)
     secret = env_var("DELIVERY_CLIENT_SECRET")
-    if profile.auth_flow == "oauth2_client_credentials" or secret:
+    if profile.auth_flow == "oauth2_client_credentials":
         if not secret:
-            raise SystemExit("PHI_AI_DELIVERY_CLIENT_SECRET is required for this vendor")
-        client.authenticate_client_secret(client_id, secret, token_url)
-    else:
-        key_path = env_var("DELIVERY_PRIVATE_KEY_PATH")
-        if not key_path:
-            raise SystemExit("PHI_AI_DELIVERY_PRIVATE_KEY_PATH is required for this vendor")
-        with open(key_path, "rb") as handle:
-            client.authenticate(client_id, handle.read(), token_url)
+            raise SystemExit(
+                f"{profile.name} authenticates with a client secret; set "
+                "PHI_AI_DELIVERY_CLIENT_SECRET"
+            )
+        client.authenticate_client_secret(client_id, secret, token_url, scope=scope)
+        return client.access_token
+
+    if secret:
+        raise SystemExit(
+            f"{profile.name} does not accept a client secret (its profile records "
+            f"auth_flow={profile.auth_flow!r}); unset PHI_AI_DELIVERY_CLIENT_SECRET rather "
+            "than let it override the signed-assertion grant this vendor documents"
+        )
+    key_path = env_var("DELIVERY_PRIVATE_KEY_PATH")
+    if not key_path:
+        raise SystemExit("PHI_AI_DELIVERY_PRIVATE_KEY_PATH is required for this vendor")
+    with open(key_path, "rb") as handle:
+        private_key_pem = handle.read()
+    try:
+        check_private_key_signs(profile.assertion_algorithm, private_key_pem)
+    except ClientAssertionKeyError as exc:
+        raise SystemExit(
+            f"{profile.name} signs its client assertion with {profile.assertion_algorithm}, "
+            f"but PHI_AI_DELIVERY_PRIVATE_KEY_PATH ({key_path!r}) cannot: {exc}"
+        ) from exc
+    client.authenticate(client_id, private_key_pem, token_url,
+                        jwt_kid=env_var("DELIVERY_JWT_KID") or None, scope=scope)
     return client.access_token
 
 
@@ -124,8 +180,12 @@ def main(argv: Optional[list] = None) -> int:
         description="Deliver stored records into a destination EMR.",
     )
     parser.add_argument("--destination", required=True, help="destination FHIR base URL")
-    parser.add_argument("--vendor", required=True,
-                        help="epic | cerner | athenahealth | eclinicalworks | nextgen")
+    from core.fhir.emr_profiles import PROFILES
+
+    parser.add_argument("--vendor", required=True, choices=sorted(PROFILES),
+                        metavar="VENDOR",
+                        help="the destination's profile key in core/fhir/emr_profiles.py "
+                             "PROFILES: " + " | ".join(sorted(PROFILES)))
     parser.add_argument("--identity-map", required=True,
                         help="CSV mapping source patient ids to destination patient ids")
     parser.add_argument("--purpose-of-use", required=True,

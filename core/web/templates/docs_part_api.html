@@ -127,8 +127,9 @@ mutation is a POST carrying the session's CSRF token; GETs never mutate.</p>
 (202 + <span class="mono">X-Progress</span> → 200 + manifest), NDJSON
 download, then encrypt-store-index with reference normalization and
 sensitivity classification at the door. Only a clean run advances the
-watermark. Vendor seams enforced: Epic's one-run-per-24h group export with no
-incremental mode; NextGen's absence of bulk entirely.
+watermark. Vendor seams enforced per profile: Epic's one-run-per-24h group
+export with no incremental mode; Group-only export where a vendor documents
+only that; the absence of bulk entirely where a profile records none.
 <strong>Streaming intake</strong>: three inbound feeds — ADT
 (admissions/discharges/transfers), ORU (results as they finalize) and X12 835
 (payment remittance) — each partitioned with acknowledged checkpoints. The
@@ -173,7 +174,12 @@ secret — the one profiled vendor whose documented flow is a secret.
 <strong>MEDITECH / NextGen:</strong> SMART Backend Services recorded as the
 ONC g(10) certification baseline, flagged for portal confirmation; NextGen
 exposes no documented bulk export and no bulk write surface, and the
-platform refuses accordingly rather than degrading.</p>
+platform refuses accordingly rather than degrading.
+<strong>Every other profiled vendor</strong> ({{ vendor_names }}): the grant,
+signing algorithm, scope rule, bulk scope and write surface its own
+documentation records, held in its profile and listed on
+<a href="/docs/emr">EMR connections</a>; nothing is carried over from
+another vendor.</p>
 
 <h2>8. Error model</h2>
 </div>

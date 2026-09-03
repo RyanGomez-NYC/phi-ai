@@ -1,5 +1,117 @@
 # Changelog
 
+## 1.1.0 — 2026-09-03
+
+### AI-Native Data Orchestration Designed for Compliance
+
+Orchestration in 1.1 exists to hydrate the PHI AI store, and the store is
+what the AI is allowed to read. Data moves out of each EMR, through the
+categories and permissions that govern it, into one place — and retrieval
+answers from that place or refuses. The compliance boundary and the
+retrieval boundary are the same boundary.
+
+- **Nine more EMR connectors** — ModMed, Altera Digital Health, Greenway
+  Health, Veradigm, Practice Fusion, TruBridge, MEDHOST, Netsmart and
+  Nextech join the six already shipped. Every profile is written from
+  that vendor's own documentation; where a vendor documents nothing on a
+  point, the profile says so and defaults conservatively. Nothing is
+  carried over from Epic.
+- **Per-vendor assertion signing** — `EMRProfile.assertion_algorithm`
+  (RS384 by default, ES384 where the vendor documents only that).
+- **Store-bound retrieval** — `GrantScope.permitted_sources` and
+  `require_provenance` are checked before the subject, so a chunk with no
+  recorded origin cannot be retrieved at all. Every serialized resource
+  carries a `Provenance` record naming the system it came from.
+- **Connector extension guide** — `docs/EXTENDING_CONNECTORS.md`.
+- **Removed from the public repository**: references to the demonstration
+  tree. The public repository is the software; the demonstration is not
+  part of it and is no longer named by it.
+
+## 1.1.0-rc1 — 2026-09-02
+
+### Nine more EMRs, one client, no new special cases
+
+```text
+ YOUR EMR ──▶ CLASSIFY ──▶ ENCRYPT ──▶ SYSTEM OF RECORD ──▶ GOVERNED AI
+  FHIR R4     sensitive     per-object   your cloud, your     bounded by
+  15 vendors  categories    data keys,   keys — storage       the asker's
+              fail closed   your KMS     always wins          own role
+```
+
+- **Nine new EMR connectors** — ModMed, Altera Digital Health, Greenway
+  Health, Veradigm, Practice Fusion, TruBridge, MEDHOST, Netsmart and
+  Nextech join Epic, Oracle Health (Cerner), athenahealth,
+  eClinicalWorks, MEDITECH and NextGen Healthcare: every entry in
+  `core/fhir/emr_profiles.py` `PROFILES` is written from that vendor's
+  own documentation — auth, keys, scopes, consent, bulk scope, writes,
+  registration, limits — with a chapter in `docs/EMR_CONNECTORS.md`
+  that separates what the vendor documents, what its own public
+  endpoints returned, and what must be confirmed on the instance. Where
+  a vendor documents nothing on a point the chapter says "not
+  documented by the vendor" and the profile defaults conservatively;
+  nothing is carried over from Epic.
+- **Per-vendor assertion signing algorithm** —
+  `EMRProfile.assertion_algorithm` (RS384 by default; ES384 where the
+  vendor documents only that - the profile says which). The ingestion
+  client signs with the profile's algorithm rather than a hard-coded
+  RS384, so an EC P-384 key works where the vendor requires one;
+  `Settings.from_env()` refuses a key of the wrong family at startup.
+  The delivery CLI (`python -m core.fhir.delivery`) now builds its
+  destination token request on the DESTINATION's profile too - its
+  algorithm, its grant, its `kid`, and one `system/{Type}.write` scope
+  per writable type where the profile requires explicit scopes - and
+  refuses a `PHI_AI_DELIVERY_CLIENT_SECRET` set for a vendor whose
+  profile takes none, instead of silently using it.
+- **Emulators enforce the algorithm, and verify the assertion** —
+  `EmulatorVendor.assertion_algorithms` lists what each emulator's token
+  endpoint accepts; an assertion signed with anything else is refused as
+  `invalid_client`, so a client that signs everything RS384 fails
+  against the ModMed and Greenway emulators, not against a practice.
+  Every assertion's audience, expiry, required claims and `iss == sub`
+  are verified; its signature is verified when the client's public JWK
+  Set is registered (`build_server(client_jwks=...)`, `python -m
+  emulators --client-jwks PATH` - the integration tests and the e2e
+  matrix both register one), and without one the emulator logs a
+  WARNING that signatures are unverified. A client secret is checked
+  against registered credentials the same way (`--client-secret
+  ID:SECRET`). Wildcard-scope refusal is now its own per-vendor flag
+  (`refuses_wildcard_scope`), true only for Oracle Health, which
+  documents it. Malformed input (a non-integer Content-Length, a
+  non-UTF-8 body, a non-string `id`, a negative `_offset`) is a 400
+  with a body, never a dropped connection. Both-grant token endpoints
+  (TruBridge, Netsmart, alongside Oracle Health), scope-required token
+  requests and read-only write refusals are modelled the same way, each
+  from the vendor's own documentation.
+- **Ports 9107–9115** — one emulator per new vendor in
+  `emulators/vendors.py` `DEFAULT_PORTS`; the earlier vendors keep the
+  ports they had.
+- **The end-to-end matrix** — `tests/test_e2e_matrix.py` and
+  `scripts/e2e_matrix.py` drive every emulator as a source
+  (authenticate with its real grant and algorithm, read its
+  CapabilityStatement, ingest by paged search and by `$export` where
+  supported, with the refusal asserted where not) and every vendor as a
+  delivery target through `core/fhir/delivery/writer.py` (success where
+  the CapabilityStatement advertises `create`, a structured refusal
+  where it does not), across the full source-by-target matrix on
+  synthetic, non-PHI data. Before each source's real grant the matrix
+  sends that vendor's documented refusals (wrong algorithm, unsigned,
+  unregistered key, missing scope, wrong grant) and asserts each 400,
+  and the proof records what was refused per source. The proof table
+  lands in `private-notes/e2e-proof.md` beside the checkout, never in
+  the repository. The matrix delivers through `writer.py` with tokens
+  it mints itself; the delivery CLI's own token request is covered by
+  `tests/test_delivery.py`, parametrised over every profile.
+- **Setup runbooks** — every vendor chapter ends with "Setting it up":
+  register with the vendor, generate the key pair and JWKS (RSA or EC
+  P-384 as the vendor documents), configure the environment, pre-flight
+  the instance, first ingest, first delivery (and why it is refused on a
+  read-only surface), local rehearsal against the emulator, and known
+  limits with where to confirm them.
+- **Enumerations derived, not maintained** — the README, ARCHITECTURE,
+  the runbooks and the installer text now point at `PROFILES` and
+  `DEFAULT_PORTS` instead of repeating a vendor count that had already
+  drifted in places.
+
 ## 1.0.0-rc1 — 2026-08-29
 
 ```text
