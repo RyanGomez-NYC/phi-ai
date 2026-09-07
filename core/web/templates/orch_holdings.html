@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}What each system holds{% endblock %}
+{% block body %}
+<h1>What each system holds</h1>
+<p class="lede">No system holds the whole record. Each of these holds a different part of it —
+the PHI AI store holds what was read into it, and each target holds what this deployment's
+runs actually wrote there. What a source holds beyond what was read from it is that source's
+to say: a live count needs a connection, and this screen says so rather than inventing one.</p>
+
+<h3>The PHI AI store</h3>
+<div class="oc-inv-tiles">
+  <div class="card stat"><div class="n">{{ '{:,}'.format(store.charts) }}</div><div class="k">charts</div></div>
+  <div class="card stat"><div class="n">{{ '{:,}'.format(store.total) }}</div><div class="k">records</div></div>
+</div>
+{% if store.by_type %}
+<table class="tablewrap">
+  <thead><tr><th>Resource type</th><th class="num">Records</th></tr></thead>
+  <tbody>{% for rt, n in store.by_type.items() %}<tr><td>{{ rt }}</td><td class="num">{{ '{:,}'.format(n) }}</td></tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="hint">The store is empty, or the reader cannot count.</p>{% endif %}
+
+{% if store.per_chart %}
+<h3 style="margin-top:22px">The charts in the set</h3>
+<table class="tablewrap">
+  <thead><tr><th>Chart</th><th>Reference</th><th>Held here, by type</th></tr></thead>
+  <tbody>{% for c in store.per_chart %}
+  <tr><td>{{ c.name }}</td><td class="mono">{{ c.ref }}</td>
+    <td>{% for rt, n in c.by_type.items() %}<span class="oc-chip">{{ n }} × {{ rt }}</span> {% else %}<span class="v-mute">nothing</span>{% endfor %}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% endif %}
+
+<h3 style="margin-top:22px">Each target, as this deployment has written to it</h3>
+{% set targets = sel.targets %}
+{% if targets %}
+<table class="tablewrap">
+  <thead><tr><th>Target</th><th>Received from runs here</th></tr></thead>
+  <tbody>{% for k in targets %}{% set d = delivered.get(k) %}
+  <tr><td>{{ systems[k].name if k in systems else k }}</td>
+    <td>{% if d %}{% for rt, n in d.items() %}<span class="oc-chip good">{{ '{:,}'.format(n) }} × {{ rt }}</span> {% endfor %}
+        {% else %}<span class="hint">nothing written from here yet — runs that were decided and not written contribute nothing</span>{% endif %}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="hint">No target is wired.</p>{% endif %}
+
+<h3 style="margin-top:22px">Each source</h3>
+{% if sel.sources %}
+<table class="tablewrap">
+  <thead><tr><th>Source</th><th>Holds</th></tr></thead>
+  <tbody>{% for k in sel.sources %}
+  <tr><td>{{ systems[k].name if k in systems else k }}</td>
+    <td class="hint">not connected for a live count — what was read from it is in the store above</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="hint">No source is wired.</p>{% endif %}
+{% endblock %}

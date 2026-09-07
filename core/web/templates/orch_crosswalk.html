@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Practitioner crosswalk{% endblock %}
+{% block body %}
+<h1>Practitioner crosswalk</h1>
+<p class="lede">Who the people who work here are in each other system. A delivery is authored by a
+person, and the receiving system records the author by <em>its</em> Practitioner id, not ours.
+Set by an administrator; never inferred from a name.</p>
+{% if notice %}<div class="flash">{{ notice }}</div>{% endif %}
+
+{% if can_write %}
+<form method="post" action="/orchestration/crosswalk" class="oc-save">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="set">
+  <div class="field"><label for="xw-user">User</label>
+    <input type="text" id="xw-user" name="user" maxlength="40" list="xw-users" required>
+    <datalist id="xw-users">{% for u in users %}<option value="{{ u }}">{% endfor %}</datalist></div>
+  <div class="field"><label for="xw-system">System</label>
+    <select id="xw-system" name="system">{% for k, s in systems.items() %}<option value="{{ k }}" {{ 'selected' if k in sel.targets }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="xw-id">Their Practitioner id</label>
+    <input type="text" id="xw-id" name="practitioner_id" maxlength="64" required></div>
+  <div class="field"><label for="xw-note">Note</label>
+    <input type="text" id="xw-note" name="note" maxlength="200"></div>
+  <button type="submit" class="oc-save-btn">Map</button>
+</form>
+{% else %}
+<p class="hint">Mapping a practitioner needs <span class="mono">admin:config</span>.</p>
+{% endif %}
+
+<h3 style="margin-top:22px">On file</h3>
+{% if rows %}
+<table class="tablewrap">
+  <thead><tr><th>User</th><th>System</th><th>Their Practitioner id</th><th>Set</th><th>Note</th><th></th></tr></thead>
+  <tbody>{% for r in rows %}
+  <tr>
+    <td class="mono">{{ r.user }}</td>
+    <td>{{ systems[r.system].name if r.system in systems else r.system }}</td>
+    <td class="mono">{{ r.practitioner_id }}</td>
+    <td class="hint">{{ r.by }} · {{ r.at }}</td>
+    <td class="hint">{{ r.note }}</td>
+    <td>{% if can_write %}<form method="post" action="/orchestration/crosswalk" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="user" value="{{ r.user }}"><input type="hidden" name="system" value="{{ r.system }}">
+      <button type="submit" name="action" value="clear" class="btn-sm">Clear</button></form>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}
+<p class="hint">Nobody is mapped yet. A delivery from this deployment goes out unattributed at
+that system until its author is.</p>
+{% endif %}
+{% endblock %}

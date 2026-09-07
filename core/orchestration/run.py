@@ -121,7 +121,8 @@ def execute(*, run_id: int, sel: Selection, scope: Scope, charts: list[dict],
             systems: Mapping[str, System], consents: ConsentStore,
             resources_for: Callable[[str], Iterable[Mapping]], mover: Mover,
             population_stored: int = 0, started_at: str, finished_at: str,
-            by: str = "") -> Run:
+            by: str = "",
+            links=None) -> Run:
     """Perform the exchange: one read step per source, then one deliver step
     per target per chart (or per target for a population), each decided by
     decide_delivery() and then handed to the mover with only the records the
@@ -183,7 +184,10 @@ def execute(*, run_id: int, sel: Selection, scope: Scope, charts: list[dict],
                 cat = _heightened_category(r)
                 if cat:
                     held[cat] = held.get(cat, 0) + 1
+            linked = (None if chart is None or links is None
+                      else links.verified_for(chart["ref"], target.key) is not None)
             d = decide_delivery(target, patient=chart["ref"] if chart else None, held=held,
+                                link_verified=linked,
                                 purpose=sel.purpose, consents=consents, scope=scope,
                                 who=chart["name"] if chart else "population")
             seq += 1

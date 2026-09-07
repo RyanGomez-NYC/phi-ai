@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Connected systems{% endblock %}
+{% block body %}
+<h1>Connected systems</h1>
+<p class="lede">Every system this platform can talk to, and what each will actually do. One row
+per profiled vendor, every flag read from that vendor's own documentation — the citation is its
+chapter in <span class="mono">docs/EMR_CONNECTORS.md</span> — and never typed here. Which of them
+this deployment is configured to read from and deliver to is set on
+<a href="/integration/emrconfig">Source &amp; target EMRs</a>{% if not can_config %} (needs
+<span class="mono">admin:config</span>){% endif %}.</p>
+
+<table class="tablewrap">
+  <thead><tr><th>System</th><th>Auth</th><th>Bulk read</th><th>Writes</th><th>In this deployment</th></tr></thead>
+  <tbody>{% for r in rows %}{% set s = r.system %}
+  <tr>
+    <td><strong>{{ s.name }}</strong><br><span class="mono hint">{{ s.key }}</span></td>
+    <td style="font-size:12px">{{ s.auth }}</td>
+    <td style="font-size:12px"><span class="oc-chip {{ 'good' if s.supports_bulk_export else 'warn' }}">{{ 'bulk export' if s.supports_bulk_export else 'no $export' }}</span><br>{{ s.bulk }}</td>
+    <td style="font-size:12px"><span class="oc-chip {{ 'good' if s.writable else 'warn' }}">{{ 'creatable: ' ~ s.creatable|join(', ') if s.writable else 'read-only' }}</span>
+      {% if s.conditional_create %}<span class="oc-chip">conditional create</span>{% endif %}<br>{{ r.writes }}</td>
+    <td style="font-size:12px">{% if r.roles %}{% for x in r.roles %}<div>{{ x }}</div>{% endfor %}{% else %}<span class="v-mute">profiled, not configured</span>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% endblock %}

@@ -62,3 +62,29 @@ CREATE TABLE IF NOT EXISTS platform_orch_runs (
     started_at  TEXT NOT NULL DEFAULT '',
     value       TEXT NOT NULL DEFAULT ''   -- JSON: the whole run, ledger included
 );
+
+CREATE TABLE IF NOT EXISTS platform_links (
+    id           INTEGER PRIMARY KEY,
+    patient      TEXT NOT NULL,          -- 'Patient/<id>' in the PHI AI store
+    system       TEXT NOT NULL,          -- profile key of the other system
+    system_id    TEXT NOT NULL,          -- that system's own Patient id
+    status       TEXT NOT NULL DEFAULT 'candidate',
+    entered_by   TEXT NOT NULL DEFAULT '',
+    entered_at   TEXT NOT NULL DEFAULT '',
+    verified_by  TEXT NOT NULL DEFAULT '',
+    verified_at  TEXT NOT NULL DEFAULT '',
+    note         TEXT NOT NULL DEFAULT '',
+    revoked      BOOLEAN NOT NULL DEFAULT FALSE,
+    revoked_by   TEXT NOT NULL DEFAULT '',
+    revoked_at   TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS platform_crosswalk (
+    username        TEXT NOT NULL,
+    system          TEXT NOT NULL,
+    practitioner_id TEXT NOT NULL,
+    note            TEXT NOT NULL DEFAULT '',
+    set_by          TEXT NOT NULL DEFAULT '',
+    set_at          TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (username, system)
+);

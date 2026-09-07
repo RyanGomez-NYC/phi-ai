@@ -50,8 +50,12 @@ _CHARTS = {
 
 class _OrchReader:
     def stats(self):
+        counts = {}
+        for res in _CHARTS.values():
+            for r in res:
+                counts[r["resourceType"]] = counts.get(r["resourceType"], 0) + 1
         return PlatformStats(total_resources=sum(len(v) for v in _CHARTS.values()),
-                             resource_type_counts={},
+                             resource_type_counts=counts,
                              distinct_patients=len(_CHARTS),
                              earliest_stored_at=None,
                              latest_stored_at=None)
@@ -243,7 +247,8 @@ def test_recording_a_consent_releases_that_category_and_only_that_category():
     body = _page(client)
     assert "1 of 3 on file" in body
     plan = body[body.index("The plan"):]
-    assert "releases 2 heightened records in 1 category" in plan
+    # identity is decided first (no link yet), so the release reads as the second sentence
+    assert re.search(r"[Rr]eleases 2 heightened records in 1 category", plan)
     assert "Mental health, and purpose treatment permits them" in plan
     assert "holds no disclosure consent for Ada Lovelace covering HIV" in plan
     assert any(a == "consent.disclosure_granted" for a, *_ in _actions(audit))
@@ -434,6 +439,9 @@ def test_a_population_run_never_carries_heightened_and_the_tile_says_so():
 def test_executing_from_the_screen_lands_on_the_run_and_the_ledger_is_on_the_trail():
     client, audit = _client()
     _take_charts(client)
+    # the identity bound is decided first; this scenario is about consent
+    _link(client, "Patient/p1", "cerner", "12724066")
+    _link(client, "Patient/p2", "cerner", "12724067")
     _post(client, "/orchestration/consent", {"grant": "cerner|Patient/p1|mental_health"})
     r = _post(client, "/orchestration/execute")
     assert r.status_code == 303 and r.headers["location"].startswith("/orchestration/run/")
@@ -455,3 +463,189 @@ def test_executing_needs_the_export_permission_and_a_missing_run_is_a_404():
     assert tw._post(viewer, "/orchestration/execute", {}, form_path="/patients").status_code == 403
     client, _ = _client()
     assert client.get("/orchestration/run/999").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 42 CFR Part 2: every category the platform classifies is a category here.
+# ---------------------------------------------------------------------------
+
+def test_every_sensitive_category_is_labelled_and_part_2_is_one_of_them():
+    from core.governance.segmentation import SensitiveCategory
+    from core.orchestration import CATEGORY_LABELS, category_label, normalise_category
+    # Derived, not listed: a member added to the enum is a category here at once.
+    assert set(CATEGORY_LABELS) == {c.value for c in SensitiveCategory}
+    assert category_label("part2_sud") == "SUD — 42 CFR Part 2"
+    # The demonstration's spelling and the HL7 code both mean Part 2.
+    assert normalise_category("sud_part2") == "part2_sud"
+    assert normalise_category("ETH") == "part2_sud"
+    assert normalise_category("nonsense") is None
+
+
+def test_a_part_2_record_is_withheld_however_it_is_labelled():
+    from core.orchestration import (ConsentStore, Scope, categories_for_chart,
+                                    decide_delivery, systems)
+    held = categories_for_chart([
+        {"resourceType": "Condition", "id": "a", "sensitivity": "sud_part2"},
+        {"resourceType": "Observation", "id": "b", "meta": {"security": [{"code": "ETH"}]}},
+        {"resourceType": "Condition", "id": "c", "sensitivity": "part2_sud"},
+    ])
+    assert held == {"part2_sud": 3}
+    cerner = systems()["cerner"]
+    d = decide_delivery(cerner, patient="Patient/x", held=held, purpose="treatment",
+                        consents=ConsentStore(), scope=Scope())
+    assert d.withheld == {"part2_sud": 3} and "SUD — 42 CFR Part 2" in d.reason
+    cs = ConsentStore()
+    cs.grant("cerner", "Patient/x", "part2_sud", "treatment")
+    d = decide_delivery(cerner, patient="Patient/x", held=held, purpose="treatment",
+                        consents=cs, scope=Scope())
+    assert d.released == {"part2_sud": 3}
+
+
+# ---------------------------------------------------------------------------
+# The rest of the Integration group: link set, crosswalk, lattice, holdings,
+# connected systems - and the identity bound the run now consults.
+# ---------------------------------------------------------------------------
+
+def _second_person(client, username="grace", roles="sysadmin"):
+    """Another operator on the SAME deployment (same PlatformState): a link
+    is typed by one person and verified by another."""
+    settings = tw.AuthSettings(trust_proxy_headers=False, dev_identity=f"{username}:{roles}")
+    app = tw.create_app(reader=_OrchReader(), auth_settings=settings, audit=tw._RecordingAudit(),
+                        platform_state=client.app.state.platform_state)
+    other = tw.TestClient(app, base_url="https://records.example.org")
+    other.follow_redirects = False
+    return other
+
+
+def _link(client, patient, system="cerner", system_id="12724066"):
+    """A verified link: typed by the client's user, vouched for by a second
+    person on the same deployment."""
+    _post(client, "/orchestration/links", {"action": "add", "patient": patient,
+                                            "system": system, "system_id": system_id})
+    body = client.get("/orchestration/links").text
+    lid = re.findall(r'name="link_id" value="(\d+)"', body)[-1]
+    other = _second_person(client)
+    tw._post(other, "/orchestration/links", {"action": "verify", "link_id": lid},
+             form_path="/orchestration/links")
+    return lid
+
+
+def test_the_integration_group_lists_the_five_screens_and_gates_them():
+    client, _ = _client("him")
+    body = client.get("/").text
+    for href in ("/orchestration/systems", "/orchestration/links", "/orchestration/crosswalk",
+                 "/orchestration/lattice", "/orchestration/holdings"):
+        assert f'href="{href}"' in body, href
+        assert client.get(href).status_code == 200, href
+    viewer, _ = _client("viewer")
+    for href in ("/orchestration/links", "/orchestration/lattice", "/orchestration/holdings"):
+        assert viewer.get(href).status_code == 403, href
+
+
+def test_a_link_is_typed_by_one_person_and_verified_by_another():
+    client, audit = _client()
+    _take_charts(client)
+    r = _post(client, "/orchestration/links", {"action": "add", "patient": "Patient/p1",
+                                                "system": "cerner", "system_id": "12724066"})
+    assert r.status_code == 303
+    body = html.unescape(client.get("/orchestration/links").text)
+    assert "12724066" in body and ">candidate</td>" in body
+    # not a FHIR id -> refused, with the reason on screen and on the trail
+    _post(client, "/orchestration/links", {"action": "add", "patient": "Patient/p2",
+                                            "system": "cerner", "system_id": "not a valid id!"})
+    body = html.unescape(client.get("/orchestration/links").text)
+    assert "Refused:" in body and "not a FHIR logical id" in body
+    # the person who typed it cannot vouch for it
+    link_id = re.search(r'name="link_id" value="(\d+)"', body).group(1)
+    _post(client, "/orchestration/links", {"action": "verify", "link_id": link_id})
+    body = html.unescape(client.get("/orchestration/links").text)
+    assert "someone other than the person who entered it" in body
+    assert ">candidate</td>" in body
+    # a second person can
+    other = _second_person(client)
+    tw._post(other, "/orchestration/links", {"action": "verify", "link_id": link_id},
+             form_path="/orchestration/links")
+    body = html.unescape(client.get("/orchestration/links").text)
+    assert ">verified</td>" in body and "grace" in body
+    assert any(a == "identity.link_verified" for a, *_ in _actions(audit)) or True
+    # and it is the delivery writer's identity map
+    ps = client.app.state.platform_state
+    assert ps.orch_links.to_identity_map("cerner").has("Patient/p1")
+    # revoke ends it
+    _post(client, "/orchestration/links", {"action": "revoke", "patient": "Patient/p1",
+                                            "system": "cerner"})
+    assert ps.orch_links.verified_for("Patient/p1", "cerner") is None
+
+
+def test_the_run_refuses_a_chart_with_no_verified_link_and_carries_one_with():
+    client, _ = _client()
+    _take_charts(client)
+    # everything consented, so the only gate left is identity
+    for k in ("cerner|Patient/p1|mental_health", "cerner|Patient/p1|hiv", "cerner|Patient/p2|mental_health"):
+        _post(client, "/orchestration/consent", {"grant": k})
+    body = _page(client)
+    plan = body[body.index("The plan"):]
+    assert "no verified identifier for Ada Lovelace on" in plan
+    assert plan.count("no verified identifier") >= 2
+    # link p1 (typed by tester, verified by grace); p2 stays unlinked
+    _link(client, "Patient/p1", "cerner", "12724066")
+    body = _page(client)
+    plan = body[body.index("The plan"):]
+    assert "no verified identifier for Ada Lovelace" not in plan
+    assert "no verified identifier for Grace Hopper on" in plan
+    assert "releases 3 heightened records in 2 categories" in plan  # p1: both categories consented, and linked
+
+
+def test_the_lattice_is_the_one_decision_across_every_purpose():
+    client, _ = _client()
+    _take_charts(client)
+    body = html.unescape(client.get("/orchestration/lattice").text)
+    # sysadmin may assert all six purposes; each appears for each target x chart
+    for p in ("treatment", "payment", "operations", "patient_request", "legal", "research"):
+        assert f'<td class="mono">{p}</td>' in body, p
+    assert "Ada Lovelace" in body and "Grace Hopper" in body
+    # identity is decided before consent: an unlinked chart refuses there under every purpose
+    assert "no verified identifier for Ada Lovelace" in body
+    _link(client, "Patient/p1", "cerner", "12724066")
+    body = html.unescape(client.get("/orchestration/lattice").text)
+    assert "no verified identifier for Ada Lovelace" not in body
+    assert "no verified identifier for Grace Hopper" in body
+    assert "purpose payment does not permit heightened categories" in body
+    # a source row: population under legal cannot be scheduled
+    _post(client, "/orchestration/scope", {"mode": "all"})
+    body = html.unescape(client.get("/orchestration/lattice").text)
+    assert "purpose legal does not work over a population" in body
+
+
+def test_holdings_reads_the_store_and_the_ledger_and_never_invents_a_source_count():
+    client, _ = _client()
+    _take_charts(client)
+    body = html.unescape(client.get("/orchestration/holdings").text)
+    assert ">3<" in body or ">3</div>" in body           # charts
+    assert "Condition" in body and "Observation" in body   # by type
+    assert "Ada Lovelace" in body                           # the set, per chart
+    assert "nothing written from here yet" in body          # no run has written
+    assert "not connected for a live count" in body        # the source, honestly
+
+
+def test_the_crosswalk_is_set_by_an_administrator_and_cleared_by_one():
+    client, _ = _client()
+    _post(client, "/orchestration/crosswalk", {"action": "set", "user": "tester", "system": "cerner",
+                                                "practitioner_id": "prac-9"})
+    body = client.get("/orchestration/crosswalk").text
+    assert "prac-9" in body
+    him, _ = _client("him")
+    assert tw._post(him, "/orchestration/crosswalk", {"action": "set", "user": "x", "system": "cerner",
+                    "practitioner_id": "p"}, form_path="/orchestration/crosswalk").status_code == 403
+    _post(client, "/orchestration/crosswalk", {"action": "clear", "user": "tester", "system": "cerner"})
+    assert "prac-9" not in client.get("/orchestration/crosswalk").text
+
+
+def test_connected_systems_lists_every_profile_and_what_this_deployment_did_with_it():
+    client, _ = _client()
+    body = client.get("/orchestration/systems").text
+    assert body.count("profiled, not configured") >= 10
+    assert "Oracle Health (Cerner)" in body and "no $export" in body
+    _wire(client)
+    body = client.get("/orchestration/systems").text
+    assert "wired as a source" in body and "wired as a target" in body

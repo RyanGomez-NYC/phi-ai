@@ -43,7 +43,7 @@ def _plural(n: int, one: str, many: str) -> str:
 
 def decide_delivery(target: System, *, patient: Optional[str], held: Mapping[str, int],
                     purpose: str, consents: ConsentStore, scope: Scope,
-                    who: str = "this chart") -> Decision:
+                    who: str = "this chart", link_verified: Optional[bool] = None) -> Decision:
     """Decide one delivery: this target, this chart (or a population step
     when patient is None), these heightened categories on the chart.
 
@@ -66,6 +66,15 @@ def decide_delivery(target: System, *, patient: Optional[str], held: Mapping[str
     if not purpose:
         return Decision("refuse", "purpose", "no purpose of use is asserted for this run",
                         fix="assert a purpose on the exchange")
+    # The identity bound. A per-chart delivery is decided against that chart's
+    # VERIFIED identifier on the target - an id typed by one person and vouched
+    # for by another. None means the caller did not consult the link set (a
+    # population step, or a screen that has no chart); False is a refusal.
+    # Identity refuses the DELIVERY, but the chart's heightened categories are
+    # still evaluated below: the checklist and the consent matrix stay on
+    # screen, so linking the chart and recording its consents proceed in
+    # parallel rather than one hiding the other.
+    identity_ok = not (patient is not None and link_verified is False)
 
     withheld: dict[str, int] = {}
     released: dict[str, int] = {}
@@ -107,6 +116,12 @@ def decide_delivery(target: System, *, patient: Optional[str], held: Mapping[str
                     + "; ".join(gates))
             reason = line if not reason else f"{reason}. {line[0].upper()}{line[1:]}"
 
+    if not identity_ok:
+        line = (f"no verified identifier for {who} on {target.name}; a per-chart delivery is "
+                "decided against that chart's verified identifier on the target")
+        reason = line if not reason else f"{line}. {reason[0].upper()}{reason[1:]}"
+        return Decision("refuse", "identity", reason, withheld=withheld, released=released,
+                        fix="add the identifier on the Patient link set and have a second person verify it")
     if not reason:
         reason = "allowed on every consulted bound"
     return Decision("allow", "consent" if held else "profile", reason,

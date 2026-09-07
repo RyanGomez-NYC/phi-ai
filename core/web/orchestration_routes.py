@@ -157,9 +157,12 @@ def register(app, page, require, current_identity, record, reader) -> None:
                 rows.append({"target": target, "chart": None, "decision": d})
                 continue
             for ch in charts:
+                # The same identity bound the run consults: a per-chart delivery
+                # is decided against the chart's VERIFIED link at the target.
+                linked = state().orch_links.verified_for(ch["ref"], tk) is not None
                 d = decide_delivery(target, patient=ch["ref"], held=ch["categories"],
                                     purpose=sel.purpose, consents=cons, scope=sc,
-                                    who=ch["name"])
+                                    who=ch["name"], link_verified=linked)
                 rows.append({"target": target, "chart": ch, "decision": d})
         return rows
 
@@ -390,6 +393,7 @@ def register(app, page, require, current_identity, record, reader) -> None:
         run = execute(run_id=run_id, sel=sel, scope=sc, charts=charts, systems=systems(),
                       consents=state().orch_consents, resources_for=chart_resources,
                       mover=mover_for(identity), population_stored=stored,
+                      links=state().orch_links,
                       started_at=started, finished_at=_now(), by=identity.username)
         state().orch_run_add(run.as_dict())
         # Every step on the trail, before the run is reported: a refusal lands

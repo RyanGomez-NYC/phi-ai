@@ -297,6 +297,10 @@ class PlatformState:
         self.orch_scope: dict = {}
         self.orch_exchanges: list[dict] = []
         self.orch_consents = ConsentStore()
+        from core.orchestration.links import LinkStore
+        from core.orchestration.crosswalk import CrosswalkStore
+        self.orch_links = LinkStore()
+        self.orch_crosswalk = CrosswalkStore()
         self._next_exchange_id = 1
         self.orch_runs: list[dict] = []
         self._next_run_id = 1
@@ -582,6 +586,63 @@ class PlatformState:
         with self._lock:
             return [dict(r["value"]) for r in sorted(self.orch_runs, key=lambda r: r["id"], reverse=True)]
 
+
+    # ---- patient links / practitioner crosswalk -------------------------
+
+    def _persist_link(self, r) -> None:
+        self._persist("INSERT INTO platform_links (id, patient, system, system_id, status, "
+                      "entered_by, entered_at, verified_by, verified_at, note, revoked, revoked_by, "
+                      "revoked_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                      "ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, "
+                      "verified_by = EXCLUDED.verified_by, verified_at = EXCLUDED.verified_at, "
+                      "note = EXCLUDED.note, revoked = EXCLUDED.revoked, "
+                      "revoked_by = EXCLUDED.revoked_by, revoked_at = EXCLUDED.revoked_at",
+                      (r.id, r.patient, r.system, r.system_id, r.status, r.entered_by, r.entered_at,
+                       r.verified_by, r.verified_at, r.note, bool(r.revoked), r.revoked_by, r.revoked_at))
+
+    def orch_link_add(self, patient: str, system: str, system_id: str, *, by: str, at: str, note: str = ""):
+        with self._lock:
+            r = self.orch_links.add(patient, system, system_id, by=by, at=at, note=note)
+            self._persist_link(r)
+            return r
+
+    def orch_link_verify(self, link_id: int, *, by: str, at: str, note: str = ""):
+        with self._lock:
+            r = self.orch_links.verify(link_id, by=by, at=at, note=note)
+            self._persist_link(r)
+            return r
+
+    def orch_link_reject(self, link_id: int, *, note: str = ""):
+        with self._lock:
+            r = self.orch_links.reject(link_id, note=note)
+            self._persist_link(r)
+            return r
+
+    def orch_link_revoke(self, patient: str, system: str, *, by: str, at: str, note: str = ""):
+        with self._lock:
+            r = self.orch_links.revoke(patient, system, by=by, at=at, note=note)
+            self._persist_link(r)
+            return r
+
+    def orch_crosswalk_set(self, user: str, system: str, practitioner_id: str, *, by: str, at: str,
+                           note: str = ""):
+        with self._lock:
+            r = self.orch_crosswalk.set(user, system, practitioner_id, by=by, at=at, note=note)
+            self._persist("INSERT INTO platform_crosswalk (username, system, practitioner_id, note, "
+                          "set_by, set_at) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (username, system) "
+                          "DO UPDATE SET practitioner_id = EXCLUDED.practitioner_id, note = EXCLUDED.note, "
+                          "set_by = EXCLUDED.set_by, set_at = EXCLUDED.set_at",
+                          (r.user, r.system, r.practitioner_id, r.note, by, at))
+            return r
+
+    def orch_crosswalk_clear(self, user: str, system: str) -> bool:
+        with self._lock:
+            gone = self.orch_crosswalk.clear(user, system)
+            if gone:
+                self._persist("DELETE FROM platform_crosswalk WHERE username = %s AND system = %s",
+                              (user, system))
+            return gone
+
     def _persist(self, sql: str, params: tuple) -> None:
         if self._connect is None:
             return
@@ -675,6 +736,18 @@ def _load_orchestration_rows(state: "PlatformState", cur) -> None:
     state.orch_consents = ConsentStore(
         Consent(str(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), str(r[5]))
         for r in cur.fetchall())
+    from core.orchestration.links import Link, LinkStore
+    from core.orchestration.crosswalk import Crosswalk, CrosswalkStore
+    cur.execute("SELECT id, patient, system, system_id, status, entered_by, entered_at, verified_by, "
+                "verified_at, note, revoked, revoked_by, revoked_at FROM platform_links ORDER BY id")
+    state.orch_links = LinkStore(Link(int(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), str(r[5]),
+                                      str(r[6]), str(r[7] or ''), str(r[8] or ''), str(r[9] or ''),
+                                      bool(r[10]), str(r[11] or ''), str(r[12] or ''))
+                                 for r in cur.fetchall())
+    cur.execute("SELECT username, system, practitioner_id, note, set_by, set_at FROM platform_crosswalk")
+    state.orch_crosswalk = CrosswalkStore(Crosswalk(str(r[0]), str(r[1]), str(r[2]), str(r[3] or ''),
+                                                    str(r[4] or ''), str(r[5] or ''))
+                                          for r in cur.fetchall())
 
 
 def _schema_path() -> str:

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Patient link set{% endblock %}
+{% block body %}
+<h1>Patient link set</h1>
+<p class="lede">Which chart in which system is this person. A link is an identifier on another
+system, typed by an operator and verified by a second person — never a match a program made. A
+per-chart delivery is decided against the <em>verified</em> link at the target: with no verified
+identifier the identity bound refuses, and the verified links are the identity map the delivery
+writer resolves against.</p>
+{% if notice %}<div class="flash">{{ notice }}</div>{% endif %}
+
+{% if not sel.patients %}
+<p class="hint">No chart is in the chosen set. Put one there on <a href="/orchestration#scope">Orchestration</a>
+— a link is about a chart, and the set names which.</p>
+{% elif can_write %}
+<form method="post" action="/orchestration/links" class="oc-save">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="add">
+  <div class="field"><label for="lk-patient">Chart</label>
+    <select id="lk-patient" name="patient">{% for c in charts %}<option value="{{ c.ref }}">{{ c.name }} — {{ c.ref }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="lk-system">System</label>
+    <select id="lk-system" name="system">{% for k, s in systems.items() %}<option value="{{ k }}" {{ 'selected' if k in sel.targets }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="lk-id">That system's Patient id</label>
+    <input type="text" id="lk-id" name="system_id" maxlength="64" placeholder="e.g. 12724066" required></div>
+  <div class="field"><label for="lk-note">Note</label>
+    <input type="text" id="lk-note" name="note" maxlength="200" placeholder="where it came from"></div>
+  <button type="submit" class="oc-save-btn">Add as candidate</button>
+  <span class="hint">A candidate is not used by a run. Someone other than you verifies it, and
+    only then does the delivery engine consult it.</span>
+</form>
+{% else %}
+<p class="hint">Adding or verifying a link needs <span class="mono">document:ingest</span> and
+<span class="mono">patient:read</span>; this role can read the set and no more.</p>
+{% endif %}
+
+<h3 style="margin-top:22px">Links on file</h3>
+{% if rows %}
+<table class="tablewrap">
+  <thead><tr><th>Chart</th><th>System</th><th>Their id</th><th>Status</th><th>Entered</th><th>Verified</th><th>Note</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}{% set l = r.link %}
+  <tr class="{{ 'v-mute' if l.revoked }}">
+    <td>{{ r.name }}<br><span class="mono hint">{{ l.patient }}</span></td>
+    <td>{{ systems[l.system].name if l.system in systems else l.system }}</td>
+    <td class="mono">{{ l.system_id }}</td>
+    <td class="{{ 'v-good' if l.status == 'verified' and not l.revoked else ('v-warn' if l.status == 'rejected' else '') }}">{{ 'revoked' if l.revoked else l.status }}</td>
+    <td class="hint">{{ l.entered_by }} · {{ l.entered_at }}</td>
+    <td class="hint">{% if l.verified_by %}{{ l.verified_by }} · {{ l.verified_at }}{% else %}—{% endif %}</td>
+    <td class="hint">{{ l.note }}</td>
+    <td>
+      {% if can_write and l.live %}
+      <form method="post" action="/orchestration/links" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="link_id" value="{{ l.id }}">
+        <input type="hidden" name="patient" value="{{ l.patient }}">
+        <input type="hidden" name="system" value="{{ l.system }}">
+        {% if l.status == 'candidate' %}
+        <button type="submit" name="action" value="verify" class="btn-sm">Verify</button>
+        <button type="submit" name="action" value="reject" class="btn-sm">Reject</button>
+        {% endif %}
+        <button type="submit" name="action" value="revoke" class="btn-sm">Revoke</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="hint">None yet. Every delivery to a target will refuse on the identity bound until a
+chart in the set has a verified link there.</p>
+{% endif %}
+{% endblock %}

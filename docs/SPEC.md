@@ -333,6 +333,22 @@ client script, under the same `script-src 'none'` as the rest of the interface.
 
 **The platform is developed with no access to real patient data at any point.** That makes the test corpus not a convenience but the entire evidence base behind every acceptance claim in §10. Its provenance is therefore held to the same standard as regulatory claims: every calibration figure cites a primary source or is labeled unverified, and the method is published.
 
+**The rest of the Integration group.** Five further screens read the same state:
+
+- *Patient link set* — an identifier on another system, typed by one person and verified by a
+  second (the enterer cannot verify). States: candidate, verified, rejected; and revoked. The
+  verified links at a target are its identity map (`core.fhir.delivery.identity`).
+- *Identity bound* — `decide_delivery(..., link_verified=)` refuses a per-chart delivery with
+  no verified link at the target, naming the chart and the target and the way to clear it. The
+  chart's heightened categories are still evaluated on a refused decision so the consent matrix
+  remains available.
+- *Practitioner crosswalk* — user × system → that system's Practitioner id; `admin:config`.
+- *Permission lattice* — every system in the exchange × every purpose the role may assert →
+  the decision and its reason; sources decided on Bulk Data $export and population purposes.
+- *What each system holds* — the store by type and per chart; each target as written to by
+  runs; sources reported as not connected for a live count.
+- *Connected systems* — the profiled vendors, their posture, and this deployment's use of each.
+
 ### 7.1 Rules
 
 **R1.** No real patient data enters the repository or any development or test environment — including data described as de-identified. There is no exception path.

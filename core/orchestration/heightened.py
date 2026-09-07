@@ -6,10 +6,10 @@ platform's own classifier, the same one serialisation consults - so a
 chart the run withholds is withheld for the reason the store would have
 refused it. Nothing is classified twice two ways.
 
-Known gap: the platform's enum has no 42 CFR Part 2 (substance use disorder) category.
-The demo classifies one. Until segmentation.py grows it, a Part 2 record
-here is whatever the classifier already calls it, and this module does not
-invent a category the classifier cannot produce.
+Every member of the enum is a category here, by construction - the labels
+are derived from the enum, never listed by hand, and a test pins the
+coverage. A hand-written list of eight left 42 CFR Part 2 out, and a Part 2
+record labelled the demonstration's way (`sud_part2`) classified as clean.
 """
 from __future__ import annotations
 
@@ -17,18 +17,48 @@ from typing import Callable, Iterable, Mapping, Optional
 
 from core.governance.segmentation import SensitiveCategory
 
-#: The words the screens use, per category. Same words as the demo where the
-#: category exists in both.
-CATEGORY_LABELS: dict[str, str] = {
-    SensitiveCategory.PSYCHOTHERAPY_NOTES.value: "Psychotherapy notes",
-    SensitiveCategory.REPRODUCTIVE_HEALTH.value: "Reproductive health",
-    SensitiveCategory.HIV.value: "HIV",
-    SensitiveCategory.GENETIC.value: "Genetic",
-    SensitiveCategory.MENTAL_HEALTH.value: "Mental health",
-    SensitiveCategory.MINOR_CONSENTED.value: "Minor-consented confidential service",
-    SensitiveCategory.DOMESTIC_VIOLENCE.value: "Domestic & intimate partner violence",
-    SensitiveCategory.ABUSE_NEGLECT.value: "Abuse & neglect",
+#: The words the screens use, per category. DERIVED from the enum: every
+#: member gets a label, the overrides below only choose the wording, and a
+#: member with no override still appears under its own name. Same words as
+#: the demonstration where the category exists in both.
+_LABEL_OVERRIDES = {
+    "psychotherapy_notes": "Psychotherapy notes",
+    "part2_sud": "SUD — 42 CFR Part 2",
+    "reproductive_health": "Reproductive health",
+    "hiv": "HIV",
+    "genetic": "Genetic",
+    "mental_health": "Mental health",
+    "minor_consented": "Minor-consented confidential service",
+    "domestic_violence": "Domestic & intimate partner violence",
+    "abuse_neglect": "Abuse & neglect",
 }
+CATEGORY_LABELS: dict[str, str] = {
+    c.value: _LABEL_OVERRIDES.get(c.value, c.value.replace("_", " ").capitalize())
+    for c in SensitiveCategory
+}
+
+#: Other spellings a record may carry for the same category: the
+#: demonstration and its emulators label Part 2 records `sud_part2`, and a
+#: security label may use the HL7 code. Normalised to the enum's value so a
+#: Part 2 record is a Part 2 record whichever way it arrived.
+CATEGORY_ALIASES: dict[str, str] = {
+    "sud_part2": SensitiveCategory.PART2_SUD.value,
+    "42cfrpart2": SensitiveCategory.PART2_SUD.value,
+    "eth": SensitiveCategory.PART2_SUD.value,          # HL7 v3 ActCode: substance abuse
+    "psy": SensitiveCategory.MENTAL_HEALTH.value,      # HL7 v3 ActCode: psychiatry
+    "reproductive": SensitiveCategory.REPRODUCTIVE_HEALTH.value,
+    "minor_confidential": SensitiveCategory.MINOR_CONSENTED.value,
+}
+
+
+def normalise_category(raw: object) -> Optional[str]:
+    """A label, an alias, or nothing. Case-insensitive; never invents."""
+    code = str(raw or "").strip().lower()
+    if not code:
+        return None
+    if code in CATEGORY_LABELS:
+        return code
+    return CATEGORY_ALIASES.get(code)
 
 
 def category_label(category: str) -> str:
@@ -45,14 +75,14 @@ def classify_by_labels(resource: Mapping) -> Optional[str]:
     """The fallback classifier: a resource that already carries a sensitivity
     label - `meta.security` codes, or a plain `sensitivity` field as the
     emulators emit - names its own category. Anything else is clean."""
-    plain = resource.get("sensitivity")
-    if isinstance(plain, str) and plain in CATEGORY_LABELS:
-        return plain
+    cat = normalise_category(resource.get("sensitivity"))
+    if cat:
+        return cat
     meta = resource.get("meta") or {}
     for coding in meta.get("security") or []:
-        code = str((coding or {}).get("code", "")).lower()
-        if code in CATEGORY_LABELS:
-            return code
+        cat = normalise_category((coding or {}).get("code"))
+        if cat:
+            return cat
     return None
 
 

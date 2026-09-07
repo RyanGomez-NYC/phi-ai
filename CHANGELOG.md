@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.2.0-rc1 — 2026-09-06
+## 1.1.0 — completed 2026-09-06: the Orchestration the 1.1.0 release named, in the platform
+
+This is not a new release. v1.1.0 was titled *AI-Native Data Orchestration Designed for Compliance* and shipped the demonstration of it; this completes that release by putting the same Orchestration into the platform itself, so the product and its demonstration no longer diverge.
 
 ### Orchestration: wire an exchange, bound its scope, decide every delivery, run it
 
@@ -83,6 +85,35 @@ systems catalogue.
 
 Tests: `tests/test_orchestration_platform.py`, 23 through the FastAPI app;
 1,830+ pass across the suite.
+
+### The rest of the Integration group (2026-09-06, later the same day)
+
+- **Patient link set** (`/orchestration/links`) — which chart in which system is this
+  person. A link is an identifier on another system typed by one person and **verified by a
+  second**; the person who entered it cannot vouch for it. Candidate → verified / rejected, and
+  revoked. The verified links are the delivery writer's identity map (`core.fhir.delivery`),
+  produced from the screen rather than a spreadsheet, with the verifier named.
+- **The identity bound.** A per-chart delivery is now decided against the chart's verified link
+  at the target — no verified identifier, no delivery — in the preflight, the lattice and the run
+  alike. Identity refuses the *delivery*; the chart's heightened categories are still evaluated,
+  so the checklist item and the consent matrix stay on screen and linking and consenting proceed
+  in parallel.
+- **Practitioner crosswalk** (`/orchestration/crosswalk`) — who each user is in each other
+  system, by that system's Practitioner id; set and cleared by an administrator.
+- **Permission lattice** (`/orchestration/lattice`) — the one decision, across every purpose
+  this role may assert, for every system in the exchange: sources on whether a population read
+  can be scheduled at all, targets through `decide_delivery()` with the chart, its categories,
+  the consents and the link.
+- **What each system holds** (`/orchestration/holdings`) — the PHI AI store by type and per
+  chart, and each target as this deployment's runs actually wrote to it. A source's live count
+  needs a connection; the screen says "not connected" rather than inventing one.
+- **Connected systems** (`/orchestration/systems`) — every profiled vendor with its posture, and
+  what this deployment has configured or wired it as.
+- **42 CFR Part 2.** The category labels are derived from `SensitiveCategory` rather than listed
+  by hand; a hand-written list of eight had left `part2_sud` out, so a Part 2 record labelled
+  `sud_part2` (or `ETH`) classified as clean. Aliases normalise to the enum; a test pins coverage.
+
+Tests: `tests/test_orchestration_platform.py` — 32, through the FastAPI app.
 
 ## 1.1.0-rc1 — 2026-09-02
 

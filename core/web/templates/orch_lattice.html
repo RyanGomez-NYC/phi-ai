@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Permission lattice{% endblock %}
+{% block body %}
+<h1>Permission lattice</h1>
+<p class="lede">The decision, opened up. For every system in the exchange and every purpose this
+role may assert: what the engine would decide, and why. Sources are decided on whether a
+population read can be scheduled from them at all; targets go through the one decision
+function the preflight and the run call — with the chart in scope, its heightened categories,
+the consents on file and the verified identifier at that target. Nothing here is a second
+opinion.</p>
+
+{% if not wired %}
+<p class="hint">Nothing is wired. Wire an exchange on <a href="/orchestration">Orchestration</a> and
+the lattice fills in.</p>
+{% else %}
+<p class="hint">Scope: <strong>{{ scope.mode }}</strong>{% if scope.exclude_sensitive %} — heightened records
+excluded{% endif %}. Purposes this role may assert: <span class="mono">{{ purposes|join(', ') }}</span>.
+{% if charts %}Charts in the set: {{ charts|map(attribute='name')|join(', ') }}.{% endif %}</p>
+<table class="tablewrap oc-plan">
+  <thead><tr><th>System</th><th>Role</th><th>Purpose</th><th>Chart</th><th>Decision</th><th>Bound</th><th>Reason</th></tr></thead>
+  <tbody>{% for r in rows %}
+  <tr>
+    <td>{{ r.system.name }}</td>
+    <td class="mono">{{ r.role }}</td>
+    <td class="mono">{{ r.purpose }}</td>
+    <td>{{ r.chart.name if r.chart else ('population' if scope.mode != 'chart' else '—') }}</td>
+    <td class="{{ 'v-good' if r.decision.decision == 'allow' else 'v-warn' }}">{{ r.decision.decision }}</td>
+    <td class="mono">{{ r.decision.bound }}</td>
+    <td style="font-size:12px">{{ r.decision.reason }}{% if r.decision.fix %} — <em>{{ r.decision.fix }}</em>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+{% endblock %}
