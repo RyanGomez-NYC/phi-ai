@@ -2,9 +2,12 @@
 
 ## 1.1.0 — completed 2026-09-06: the Orchestration the 1.1.0 release named, in the platform
 
-- **A wiring is a lane.** A selection with the same system on both sides (epic → epic) is not a wiring: the
-  exchange stays on step 1 and says why beside Save, and taking a chart into the set no longer ticks steps 1–2.
-- **What each system holds** names its tiles "Patient charts (patients)" and "Records (all types)".
+- **The EMR board** on the overview: one tile per vendor profile with the vendor's own posture —
+  bulk or per-chart reads, what the certified surface accepts, whether a write connector is sold —
+  and how this deployment has it wired. Derived from the profiles (`core/orchestration/board.py`).
+- **One self-hosted script.** `static/app.js` gives the slow controls a busy state you can see from
+  across the room, and lets lanes and scope selectors apply themselves. The CSP moves from
+  `script-src 'none'` to `script-src 'self'`: no inline script, no eval, no third-party origin.
 
 This is not a new release. v1.1.0 was titled *AI-Native Data Orchestration Designed for Compliance* and shipped the demonstration of it; this completes that release by putting the same Orchestration into the platform itself, so the product and its demonstration no longer diverge.
 

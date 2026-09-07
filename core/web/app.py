@@ -691,8 +691,17 @@ def create_app(
     def _overview(request: Request, identity: Identity):
         stats = reader.stats() if identity.can("patient:search") or identity.can("report:read") else None
         chain = reader.verify_audit_chain() if identity.can("audit:verify") else None
+        # The EMR board: the profiles' own posture, plus how THIS deployment
+        # has each system wired. Not PHI, so every role sees it; the way in
+        # (wiring an exchange) is offered only to a role that can take it.
+        from core.orchestration.board import board, board_summary, count_word
+        pstate = getattr(app.state, "platform_state", None)
+        raw = pstate.orch_selection_get() if pstate is not None else {}
+        rows = board(raw.get("sources", ()) or (), raw.get("targets", ()) or ())
         return page(request, "dashboard.html", identity, stats=stats, chain=chain,
-                    active="overview")
+                    active="overview", board=rows, board_summary=board_summary(rows),
+                    board_count=count_word(len(rows)),
+                    board_can=identity.can("integration:view"))
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, identity: Identity = Depends(current_identity)):

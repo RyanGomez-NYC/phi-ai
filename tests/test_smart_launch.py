@@ -640,13 +640,16 @@ def test_the_embedded_layout_is_applied_after_an_embedded_launch():
     assert 'class="embedded"' in body
 
 
-def test_scripts_are_forbidden_outright():
-    """This interface serves no JavaScript, so it has no reason to permit
-    any - which removes XSS as a delivery route entirely."""
+def test_scripts_are_self_hosted_and_nothing_else():
+    """This interface serves exactly one script, its own static/app.js, so
+    script-src is 'self' and nothing more: no inline script, no eval, no
+    remote origin - which keeps XSS without a delivery route."""
     client = _encounter_app()
     csp = client.get("/smart/launch", params={"iss": ISSUER, "launch": "t"},
                      follow_redirects=False).headers["content-security-policy"]
-    assert "script-src 'none'" in csp
+    script = next(d for d in csp.split(";") if d.strip().startswith("script-src"))
+    assert script.strip() == "script-src 'self'"
+    assert "unsafe-inline" not in script and "unsafe-eval" not in script
     assert "object-src 'none'" in csp
 
 

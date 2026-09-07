@@ -75,7 +75,7 @@ systems in sync, where and when they need to be.</p>
         <form method="post" action="/orchestration/exchange" style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="id" value="{{ x.id }}">
-          <button type="submit" name="action" value="load" class="btn-sm">Load</button>
+          <button type="submit" name="action" value="load" class="btn-sm" data-busy data-busy-label="Loading it">Load</button>
           <button type="submit" name="action" value="delete" class="btn-sm">Delete</button>
         </form>
       </td>
@@ -146,7 +146,8 @@ systems in sync, where and when they need to be.</p>
       </select></div>
     {% if sel.sources and sel.targets and not wired %}<p class="oc-nolane"><b>Nothing crosses yet:</b> the same
       system is on both sides. Pick a different target and this exchange is wired.</p>{% endif %}
-    <button type="submit" class="oc-save-btn" form="orc-select-form">Save this exchange</button>
+    <button type="submit" class="oc-save-btn" form="orc-select-form" data-busy
+            data-busy-label="Saving this exchange">Save this exchange</button>
     <form method="post" action="/orchestration/exchange" style="display:inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="save">
@@ -179,7 +180,7 @@ systems in sync, where and when they need to be.</p>
   verifies four thousand links by hand, so a population run does the reads across everything
   it matches and carries per-patient work for the charts named in the set.</p>
 
-  <form method="post" action="/orchestration/scope" class="oc-scope-form">
+  <form method="post" action="/orchestration/scope" class="oc-scope-form" data-oc-autoscope>
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="oc-modes">
       <label class="oc-mode{{ ' oc-mode-on' if scope.mode == 'chart' }}"><input type="radio" name="mode" value="chart" {{ 'checked' if scope.mode == 'chart' }}>
@@ -230,7 +231,7 @@ systems in sync, where and when they need to be.</p>
         each one is decided per chart against its own consent, as usual.</span>
     </label>
     <div class="oc-scope-actions">
-      <button type="submit" class="btn">Confirm scope</button>
+      <button type="submit" class="btn" data-busy data-busy-label="Confirming this scope">Confirm scope</button>
       <span class="hint">{{ scope_text }}</span>
     </div>
   </form>
@@ -344,7 +345,7 @@ systems in sync, where and when they need to be.</p>
     {% if can_execute %}
     <form method="post" action="/orchestration/execute">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn">Execute this exchange</button>
+      <button type="submit" class="btn" data-busy data-busy-label="Executing the exchange">Execute this exchange</button>
     </form>
     <span class="hint">writes the ledger, one step per delivery, and lands on the run</span>
     {% else %}

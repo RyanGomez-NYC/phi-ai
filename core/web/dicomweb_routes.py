@@ -33,8 +33,9 @@ fetches that follow are the mechanics of that one disclosure, and the
 study entry accounts for it under 45 CFR 164.528.
 
 THE VIEWER RUNS ON A DIFFERENT ORIGIN, deliberately - see
-runbooks/RUNBOOK_DICOM_IMAGING.md. That keeps `script-src 'none'` intact
-on every page of this application that displays PHI, and confines the
+runbooks/RUNBOOK_DICOM_IMAGING.md. That keeps `script-src 'self'` - one
+self-hosted file, no third-party origin - intact on every page of this
+application that displays PHI, and confines the
 scripting a medical image viewer genuinely requires to an origin that
 holds no session of its own. The cost is CORS, handled below with an
 exact-origin allowlist: `*` is not merely discouraged here, it is

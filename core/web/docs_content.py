@@ -4,8 +4,9 @@
 Server-rendered, animated architecture and data-flow diagrams for the
 documentation section.
 
-This interface runs under `script-src 'none'` (core/web/security.py), so
-the diagrams cannot be drawn by a charting library. They do not need to
+This interface serves one self-hosted script and no other (`script-src
+'self'`, core/web/security.py), so the diagrams are not drawn by a charting
+library. They do not need to
 be: SVG with SMIL animation (<animateMotion>, <animate>) is markup, not
 script, and renders animated under the strictest CSP. The generator
 below mirrors the demo's d3 engine - boxes, curved links with

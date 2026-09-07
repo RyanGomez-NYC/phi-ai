@@ -522,3 +522,35 @@ def test_a_purpose_outside_the_role_is_refused_before_any_read():
     assert r.status_code in (400, 403)
     assert reader.reads == [], "resource was decrypted despite the refused purpose"
 # Made by Ryan Gomez & Co. Inc.
+
+
+
+def test_the_overview_carries_the_emr_board():
+    # The same board the demonstration's home page carries, derived from the
+    # profiles: one tile per vendor, marks distinct, the vendor's own posture.
+    from core.orchestration.systems import systems
+    client, _, _ = _client(roles="sysadmin")
+    body = client.get("/overview").text
+    assert body.count('class="emr-tile"') == len(systems())
+    marks = re.findall(r'class="emr-mark" aria-hidden="true">([A-Z]{2})<', body)
+    assert len(marks) == len(systems()) and len(set(marks)) == len(marks), marks
+    for phrase in ("EMRs, both directions", "read in bulk", "accept writes on the",
+                   "sell a write connector", "bulk export", "one chart at a time",
+                   "with a licensed connector", "read-only", "not wired here"):
+        assert phrase in body, phrase
+    assert 'href="/orchestration">Wire an exchange' in body
+    # A role that cannot wire is told what it needs, and offered no link.
+    viewer = _client(roles="viewer")[0].get("/overview").text
+    assert body.count('class="emr-tile"') == viewer.count('class="emr-tile"')
+    assert 'href="/orchestration">Wire an exchange' not in viewer
+    assert "needs <span class=\"mono\">integration:view</span>" in viewer
+
+
+def test_the_one_script_is_self_hosted_and_served():
+    client, _, _ = _client()
+    r = client.get("/overview")
+    assert '<script src="/static/app.js" defer></script>' in r.text
+    assert "script-src 'self'" in r.headers["content-security-policy"]
+    js = client.get("/static/app.js")
+    assert js.status_code == 200 and "busy-bar" in js.text and "lane_apply" in js.text
+    assert "eval(" not in js.text and "innerHTML" not in js.text

@@ -14,8 +14,8 @@ The web screens over machinery the platform already has:
   editor, the role/permission matrix, and a live audit-chain check.
 - Documentation: six sections under /docs, readable by every signed-in
   role. The diagram sections render static server-side SVG with SMIL
-  animation - this interface runs under `script-src 'none'`, and SMIL
-  needs no script.
+  animation - this interface serves one self-hosted script (`script-src
+  'self'`) and no charting library, and SMIL needs no script.
 
 Same discipline as every other surface: nav visibility and route
 enforcement come from the same table, refusals are audited, and every

@@ -47,5 +47,30 @@ audit trail against your username and a stated purpose of use.</p>
   Your role does not include access to platform holdings.
 </div></div>
 {% endif %}
+
+{# The EMR board - the same one the demonstration's home page carries, derived
+   from the profiles (core/orchestration/board.py). Colour is semantic only:
+   green where the system can, navy where it reads one chart at a time,
+   hollow where writes wait on a licence, grey where it is read-only. #}
+<section class="emr-board" id="emrs">
+  <h2 class="emr-title">{{ board_count }} EMRs, both directions</h2>
+  <p class="emr-sum"><b>{{ board_summary.bulk }}</b> read in bulk &middot; <b>{{ board_summary.writes }}</b> accept writes on the
+    certified surface &middot; <b>{{ board_summary.sells }}</b> sell a write connector</p>
+  <div class="emr-grid">
+    {% for r in board %}
+    <div class="emr-tile" id="emr-{{ r.key }}">
+      <div class="emr-top"><span class="emr-mark" aria-hidden="true">{{ r.mark }}</span>
+        <span class="emr-name">{{ r.name }}</span></div>
+      <ul class="emr-posture">
+        <li class="{{ r.reads_kind }}"><span class="emr-lbl">Reads</span> {{ r.reads }}</li>
+        <li class="{{ r.writes_kind }}"><span class="emr-lbl">Writes</span> {{ r.writes }}</li>
+      </ul>
+      <div class="emr-use{{ ' emr-use-on' if r.use != 'not wired here' }}">{{ r.use }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="emr-cta">{% if board_can %}<a href="/orchestration">Wire an exchange between any of them &rarr;</a>
+    {% else %}<span class="hint">Wiring an exchange needs <span class="mono">integration:view</span>.</span>{% endif %}</p>
+</section>
 {% endblock %}
 {# Made by Ryan Gomez & Co. Inc. #}

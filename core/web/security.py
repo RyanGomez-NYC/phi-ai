@@ -109,16 +109,18 @@ def build_csp(origins: list[str]) -> str:
     both the default and the safe answer.
 
     The rest is tight because it can be: this interface serves its own
-    CSS and no JavaScript at all, so it has no reason to permit inline
-    script, remote script, or any third-party origin. A PHI interface
-    that does not need those should not allow them.
+    CSS and exactly one script, its own static/app.js, so script-src is
+    'self' and nothing more - no inline script, no eval, no remote script,
+    no third-party origin. A PHI interface that does not need those should
+    not allow them. (Until 2026-09-07 it was 'none'; the busy-button and
+    apply-on-change behaviour the demonstration has needed one file.)
     """
     ancestors = " ".join(origins) if origins else "'none'"
     return "; ".join(
         [
             "default-src 'self'",
             "style-src 'self' 'unsafe-inline'",  # small inline styles in templates
-            "script-src 'none'",
+            "script-src 'self'",
             "img-src 'self' data:",
             "form-action 'self'",
             "base-uri 'none'",

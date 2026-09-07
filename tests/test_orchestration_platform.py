@@ -665,3 +665,31 @@ def test_the_same_system_on_both_sides_is_not_wired():
     r = _wire(client, sources=("epic",), targets=("cerner",))
     assert r.headers["location"].endswith("#scope")
     assert "Nothing crosses yet" not in _page(client)
+
+
+
+def test_the_board_says_how_each_system_is_wired_here():
+    client, _ = _client()
+    before = client.get("/overview").text
+    assert before.count("not wired here") == before.count('class="emr-tile"')
+    _wire(client, sources=("epic",), targets=("cerner",))
+    body = client.get("/overview").text
+    epic = body.split('id="emr-epic"', 1)[1].split("</div>\n    </div>", 1)[0]
+    cerner = body.split('id="emr-cerner"', 1)[1].split("</div>\n    </div>", 1)[0]
+    assert "wired as a source" in epic and "wired as a target" in cerner
+    assert body.count("not wired here") == before.count("not wired here") - 2
+
+
+def test_the_slow_controls_carry_the_busy_contract():
+    # The demonstration's busy buttons, by the same attributes: Save, Confirm,
+    # Execute and Load opt in with data-busy and name the verb in progress.
+    client, _ = _client()
+    _wire(client, name="Nightly")
+    body = _page(client)
+    for label in ("Saving this exchange", "Confirming this scope"):
+        assert f'data-busy-label="{label}"' in body, label
+    assert 'class="oc-scope-form" data-oc-autoscope' in body
+    # Load appears once an exchange has been kept; it opts in the same way.
+    client.post("/orchestration/exchange", data={"csrf_token": tw._csrf(client, "/orchestration"),
+                                                 "action": "save", "name": "Nightly"})
+    assert 'data-busy-label="Loading it"' in _page(client)
