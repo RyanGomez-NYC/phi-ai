@@ -2,6 +2,10 @@
 
 ## 1.1.0 — completed 2026-09-06: the Orchestration the 1.1.0 release named, in the platform
 
+- **A wiring is a lane.** A selection with the same system on both sides (epic → epic) is not a wiring: the
+  exchange stays on step 1 and says why beside Save, and taking a chart into the set no longer ticks steps 1–2.
+- **What each system holds** names its tiles "Patient charts (patients)" and "Records (all types)".
+
 This is not a new release. v1.1.0 was titled *AI-Native Data Orchestration Designed for Compliance* and shipped the demonstration of it; this completes that release by putting the same Orchestration into the platform itself, so the product and its demonstration no longer diverge.
 
 ### Orchestration: wire an exchange, bound its scope, decide every delivery, run it

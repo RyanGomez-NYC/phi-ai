@@ -82,5 +82,8 @@ def normalise_selection(sources, targets, patients, purpose: str, *,
 
 
 def selection_chosen(sel: Selection) -> bool:
-    """Has the operator wired anything at all? A default is not a choice."""
-    return bool(sel.sources) and bool(sel.targets)
+    """Has the operator wired a lane? A default is not a choice, and neither is
+    the same system named on both sides: epic -> epic moves nothing. The chart
+    take stores a selection too, carrying whatever systems were current, so
+    "a selection is stored" is not the test either."""
+    return any(s != t for s in sel.sources for t in sel.targets)

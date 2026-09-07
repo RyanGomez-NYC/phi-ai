@@ -144,6 +144,8 @@ systems in sync, where and when they need to be.</p>
       <select id="orc-purpose" form="orc-select-form" name="purpose">
         {% for code, label in purposes %}<option value="{{ code }}" {{ 'selected' if sel.purpose == code }}>{{ label }}</option>{% endfor %}
       </select></div>
+    {% if sel.sources and sel.targets and not wired %}<p class="oc-nolane"><b>Nothing crosses yet:</b> the same
+      system is on both sides. Pick a different target and this exchange is wired.</p>{% endif %}
     <button type="submit" class="oc-save-btn" form="orc-select-form">Save this exchange</button>
     <form method="post" action="/orchestration/exchange" style="display:inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

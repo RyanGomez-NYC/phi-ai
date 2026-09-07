@@ -872,7 +872,7 @@ td form { display: inline-block; }
 }
 
 /* ─────────────────────────────────────────────────────────────
-   φ(ai) interface kit
+   φ(ai) interface kit — append to www-demo/public/assets/app.css
    ─────────────────────────────────────────────────────────────
    Fonts: Inter 400/500/600 + 400 italic, IBM Plex Mono 400/500.
    Vendor them locally as latin + latin-ext woff2 subsets and keep
@@ -1387,3 +1387,8 @@ table.pm thead th:first-child { background: var(--wash-2); }
 .flash { margin: 10px 0 14px; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line);
   border-left: 3px solid var(--good); background: #f7fbf8; font-size: 13px; }
 @media (max-width: 700px) { .oc-lanes { grid-template-columns: 1fr; } }
+
+/* The exchange's Save has nothing to save: the same system on both sides. */
+.oc-nolane { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid var(--orange);
+  background: #fff6f0; color: var(--slate); font-size: 13px; max-width: 560px; }
+.oc-nolane b { color: var(--navy); }

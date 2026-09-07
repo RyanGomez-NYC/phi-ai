@@ -249,6 +249,12 @@ def register(app, page, require, current_identity, record, reader) -> None:
         # the lanes on change, which is what the demonstration does.
         if form.get("lane_apply"):
             return land("wired")
+        if not selection_chosen(sel):
+            # The same system on both sides moves nothing: the step is not
+            # finished, and the page says why instead of opening the scope.
+            notice_set(request, "Nothing crosses yet: the same system is on both sides. "
+                                "Pick a different target and this exchange is wired.")
+            return land("wired")
         flash_set(request, "scope")
         return land("scope")
 

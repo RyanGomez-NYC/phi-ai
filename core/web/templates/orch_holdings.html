@@ -9,8 +9,8 @@ to say: a live count needs a connection, and this screen says so rather than inv
 
 <h3>The PHI AI store</h3>
 <div class="oc-inv-tiles">
-  <div class="card stat"><div class="n">{{ '{:,}'.format(store.charts) }}</div><div class="k">charts</div></div>
-  <div class="card stat"><div class="n">{{ '{:,}'.format(store.total) }}</div><div class="k">records</div></div>
+  <div class="card stat"><div class="n">{{ '{:,}'.format(store.charts) }}</div><div class="k">Patient charts (patients)</div></div>
+  <div class="card stat"><div class="n">{{ '{:,}'.format(store.total) }}</div><div class="k">Records (all types)</div></div>
 </div>
 {% if store.by_type %}
 <table class="tablewrap">

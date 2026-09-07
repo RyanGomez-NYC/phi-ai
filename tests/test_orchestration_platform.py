@@ -1,9 +1,9 @@
 # Copyright 2026 Ryan Gomez & Co. Inc. — PHI AI — Apache-2.0 (see LICENSE); attribution notices must be retained (see NOTICE).
 """The platform's Orchestration screen behaves as the demonstration does.
 
-The public demonstration and the platform must not diverge in functionality
-or experience. These tests pin the platform's side of that, behaviour for
-behaviour: the same staged
+The demo and the platform must not diverge in functionality or experience
+(private-notes/2026-09-06-orchestration-port-plan.md). These tests are the
+platform-side twins of tests/test_demo_orchestration.py: the same staged
 disclosure, the same scope rules, the same consent triple, the same words
 on the withheld line - exercised through the FastAPI app, not by reading
 the template.
@@ -649,3 +649,19 @@ def test_connected_systems_lists_every_profile_and_what_this_deployment_did_with
     _wire(client)
     body = client.get("/orchestration/systems").text
     assert "wired as a source" in body and "wired as a target" in body
+
+
+def test_the_same_system_on_both_sides_is_not_wired():
+    # epic -> epic moves nothing. Saving it is not a wiring: the page stays on
+    # step 1, says why beside Save, and neither later step ticks or opens.
+    client, _ = _client()
+    r = _wire(client, sources=("epic",), targets=("epic",))
+    assert r.status_code == 303 and r.headers["location"].endswith("#wired")
+    body = _page(client)
+    assert "Nothing crosses yet" in body
+    assert 'class="oc-step oc-step-open" id="systems"' in body
+    assert _open_steps(body) == {"scope": False, "preflight": False}
+    # A real lane wires it, and the notice goes away.
+    r = _wire(client, sources=("epic",), targets=("cerner",))
+    assert r.headers["location"].endswith("#scope")
+    assert "Nothing crosses yet" not in _page(client)
