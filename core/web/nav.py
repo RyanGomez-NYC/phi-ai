@@ -106,6 +106,8 @@ NAV: tuple[NavGroup, ...] = (
                 permissions=("report:read",)),
     )),
     NavGroup("Integration", (
+        NavItem("orchestration", "", "Orchestration", "/orchestration",
+                permissions=("integration:view",)),
         NavItem("emrconfig", "", "Source & target EMRs", "/integration/emrconfig",
                 permissions=("admin:config",)),
         NavItem("bulkimport", "", "Bulk import manager", "/integration/bulk",

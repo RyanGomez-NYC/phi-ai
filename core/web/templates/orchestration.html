@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% block title %}Orchestration{% endblock %}
+{% block body %}
+{# Three steps, disclosed as they are earned. Step 1 never shuts. Step 2
+   opens when an exchange is saved and STAYS open through step 3, so the
+   reader decides whether to run with the whole scope on screen. What opens
+   is the one-shot flash the action set - never the stored state, which is
+   what put the preflight on screen for anyone who had a scope saved. #}
+<h1>Orchestration</h1>
+<p class="lede orch-lede">Orchestration exists to hydrate the RAG data store at the heart of
+PHI AI. That store is the core of what frontier models read to enable AI securely and
+compliantly across your data universe — and keeping it hydrated is what holds connected
+systems in sync, where and when they need to be.</p>
+
+{% if notice %}<div class="flash">{{ notice }}</div>{% endif %}
+
+{# ============================ 1. Wire ================================ #}
+<section class="oc-step oc-step-open" id="systems">
+  <div class="oc-step-head oc-step-head-fixed">
+    <span class="oc-step-mark {{ 'v-good' if wired else 'v-mute' }}">{{ '✓' if wired else '●' }}</span>
+    <span class="oc-step-t">1. Wire the exchange</span>
+    <span class="oc-step-s">{% if wired %}{{ sel.sources|length }} source{{ '' if sel.sources|length == 1 else 's' }}
+      &rarr; {{ sel.targets|length }} target{{ '' if sel.targets|length == 1 else 's' }}{% else %}nothing wired yet{% endif %}</span>
+  </div>
+  <p class="hint">Tick a system into a lane and PHI AI sits in the middle doing the work. Each
+  card carries the posture that decides its fate, read from that vendor's profile and never
+  typed here. Ticks apply when you press <em>Save this exchange</em> below, which names the
+  exchange and opens the scope.</p>
+
+  {# No script on this screen - the platform serves script-src 'none' - so a
+   tick is pending until Save this exchange submits the form. The panel
+   below ("In this exchange") is the SAVED wiring; the lanes are the form. #}
+  <form method="post" action="/orchestration/select" class="orc-select" id="orc-select-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="oc-lanes">
+      {% for lane, label, chosen in (('sources', 'Sources — read from', sel.sources),
+                                     ('targets', 'Targets — deliver to', sel.targets)) %}
+      <div class="oc-lane oc-lane-{{ lane }}">
+        <div class="oc-lane-head">{{ label }} <span class="oc-wired-n">{{ chosen|length }}</span></div>
+        {% for key, s in systems.items() %}
+        <label class="oc-sys{{ ' oc-sys-on' if key in chosen }}">
+          <input type="checkbox" name="{{ lane }}" value="{{ key }}" {{ 'checked' if key in chosen }}>
+          <span class="oc-sys-name">{{ s.name }}</span>
+          <span class="oc-wired-chips">
+            {% if lane == 'sources' %}
+            <span class="oc-chip {{ 'good' if s.supports_bulk_export else 'warn' }}">{{ 'bulk export' if s.supports_bulk_export else 'no $export' }}</span>
+            {% else %}
+            <span class="oc-chip {{ 'good' if s.writable else 'warn' }}">{{ 'creatable: ' ~ s.creatable|join(', ') if s.writable else 'read-only' }}</span>
+            {% if s.conditional_create %}<span class="oc-chip">conditional create</span>{% endif %}
+            {% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </form>
+
+  <h3 id="exchanges" style="margin-top:22px">Saved exchanges</h3>
+  <p class="hint">A saved exchange keeps the whole decision — systems, purpose, scope and how it
+  delivers — so it comes back whole rather than being rebuilt from memory. Loading one does
+  not run it: preflight is decided again before anything moves.</p>
+  {% if exchanges %}
+  <table class="tablewrap oc-exchanges">
+    <thead><tr><th>Name</th><th>Wiring</th><th>Delivers</th><th>Saved</th><th></th></tr></thead>
+    <tbody>
+    {% for x in exchanges %}
+    {% set v = x.value.selection %}
+    <tr>
+      <td><strong>{{ x.name }}</strong></td>
+      <td class="mono">{{ v.sources|join(', ') }} &rarr; {{ v.targets|join(', ') }}</td>
+      <td>{{ delivery_modes[v.delivery].label if v.delivery in delivery_modes else v.delivery }}</td>
+      <td class="hint">{{ x.saved_by }} · {{ x.saved_at }}</td>
+      <td>
+        <form method="post" action="/orchestration/exchange" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="id" value="{{ x.id }}">
+          <button type="submit" name="action" value="load" class="btn-sm">Load</button>
+          <button type="submit" name="action" value="delete" class="btn-sm">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="hint">None saved yet. Name one below and press <em>Keep this exchange</em>.</p>
+  {% endif %}
+
+  {# What is actually wired, after applying - the selection and nothing else. #}
+  <h3 id="wired" style="margin-top:26px">In this exchange
+    {% if sel.name %}<span class="hint" style="font-weight:400">— {{ sel.name }}</span>
+    {% else %}<span class="hint" style="font-weight:400">— unnamed; name it below to keep it</span>{% endif %}</h3>
+  <p class="hint" style="margin-top:2px"><span class="pill">{{ delivery_modes[sel.delivery].label }}</span>
+    {{ delivery_modes[sel.delivery].blurb }}{% if sel.delivery == 'schedule' %} Cadence
+    <strong>{{ cadences[sel.cadence].label }}</strong>.{% endif %}</p>
+  {% if not wired %}
+  <p class="hint">Nothing wired yet. Put a system in each lane above.</p>
+  {% else %}
+  <div class="oc-wired">
+    {% for side, head, keys in (('source', 'Sources — read from', sel.sources),
+                                ('target', 'Targets — deliver to', sel.targets)) %}
+    <section class="oc-wired-col oc-wired-{{ side }}">
+      <div class="oc-wired-head">{{ head }} <span class="oc-wired-n">{{ keys|length }}</span></div>
+      {% for k in keys %}{% set s = systems[k] %}
+      <article class="oc-wired-card">
+        <div class="oc-wired-name">{{ s.name }}</div>
+        <dl class="oc-wired-posture">
+          <dt>auth</dt><dd>{{ s.auth }}</dd>
+          {% if side == 'source' %}<dt>bulk</dt><dd>{{ s.bulk }}</dd>
+          {% else %}<dt>writes</dt><dd>{{ s.writes }}</dd>{% endif %}
+        </dl>
+        <div class="oc-wired-chips">
+          {% if side == 'source' %}
+          <span class="oc-chip {{ 'good' if s.supports_bulk_export else 'warn' }}">{{ 'bulk export' if s.supports_bulk_export else 'no $export' }}</span>
+          {% else %}
+          <span class="oc-chip {{ 'good' if s.writable else 'warn' }}">{{ 'creatable: ' ~ s.creatable|join(', ') if s.writable else 'read-only' }}</span>
+          {% if s.conditional_create %}<span class="oc-chip">conditional create</span>{% endif %}
+          {% endif %}
+        </div>
+        <a href="/integration/emrconfig">Configure this connection &rarr;</a>
+      </article>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Save sits at the FOOT of the step, under the wiring it describes. The
+     controls live outside the form and name it with form="orc-select-form". #}
+  <div class="oc-save">
+    <div class="field"><label for="orc-name">Name this exchange</label>
+      <input type="text" id="orc-name" form="orc-select-form" name="name" maxlength="60"
+             value="{{ sel.name }}" placeholder="e.g. Nightly cardiology to Oracle"></div>
+    <div class="field"><label for="orc-delivery">How it delivers</label>
+      <select id="orc-delivery" form="orc-select-form" name="delivery">
+        {% for k, m in delivery_modes.items() %}<option value="{{ k }}" {{ 'selected' if sel.delivery == k }}>{{ m.label }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="orc-cadence">Cadence</label>
+      <select id="orc-cadence" form="orc-select-form" name="cadence">
+        {% for k, c in cadences.items() %}<option value="{{ k }}" {{ 'selected' if sel.cadence == k }}>{{ c.label }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="orc-purpose">Purpose of use — asserted for this run</label>
+      <select id="orc-purpose" form="orc-select-form" name="purpose">
+        {% for code, label in purposes %}<option value="{{ code }}" {{ 'selected' if sel.purpose == code }}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <button type="submit" class="oc-save-btn" form="orc-select-form">Save this exchange</button>
+    <form method="post" action="/orchestration/exchange" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="save">
+      <button type="submit" class="btn-sm" {{ '' if wired and sel.name else 'disabled' }}>Keep this exchange</button>
+    </form>
+    <span class="hint">Recorded as <span class="mono">integration.selection_changed</span>. This
+      purpose is the one the run asserts and every gate is decided against; it is separate from
+      the access pill, which governs what you can see while you browse.</span>
+  </div>
+</section>
+
+{# ============================ 2. Scope =============================== #}
+{# Stays open THROUGH the preflight: the projection, the tiles and the
+   inventory are what is being confirmed, and they must not leave the screen
+   at the moment they matter. A plain load has no flash: step 1 alone. #}
+<details class="oc-step" id="scope"{{ ' open' if flash in ('scope', 'preflight') }}>
+  <summary class="oc-step-head">
+    <span class="oc-step-mark {{ 'v-good' if scoped else 'v-mute' }}">{{ '✓' if scoped else '●' }}</span>
+    <span class="oc-step-t">2. Scope — review and confirm</span>
+    <span class="oc-step-s">{% if scoped %}{{ n_scope }} chart{{ '' if n_scope == 1 else 's' }} in scope
+      {%- if withheld_total %} · {{ withheld_total }} heightened{{ ', excluded' if scope.exclude_sensitive }}{% endif %}
+      {% elif wired %}confirm what this run is about{% else %}wire the exchange first{% endif %}</span>
+  </summary>
+  {% if not wired %}
+  <p class="hint">Wire at least one source and one target above, then save the exchange.</p>
+  {% else %}
+  <p class="hint">One chart, or a population. The difference is not cosmetic: a bulk
+  <span class="mono">$export</span> is decided once for the whole scope, while a delivery is
+  decided per chart against that chart's verified identifier on the target — and nobody
+  verifies four thousand links by hand, so a population run does the reads across everything
+  it matches and carries per-patient work for the charts named in the set.</p>
+
+  <form method="post" action="/orchestration/scope" class="oc-scope-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="oc-modes">
+      <label class="oc-mode{{ ' oc-mode-on' if scope.mode == 'chart' }}"><input type="radio" name="mode" value="chart" {{ 'checked' if scope.mode == 'chart' }}>
+        <strong>One chart</strong> <span class="hint">the chosen set, up to {{ set_max }}</span></label>
+      <label class="oc-mode{{ ' oc-mode-on' if scope.mode == 'all' }}"><input type="radio" name="mode" value="all" {{ 'checked' if scope.mode == 'all' }}{{ ' disabled' if not can_choose }}>
+        <strong>Every patient</strong> <span class="hint">the whole corpus — what Bulk Data Export is for</span></label>
+      <label class="oc-mode{{ ' oc-mode-on' if scope.mode == 'segment' }}"><input type="radio" name="mode" value="segment" {{ 'checked' if scope.mode == 'segment' }}{{ ' disabled' if not can_choose }}>
+        <strong>A segment</strong> <span class="hint">narrowed by the selectors below</span></label>
+    </div>
+    {% if not can_choose %}
+    <p class="hint">A population scope needs <span class="mono">patient:search</span>; this role
+    can bound a run to a chart it already holds and no more.</p>
+    {% endif %}
+
+    {# Always shown: with no script to reveal them on the radio, hiding them
+       would make "A segment" a choice with nothing behind it. They apply only
+       to a segment; the server clears them for the other modes. #}
+    <div class="oc-selectors">
+      <div class="field"><label for="sc-cond">Condition contains</label>
+        <input type="text" id="sc-cond" name="condition" value="{{ scope.condition }}" placeholder="e.g. diabetes, hypertension"></div>
+      <div class="field"><label for="sc-sex">Sex</label>
+        <select id="sc-sex" name="sex"><option value="">any</option>
+          {% for sx in ('female', 'male') %}<option value="{{ sx }}" {{ 'selected' if scope.sex == sx }}>{{ sx }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="sc-band">Age</label>
+        <select id="sc-band" name="band"><option value="">any</option>
+          {% for b in ('0-17', '18-44', '45-64', '65+') %}<option value="{{ b }}" {{ 'selected' if scope.band == b }}>{{ b }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="sc-payer">Payer</label>
+        <input type="text" id="sc-payer" name="payer" value="{{ scope.payer }}" placeholder="any"></div>
+      <div class="field"><label for="sc-state">State</label>
+        <input type="text" id="sc-state" name="state" value="{{ scope.state }}" placeholder="any"></div>
+      <div class="field"><label for="sc-med">Medication contains</label>
+        <input type="text" id="sc-med" name="medication" value="{{ scope.medication }}" placeholder="e.g. metformin, insulin"></div>
+      <div class="field"><label for="sc-living">Status</label>
+        <select id="sc-living" name="living"><option value="">any</option>
+          <option value="living" {{ 'selected' if scope.living == 'living' }}>living only</option>
+          <option value="deceased" {{ 'selected' if scope.living == 'deceased' }}>deceased only</option></select></div>
+      <div class="field"><label for="sc-seen">Seen since</label>
+        <input type="date" id="sc-seen" name="seen_since" value="{{ scope.seen_since }}"></div>
+    </div>
+
+    {# OUTSIDE the selector block on purpose: a decision about the whole run,
+       sayable about "every patient" too, and stronger than the consent gate. #}
+    <label class="oc-scope-flag">
+      <input type="checkbox" name="exclude_sensitive" value="1" {{ 'checked' if scope.exclude_sensitive }}>
+      <span><strong>Leave heightened records out of this run.</strong>
+        Mental health, HIV, reproductive, genetic and minor-consented care stay where they are
+        &mdash; <em>even for a chart that has a disclosure consent on file</em>. Untick it and
+        each one is decided per chart against its own consent, as usual.</span>
+    </label>
+    <div class="oc-scope-actions">
+      <button type="submit" class="btn">Confirm scope</button>
+      <span class="hint">{{ scope_text }}</span>
+    </div>
+  </form>
+
+  {% if scoped %}
+  <div class="oc-inv-tiles">
+    <div class="card stat"><div class="n">{{ n_scope }}</div><div class="k">chart{{ '' if n_scope == 1 else 's' }} in scope</div>
+      <div class="hint">{{ scope_text }}</div></div>
+    {% if scope.mode == 'chart' %}
+    <div class="card stat{{ ' oc-inv-sens' if withheld_total }}">
+      <div class="n {{ 'v-warn' if withheld_total }}">{{ withheld_total }}</div>
+      <div class="k">heightened records</div>
+      <div class="hint">{{ 'excluded by this scope' if scope.exclude_sensitive else 'decided per chart, never in bulk' }}</div></div>
+    {% endif %}
+  </div>
+  {% if scope.mode == 'chart' and charts %}
+  <table class="tablewrap oc-set">
+    <thead><tr><th>Chart</th><th>Reference</th><th>Heightened categories</th></tr></thead>
+    <tbody>{% for ch in charts %}
+      <tr><td>{{ ch.name }}</td><td class="mono">{{ ch.ref }}</td>
+        <td>{% if ch.categories %}{% for c, n in ch.categories.items() %}<span class="oc-chip warn">{{ n }} × {{ c|replace('_', ' ') }}</span> {% endfor %}{% else %}<span class="v-mute">none</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% endif %}
+
+  {% if scope.mode != 'chart' or withheld_total %}
+  <div class="oc-inv-heightened">
+    {% if scope.mode != 'chart' %}<strong class="v-warn">Heightened records in this scope</strong>
+    are decided per chart and never carried by a population read: each one is decided against
+    that chart's own consent and this purpose. A bulk <span class="mono">$export</span> is decided
+    once for the whole scope, which is exactly why it cannot be the thing that moves them.
+    {% else %}<strong class="v-warn">{{ withheld_total }} heightened record{{ '' if withheld_total == 1 else 's' }}</strong>
+    {{ 'is' if withheld_total == 1 else 'are' }} inside this scope — {{ withheld_text }}.{% endif %}
+    {% if scope.exclude_sensitive %}
+    <br><strong>This scope leaves them behind.</strong> Every one of them stays where it is
+    &mdash; including on a chart that has a disclosure consent on file, because the scope's
+    exclusion is a decision about this run and outranks the consent rather than restating it.
+    {% endif %}
+    <div class="oc-heightened-act">
+      {% if scope.exclude_sensitive %}
+      <span class="hint">Nothing to work per-chart while this scope excludes them.</span>
+      {% elif scope.mode != 'chart' and can_choose and can_hold %}
+      <button type="submit" form="oc-take-form" class="btn-sm">Work these charts per-chart &rarr;</button>
+      <span class="hint">puts up to {{ set_max }} charts carrying these categories into the scope,
+        where each category can be consented at each target</span>
+      {% elif scope.mode != 'chart' %}
+      <span class="hint">Recording a consent needs <span class="mono">patient:search</span> and
+        <span class="mono">patient:read</span> — naming the chart is choosing a person.</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+  {% endif %}
+</details>
+
+{# ============================ 3. Preflight =========================== #}
+<details class="oc-step" id="preflight"{{ ' open' if flash == 'preflight' }}>
+  <summary class="oc-step-head">
+    <span class="oc-step-mark v-mute">●</span>
+    <span class="oc-step-t">3. Preflight</span>
+    <span class="oc-step-s">{{ 'every line is checked before the exchange can run' if scoped else 'confirm the scope first' }}</span>
+  </summary>
+  {% if not scoped %}
+  <p class="hint">Confirm the scope above and every line of the plan appears here.</p>
+  {% else %}
+  <p class="hint">Every line has to be checked before the exchange can run. Checking one records
+  that you knew — it grants nothing: every step is decided again when the run starts, so a
+  refusal stays a refusal.</p>
+  {% set items = [] %}
+  {% set _ = items.append({'what': 'Systems wired: ' ~ sel.sources|length ~ ' source' ~ ('' if sel.sources|length == 1 else 's') ~ ' → ' ~ sel.targets|length ~ ' target' ~ ('' if sel.targets|length == 1 else 's'),
+                           'why': (sel.sources|map('string')|join(', ')) ~ ' → ' ~ (sel.targets|join(', ')) ~ ' — every hop decided on its own', 'hard': False}) %}
+  {% set _ = items.append({'what': ('Scope is one chart: ' if scope.mode == 'chart' else 'Scope is a population: ') ~ n_scope ~ ' chart' ~ ('' if n_scope == 1 else 's'),
+                           'why': scope_text, 'hard': scope.mode != 'chart'}) %}
+  {% set _ = items.append({'what': 'Purpose of use asserted: ' ~ sel.purpose, 'why': 'recorded on every event this run writes to the audit trail', 'hard': False}) %}
+  {# Excluded by the scope => NOT a checklist item. The operator made that
+     call in step 2; the banner, the plan and the audit line carry it. #}
+  {% if withheld_total and not scope.exclude_sensitive %}
+  {% set _ = items.append({'what': withheld_total ~ ' heightened record' ~ ('' if withheld_total == 1 else 's') ~ ' stay behind',
+                           'why': 'no target has earned them; counted here, never silently dropped', 'hard': True, 'steps': True}) %}
+  {% endif %}
+  <div class="oc-items">
+    {% for g in items %}
+    <label class="oc-item{{ ' oc-hard' if g.hard }}">
+      <input type="checkbox" class="oc-ack">
+      <span><strong>{{ g.what }}</strong> — {{ g.why }}</span>
+    </label>
+    {% if g.steps %}{% include "_orch_heightened.html" %}{% endif %}
+    {% endfor %}
+  </div>
+  <p class="mono hint">{{ items|length }} line{{ '' if items|length == 1 else 's' }} to acknowledge — each box is your own mark that you read it</p>
+
+  <h3 style="margin-top:22px">The plan — every delivery, decided</h3>
+  <table class="tablewrap oc-plan">
+    <thead><tr><th>Target</th><th>Chart</th><th>Decision</th><th>Reason</th><th>Withheld</th><th>Released</th></tr></thead>
+    <tbody>{% for r in plan %}
+      <tr>
+        <td>{{ r.target.name }}</td>
+        <td>{{ r.chart.name if r.chart else 'population' }}</td>
+        <td class="{{ 'v-good' if r.decision.decision == 'allow' else 'v-warn' }}">{{ r.decision.decision }}</td>
+        <td style="font-size:12px">{{ r.decision.reason }}{% if r.decision.fix %} — <em>{{ r.decision.fix }}</em>{% endif %}</td>
+        <td class="num {{ 'v-warn' if r.decision.withheld }}">{{ r.decision.withheld.values()|sum if r.decision.withheld else '—' }}</td>
+        <td class="num {{ 'v-good' if r.decision.released }}">{{ r.decision.released.values()|sum if r.decision.released else '—' }}</td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+
+  {# Execute: every step above is decided again when the run starts, so a
+     refusal stays a refusal whatever was acknowledged. #}
+  <div class="oc-scope-actions" style="margin-top:16px">
+    {% if can_execute %}
+    <form method="post" action="/orchestration/execute">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn">Execute this exchange</button>
+    </form>
+    <span class="hint">writes the ledger, one step per delivery, and lands on the run</span>
+    {% else %}
+    <span class="hint">Executing needs <span class="mono">integration:export</span>, which this role does not hold.</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</details>
+
+{% if runs %}
+<h3 id="runs" style="margin-top:26px">Runs on this deployment</h3>
+<table class="tablewrap oc-exchanges">
+  <thead><tr><th>Run</th><th>Status</th><th>Exchange</th><th class="num">Delivered</th><th class="num">Withheld</th><th class="num">Released</th><th>Started</th></tr></thead>
+  <tbody>{% for r in runs %}
+    <tr><td><a href="/orchestration/run/{{ r.id }}">Run {{ r.id }}</a></td>
+      <td class="{{ {'complete':'v-good','partial':'v-warn','refused':'v-warn'}.get(r.status, '') }}">{{ r.status }}</td>
+      <td class="mono">{{ r.sources|join(', ') }} &rarr; {{ r.targets|join(', ') }}</td>
+      <td class="num">{{ r.moved }}</td><td class="num {{ 'v-warn' if r.withheld }}">{{ r.withheld }}</td><td class="num">{{ r.released }}</td>
+      <td class="hint">{{ r.started_at }} · {{ r.by }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% endif %}
+
+{# Hidden forms the buttons above name with form="…": a nested form is
+   dropped by every browser, so the controls live where they read and the
+   form lives here. #}
+<form method="post" action="/orchestration/consent" id="hs-consent-form" hidden>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+</form>
+<form method="post" action="/orchestration/heightened" id="oc-take-form" hidden>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+</form>
+
+
+{% endblock %}

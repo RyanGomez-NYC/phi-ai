@@ -1,31 +1,88 @@
 # Changelog
 
-## 1.1.0 — 2026-09-03
+## 1.2.0-rc1 — 2026-09-06
 
-### AI-Native Data Orchestration Designed for Compliance
+### Orchestration: wire an exchange, bound its scope, decide every delivery, run it
 
-Orchestration in 1.1 exists to hydrate the PHI AI store, and the store is
-what the AI is allowed to read. Data moves out of each EMR, through the
-categories and permissions that govern it, into one place — and retrieval
-answers from that place or refuses. The compliance boundary and the
-retrieval boundary are the same boundary.
+```text
+ WIRE ──▶ SCOPE ──▶ PREFLIGHT ──▶ RUN ──▶ LEDGER + QA
+ sources    chart /    every        decided   every step,
+ & targets  population delivery     then      then audited
+ from the   / segment  decided      performed by three
+ profiles   + exclude  once, here   or named  independent
+            heightened              as not    agents
+```
 
-- **Nine more EMR connectors** — ModMed, Altera Digital Health, Greenway
-  Health, Veradigm, Practice Fusion, TruBridge, MEDHOST, Netsmart and
-  Nextech join the six already shipped. Every profile is written from
-  that vendor's own documentation; where a vendor documents nothing on a
-  point, the profile says so and defaults conservatively. Nothing is
-  carried over from Epic.
-- **Per-vendor assertion signing** — `EMRProfile.assertion_algorithm`
-  (RS384 by default, ES384 where the vendor documents only that).
-- **Store-bound retrieval** — `GrantScope.permitted_sources` and
-  `require_provenance` are checked before the subject, so a chunk with no
-  recorded origin cannot be retrieved at all. Every serialized resource
-  carries a `Provenance` record naming the system it came from.
-- **Connector extension guide** — `docs/EXTENDING_CONNECTORS.md`.
-- **Removed from the public repository**: references to the demonstration
-  tree. The public repository is the software; the demonstration is not
-  part of it and is no longer named by it.
+- **The Orchestration screen** (`/orchestration`, Integration group,
+  `integration:view`). Three steps, disclosed as they are earned: *Wire*
+  never shuts; *Scope* opens when the exchange is saved and stays open
+  through *Preflight*, so the reader decides whether to run with the whole
+  scope on screen; a plain load opens *Wire* alone. Systems and their
+  posture come from `core/fhir/emr_profiles.py` `PROFILES`, never typed.
+  Named exchanges are kept whole (wiring, purpose, delivery, cadence,
+  scope) and loaded back without running.
+- **Scope**: one chart (a set of up to three), every patient, or a segment
+  by condition, sex, age band, payer, state, medication, living/deceased
+  and seen-since — and a run-wide switch, *leave heightened records out of
+  this run*, that outranks a consent rather than restating it. A
+  population scope under `patient_request` or `legal` collapses to the
+  chart: neither purpose names a cohort.
+- **One decision function.** `core/orchestration/decide.py`
+  `decide_delivery()` is the only place a delivery is decided — target
+  writability, purpose, and per heightened category: released only when
+  the scope does not exclude it, the purpose permits it (`treatment`,
+  `patient_request`) *and* the receiving system holds a disclosure consent
+  for that chart in that category. The preflight, the run and the ledger
+  consult it and nothing else, so they cannot disagree about a record.
+- **Disclosure consents**, keyed receiving system × chart × category
+  (`core/orchestration/consents.py`) — a release to one hospital earns
+  nothing at another, and releasing a mental-health record does not release
+  the HIV record beside it. Recorded and revoked on the preflight, each
+  landing on the audit trail (`consent.disclosure_granted` / `_revoked`);
+  every run decides again, so a revocation is honoured by the next one.
+  Categories are the platform's own `SensitiveCategory`.
+- **The way through.** "N heightened records stay behind" is true and, on
+  a population scope, a dead end; *Work these charts per-chart* finds the
+  charts in the store that actually carry a category and makes them the
+  set. Gated like the roster: naming a chart is choosing a person
+  (`patient:search`, `patient:read`).
+- **Excluded means excluded.** With the switch on, no checklist item, no
+  four-step panel, no per-chart offer; the summary reads "heightened,
+  excluded", the tile "excluded by this scope", and the audit line names
+  it. It is not silently dropped — the scope banner, the run and the trail
+  all carry the choice.
+- **The run** (`core/orchestration/run.py`, `integration:export`): one read
+  step per source, one delivery per target per chart, each decided and then
+  handed to a mover with only the records the decision allows. Tile for
+  tile as the demonstration reports it — what the store holds for the
+  scope, delivered, heightened left behind, released under consent — and
+  every zero explains itself ("this run's scope excluded heightened
+  records, so they stayed put"; "no disclosure consent covers them for
+  these targets"). Reconciliation by resource type; a ledger with every
+  step's reason; and **three QA agents** — Completeness, Integrity, Counts —
+  that answer what the tiles cannot answer about themselves (a category
+  released without a consent, a write to a read-only target, tiles that
+  disagree with the ledger). Deciding and writing are separate on purpose:
+  a deployment with no configured destination records every step as
+  *decided, not written*, with the seam named — the platform's export
+  manager takes the same line — and the writes remain the delivery
+  service's (`core.fhir.delivery`) against a configured target URL with a
+  verified identity map.
+- **State survives a restart**: selection, scope, exchanges, consents and
+  runs in `PlatformState` with SQL write-through; four tables in
+  `core/db/platform_state_schema.sql`.
+- **No scripts.** The platform serves `script-src 'none'`; the screen is
+  server-rendered end to end — ticks apply on *Save this exchange*,
+  selectors on *Confirm scope*.
+
+Not yet in the platform, and visible as such: a drag canvas for the lanes
+(checkbox lanes instead), per-source inventory and projection (needs
+source and target calls), and the section's companion screens — patient
+link set, practitioner crosswalk, permission lattice, holdings, connected-
+systems catalogue.
+
+Tests: `tests/test_orchestration_platform.py`, 23 through the FastAPI app;
+1,830+ pass across the suite.
 
 ## 1.1.0-rc1 — 2026-09-02
 

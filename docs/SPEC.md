@@ -304,6 +304,31 @@ Unchanged in principle, extended in coverage: every AI interaction, every regist
 
 ---
 
+### 6.9 Data orchestration
+
+An exchange is wired between profiled systems (§4, `core/fhir/emr_profiles.py`):
+sources it reads from, targets it delivers to, under one asserted purpose of use.
+Its scope is one chart, every patient, or a segment; a run-wide switch leaves
+heightened records (§6.1) out of the run outright. Every delivery is decided by
+one function, `core/orchestration/decide.py` `decide_delivery()`, and by nothing
+else: target writability from the profile; purpose; and, per heightened
+category, release only when the scope does not exclude it, the purpose permits
+it (`treatment`, `patient_request`), *and* the receiving system holds a
+disclosure consent for that chart in that category. A disclosure consent is
+its own record — receiving system × chart × category — distinct from the
+ambient consent gate (§6.5); a consent says *may*, the scope's exclusion says
+*not this run* and outranks it.
+
+The preflight shows the decisions; the run performs them and records a ledger,
+one step per delivery with its reason; three independent QA agents
+(Completeness, Integrity, Counts) then answer what the run's own totals cannot
+answer about themselves. Deciding and writing are separate: a deployment with
+no configured destination records each step as *decided, not written*, naming
+the seam, and the write remains the delivery service's (`core.fhir.delivery`)
+against a configured target with a verified identity map. Every step, consent
+and run lands on the audit trail (§6.8). The screen is server-rendered with no
+client script, under the same `script-src 'none'` as the rest of the interface.
+
 ## 7. Synthetic test data
 
 **The platform is developed with no access to real patient data at any point.** That makes the test corpus not a convenience but the entire evidence base behind every acceptance claim in §10. Its provenance is therefore held to the same standard as regulatory claims: every calibration figure cites a primary source or is labeled unverified, and the method is published.

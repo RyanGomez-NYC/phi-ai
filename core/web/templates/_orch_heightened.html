@@ -1,0 +1,104 @@
+{# What it actually takes to move a heightened record, step by step - and the
+   consent matrix that clears the one gate this screen can clear.
+
+   "N heightened records stay behind" is a true statement and a dead end: it
+   names a refusal without naming the way through it. Each step below is a
+   gate the run really consults; the mark says whether this session already
+   satisfies it. Step 3 is the consent, per chart, per category, per
+   receiving system - recorded here, against the triple the decision engine
+   keys on, so the next run carries what was released. #}
+{% set hs_purpose_ok = sel.purpose in ('treatment', 'patient_request') %}
+{% set hs_targets_write = plan|selectattr('decision.bound', 'ne', 'target')|list|length == plan|length %}
+{% set hs_in_scope = scope.mode == 'chart' and charts|length > 0 %}
+{% set hs_need = matrix|length %}
+{% set hs_have = matrix_on_file %}
+<details class="hs-steps">
+  <summary>What it takes to move them — {% if withheld_total %}{{ withheld_total }} record{{ '' if withheld_total == 1 else 's' }}, {% endif %}four steps</summary>
+  <div class="hs-body">
+    <p class="hint">Heightened categories are decided per chart and never on a population
+    write, so this is a per-patient path by design. Each step below is a gate the run really
+    consults; the mark says whether this session already satisfies it.</p>
+    <ol class="hs-list">
+      <li>
+        <span class="{{ 'v-good' if hs_purpose_ok else 'v-warn' }}">{{ '✓' if hs_purpose_ok else '●' }}</span>
+        <strong>Assert a purpose that permits heightened categories.</strong>
+        Only <span class="mono">treatment</span> and <span class="mono">patient_request</span>
+        do. You are asserting <span class="mono">{{ sel.purpose }}</span>{% if not hs_purpose_ok %}
+        — change it on the exchange above and save{% endif %}.
+      </li>
+      <li>
+        <span class="{{ 'v-good' if hs_targets_write else 'v-warn' }}">{{ '✓' if hs_targets_write else '●' }}</span>
+        <strong>Deliver to a target whose profile advertises create.</strong>
+        A read-only target refuses every write, heightened or not; the profile, not this
+        screen, says which types it takes.
+      </li>
+      <li>
+        <span class="{{ 'v-good' if hs_need and hs_have == hs_need else 'v-warn' }}">{{ '✓' if hs_need and hs_have == hs_need else '●' }}</span>
+        <strong>Record a disclosure consent for the chart, at the receiving system.</strong>
+        This is the gate that is actually stopping the records. A consent is per chart, per
+        category, <em>and per receiving system</em> — a release to one hospital earns nothing
+        at another, and releasing a mental-health record does not release the one beside it.
+        {% if not hs_in_scope %}A population scope names no chart, so there is nothing to
+        consent against yet — take the charts that carry these categories to the per-chart path
+        and each one appears here.
+        {% if can_choose and can_hold %}
+        <div class="oc-heightened-act" style="margin-top:6px">
+          <button type="submit" form="oc-take-form" class="btn-sm">Work these charts per-chart
+            &rarr;</button>
+        </div>
+        {% endif %}
+        {% elif hs_need == 0 %}Nothing in scope carries a heightened category, so there is
+        nothing to release.
+        {% elif hs_have == hs_need %}All {{ hs_need }} are on file — the next run carries them,
+        and preflight decides each one again when it starts.
+        {% else %}{{ hs_have }} of {{ hs_need }} on file. Record the rest below; the count above
+        drops as they cross.{% endif %}
+        {% if hs_in_scope and hs_need > 0 %}
+        <div class="hs-consents">
+          <div class="hs-consents-head">Disclosure consents — this exchange's targets, the charts
+            in scope, the categories each chart carries</div>
+          <table class="hs-consent-table">
+            <thead><tr><th>Receiving system</th><th>Chart</th><th>Category</th>
+              <th class="num">Records</th><th>On file</th></tr></thead>
+            <tbody>
+            {% for m in matrix %}
+              <tr>
+                <td>{{ m.target.name }}</td>
+                <td>{{ m.chart.name }}</td>
+                <td>{{ m.label }}</td>
+                <td class="num">{{ m.records }}</td>
+                <td>
+                  {% if m.on_file %}
+                  <span class="v-good">&#10003; on file</span>
+                  {% if can_consent %}
+                  <button type="submit" form="hs-consent-form" name="revoke" value="{{ m.key }}"
+                          class="btn-sm hs-revoke">Revoke</button>
+                  {% endif %}
+                  {% elif can_consent %}
+                  <button type="submit" form="hs-consent-form" name="grant" value="{{ m.key }}"
+                          class="btn-sm">Record consent</button>
+                  {% else %}
+                  <span class="hint">needs <span class="mono">roi:create</span></span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          <p class="hint">Recording one is an authorisation, and it lands on the audit trail as
+            <span class="mono">consent.disclosure_granted</span> under your name. Revoking it is
+            honoured by the next run: every step is decided again when a run starts.</p>
+        </div>
+        {% endif %}
+      </li>
+      <li>
+        <span class="{{ 'v-good' if hs_in_scope else 'v-warn' }}">{{ '✓' if hs_in_scope else '●' }}</span>
+        <strong>Re-run with that chart in scope.</strong>
+        {% if hs_in_scope %}Done — {{ charts|length }} chart{{ ' is' if charts|length == 1 else 's are' }}
+        in scope, so this step is satisfied; step 3 is what remains.{% else %}Put the
+        patient in context or add them to the chosen set, then execute.{% endif %} The heightened
+        records cross on the next run, for the categories a consent covers, and no others.
+      </li>
+    </ol>
+  </div>
+</details>

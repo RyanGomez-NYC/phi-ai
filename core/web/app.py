@@ -1962,6 +1962,8 @@ def create_app(
 
     app.state.platform_state = platform_state or PlatformState()
     platform_routes.register(app, page, require, current_identity, record, reader)
+    from core.web import orchestration_routes
+    orchestration_routes.register(app, page, require, current_identity, record, reader)
 
     #
     # Registered LAST, and only when this deployment enabled them, so a

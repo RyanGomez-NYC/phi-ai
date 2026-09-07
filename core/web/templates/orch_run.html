@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id }} — Orchestration{% endblock %}
+{% block body %}
+{# The run, tile for tile as the demonstration reports it: what the store
+   holds for the scope, what was delivered, what was withheld as heightened,
+   what was released - and every zero explains itself. A run whose steps
+   were decided but not written says so here and on every step. #}
+<p class="hint"><a href="/orchestration">&larr; Orchestration</a></p>
+<h1>Run {{ run.id }}
+  <span class="pill {{ {'complete':'v-good','partial':'v-warn','refused':'v-warn','decided':''}.get(run.status, '') }}">{{ run.status }}</span></h1>
+<p class="lede">{{ run.sources|map('string')|join(', ') }} &rarr; {{ run.targets|join(', ') }} ·
+  purpose <span class="mono">{{ run.purpose }}</span> ·
+  {{ 'a population' if run.population else (run.charts ~ ' chart' ~ ('' if run.charts == 1 else 's')) }}
+  {%- if run.scope_excluded %} · <strong>heightened records excluded by the scope</strong>{% endif %} ·
+  started {{ run.started_at }} by {{ run.by }}</p>
+
+{% if run.status == 'decided' %}
+<div class="flash">Every step of this run was <strong>decided, not written</strong>: no delivery
+destination is configured for its target{{ '' if run.targets|length == 1 else 's' }} on this
+deployment. The decisions are real and on the audit trail; the writes are the delivery
+service's, against a configured target URL with a verified identity map.</div>
+{% endif %}
+
+<div class="oc-inv-tiles">
+  <div class="card stat"><div class="n">{{ run.stored }}</div>
+    <div class="k">records the store holds for this scope</div>
+    <div class="hint">read into the PHI AI store — this run's destination for reads, never its scope</div></div>
+  <div class="card stat"><div class="n {{ 'v-good' if run.moved }}">{{ run.moved }}</div>
+    <div class="k">delivered</div>
+    <div class="hint">{% if run.moved %}written into {{ run.targets|length }} target{{ '' if run.targets|length == 1 else 's' }}
+      {% elif run.status == 'decided' %}decided, not written — no destination configured
+      {% elif run.refused and not run.allowed %}every delivery was refused; see the ledger
+      {% else %}nothing was eligible to cross{% endif %}</div></div>
+  <div class="card stat{{ ' oc-inv-sens' if run.skipped_heightened }}">
+    <div class="n {{ 'v-warn' if run.skipped_heightened }}">{{ '—' if run.population else run.skipped_heightened }}</div>
+    <div class="k">heightened, left behind</div>
+    <div class="hint">
+      {%- if run.population -%}
+      a population write never carries them; each is decided per chart
+      {%- elif run.skipped_heightened == 0 and run.released > 0 -%}
+      every heightened record in scope crossed under a recorded disclosure consent
+      {%- elif run.skipped_heightened == 0 and run.scope_heightened > 0 -%}
+      the scope's {{ run.scope_heightened }} heightened record{{ '' if run.scope_heightened == 1 else 's' }} had already crossed on an earlier run
+      {%- elif run.skipped_heightened == 0 -%}
+      nothing in scope carried a heightened category
+      {%- elif run.scope_excluded -%}
+      this run's scope excluded heightened records, so they stayed put
+      {%- else -%}
+      no disclosure consent covers them for these targets{% if run.released and run.written %} — {{ run.released }} did cross under one{% elif run.released %} — {{ run.released }} {{ 'was' if run.released == 1 else 'were' }} released under one, decided and not written{% endif %}
+      {%- endif -%}
+    </div></div>
+  <div class="card stat"><div class="n {{ 'v-good' if run.released }}">{{ run.released }}</div>
+    <div class="k">released under consent</div>
+    <div class="hint">{% if run.released and run.written %}heightened records a disclosure consent covered at the receiving system{% elif run.released %}covered by a consent at the receiving system — decided, not written on this deployment{% else %}no heightened record was released{% endif %}</div></div>
+</div>
+
+<h3 style="margin-top:22px">Reconciliation — what crossed, by type</h3>
+{% if run.by_type %}
+<table class="tablewrap recon">
+  <thead><tr><th>Resource type</th><th class="num">PHI AI store</th>
+    {% for t in run.targets %}<th class="num">{{ systems[t].name if t in systems else t }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for t, row in run.by_type.items() %}
+    <tr><td>{{ t }}</td><td class="num">{{ row.stored }}</td>
+      {% for tk in run.targets %}<td class="num {{ 'v-good' if row.delivered.get(tk) }}">{{ row.delivered.get(tk, 0) if run.written else '—' }}</td>{% endfor %}</tr>
+  {% endfor %}</tbody>
+</table>
+{% if not run.written %}<p class="hint">Per-target columns show a dash: nothing was written, so there is nothing to reconcile yet.</p>{% endif %}
+{% else %}
+<p class="hint">{{ 'A population run reconciles per type once its bulk write is performed.' if run.population else 'Nothing in scope held a record to reconcile.' }}</p>
+{% endif %}
+
+<h3 style="margin-top:22px">The ledger — every step, decided</h3>
+<table class="tablewrap oc-plan">
+  <thead><tr><th>#</th><th>System</th><th>Direction</th><th>Chart</th><th>Decision</th><th>Reason</th>
+    <th class="num">Offered</th><th class="num">Moved</th><th>Note</th></tr></thead>
+  <tbody>{% for s in run.steps %}
+    <tr>
+      <td class="mono">{{ s.seq }}</td><td>{{ s.system_name }}</td><td class="mono">{{ s.direction }}</td>
+      <td>{{ s.who }}</td>
+      <td class="{{ 'v-good' if s.decision.decision == 'allow' else 'v-warn' }}">{{ s.decision.decision }}</td>
+      <td style="font-size:12px">{{ s.decision.reason }}</td>
+      <td class="num">{{ s.offered }}</td>
+      <td class="num {{ 'v-good' if s.moved }}">{{ s.moved }}</td>
+      <td class="hint" style="font-size:11.5px">{{ s.note }}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+
+<h3 style="margin-top:22px">QA agents — {{ findings|selectattr('passed')|list|length }} of {{ findings|length }} pass</h3>
+<table class="tablewrap qa">
+  <thead><tr><th>Agent</th><th>Check</th><th>Verdict</th><th>Evidence</th></tr></thead>
+  <tbody>{% for f in findings %}
+    <tr><td>{{ f.agent }}</td><td>{{ f.check }}</td>
+      <td class="{{ 'v-good' if f.passed else 'v-warn' }}">{{ 'PASS' if f.passed else 'FAIL' }}</td>
+      <td style="font-size:12px">{{ f.evidence }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+<p class="hint">Three agents, each answering one question the tiles cannot answer about themselves.
+A finding is evidence, not a verdict: it names the numbers.</p>
+{% endblock %}

@@ -1168,3 +1168,222 @@ table.pm th:first-child, table.pm td:first-child {
   position: sticky; left: 0; z-index: 1; background: #fff; }
 table.pm thead th:first-child { background: var(--wash-2); }
 .tablewrap tbody tr:nth-child(even) td:first-child { background: var(--wash); }
+
+/* ==== Orchestration (ported from the demonstration, same words, same rules) ==== */
+.oc-step { border-top: 1px solid var(--line); margin-top: 22px; }
+.oc-step[open] { padding-bottom: 6px; }
+.oc-step > .oc-step-head {
+  display: flex; align-items: baseline; gap: 10px; cursor: pointer;
+  list-style: none; padding: 14px 2px 10px;
+}
+/* Step 1 is a section, not a <details>: it never shuts, so its head is a
+   heading rather than a control - no pointer, no hover affordance, nothing
+   that invites a click that would do nothing. */
+.oc-step-head-fixed { cursor: default; }
+.oc-step-head-fixed:hover .oc-step-t { color: var(--navy); }
+.oc-step.oc-step-open { border-top: 1px solid var(--line); margin-top: 22px; padding-bottom: 6px; }
+.oc-step > .oc-step-head::-webkit-details-marker { display: none; }
+.oc-step > .oc-step-head:hover .oc-step-t { color: var(--orange-deep); }
+.oc-step > .oc-step-head:focus-visible { outline: 3px solid var(--pastel-3); outline-offset: 2px; }
+.oc-step-t {
+  font-family: var(--sans); font-size: 20px; font-weight: 600; color: var(--navy);
+  letter-spacing: -.01em;
+}
+/* The state line is the whole point of collapsing: it carries the decision
+   forward so a shut step still answers "what did I choose?". */
+.oc-step-s { font-size: 13px; color: var(--mute); margin-left: auto; text-align: right; }
+.oc-step-tick { color: var(--good); font-weight: 700; }
+.oc-step-dot  { color: var(--slate); font-size: 11px; }
+@media (max-width: 700px) {
+  .oc-step > .oc-step-head { flex-wrap: wrap; }
+  .oc-step-s { margin-left: 0; width: 100%; text-align: left; }
+}
+
+.hs-steps { margin: 8px 0 2px; }
+.hs-steps > summary {
+  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--navy);
+  padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+  background: #fff;
+}
+.hs-steps > summary::-webkit-details-marker { display: none; }
+.hs-steps > summary::before { content: "\25B8"; color: var(--mute); font-size: 10px; }
+.hs-steps[open] > summary::before { content: "\25BE"; }
+.hs-steps > summary:hover { border-color: var(--orange-deep); color: var(--orange-deep); }
+.hs-body {
+  margin-top: 8px; padding: 12px 14px; border-radius: 8px;
+  background: #fff; border: 1px solid var(--line);
+}
+.hs-list { margin: 8px 0 0; padding-left: 20px; }
+.hs-list li { margin-bottom: 9px; font-size: 12.5px; line-height: 1.6; color: var(--body); }
+.hs-list li:last-child { margin-bottom: 0; }
+/* The run-wide switch, set apart from the segment selectors above it because
+   it is not one of them: it applies to "every patient" too. */
+.oc-scope-flag {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 14px 0 2px; padding: 12px 14px;
+  border: 1px solid var(--line); border-left: 3px solid var(--orange);
+  border-radius: 6px; background: var(--wash);
+}
+.oc-scope-flag input { margin-top: 3px; flex: 0 0 auto; }
+.oc-scope-flag span { font-size: 12.5px; line-height: 1.55; color: var(--slate); }
+.oc-scope-flag strong { color: var(--navy); }
+
+/* The control that turns the heightened banner from a rule into a route.
+   It sits inside a warning panel, so it reads as the way out of it. */
+.oc-heightened-act {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px;
+  margin-top: 10px;
+}
+.oc-heightened-act .hint { margin: 0; }
+/* The consent matrix: the triple, made recordable. One block per chart, one
+   row per category, one control per receiving system - the shape of the
+   record itself, so nothing here can imply a chart-wide or vendor-wide
+   release that a consent does not actually grant. */
+.hs-consents {
+  margin: 8px 0 2px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff;
+}
+.hs-consents-head {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--mute); margin-bottom: 8px;
+}
+.hs-chart + .hs-chart { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.hs-chart-name { font-size: 12.5px; color: var(--navy); font-weight: 500; }
+.hs-cat {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 4px 14px; margin-top: 6px;
+}
+.hs-cat-label { font-size: 12px; color: var(--slate); min-width: 190px; }
+.hs-cat-targets { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.hs-grant {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--wash); font-size: 11.5px;
+}
+.hs-grant.on { border-color: var(--good); background: #f7fbf8; }
+.hs-grant-sys { color: var(--slate); }
+.hs-grant.on .hs-grant-sys::before {
+  content: "\2713\00a0"; color: var(--good); font-weight: 700;
+}
+.hs-consents-note { margin: 10px 0 0; }
+@media (max-width: 700px) {
+  .hs-cat-label { min-width: 0; }
+  .hs-cat { gap: 4px 8px; }
+}
+.hs-list strong { color: var(--navy); }
+
+/* The run-wide switch, set apart from the segment selectors above it because
+   it is not one of them: it applies to "every patient" too. */
+.oc-scope-flag {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 14px 0 2px; padding: 12px 14px;
+  border: 1px solid var(--line); border-left: 3px solid var(--orange);
+  border-radius: 6px; background: var(--wash);
+}
+.oc-scope-flag input { margin-top: 3px; flex: 0 0 auto; }
+.oc-scope-flag span { font-size: 12.5px; line-height: 1.55; color: var(--slate); }
+.oc-scope-flag strong { color: var(--navy); }
+/* The control that turns the heightened banner from a rule into a route.
+   It sits inside a warning panel, so it reads as the way out of it. */
+.oc-heightened-act {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px;
+  margin-top: 10px;
+}
+.oc-heightened-act .hint { margin: 0; }
+/* (block not found: /* The consent matrix: the triple, made ) */
+
+/* ---- Orchestration, continued: lanes, cards, tiles, checklist (ported) ---- */
+.pillar .p-head { font-weight: 600; font-size: 15px; color: var(--navy);
+  border-top: 2px solid var(--orange); padding-top: 12px; }
+.pillar p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.65; color: var(--body); }
+.pillar .p-head { border-top-color: var(--orange); }
+.btn-sm { display: inline-flex; align-items: center; min-height: 30px;
+  padding: 4px 12px; border: 1px solid var(--line-strong); border-radius: 6px;
+  font-size: 12px; color: var(--navy); background: #fff; text-decoration: none; }
+.btn-sm:hover { border-color: var(--orange); color: var(--orange); }
+.oc-chip { font: 400 10.5px/1.5 var(--mono); padding: 1px 7px; border-radius: 999px;
+  background: var(--wash-2); color: var(--slate); }
+.oc-chip.good { background: var(--good-bg); color: var(--good); }
+.oc-chip.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.oc-item { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start;
+  border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: #fff; }
+.oc-item.oc-done { border-color: var(--good-line); background: var(--good-bg); }
+.oc-item.oc-hard { border-color: var(--warn-bg); background: var(--warn-bg); }
+.oc-item input[type=checkbox] { width: 17px; height: 17px; margin-top: 1px; accent-color: var(--navy); }
+.oc-item-body { font-size: 13px; line-height: 1.45; }
+.oc-item-what { font-weight: 600; }
+.oc-item-why { color: var(--slate); }
+.oc-save .field { min-width: 240px; }
+.oc-save-btn { white-space: nowrap; }
+.oc-wired-col { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--wash); }
+.oc-wired-source { border-top: 3px solid var(--navy); }
+.oc-wired-target { border-top: 3px solid var(--orange); }
+.oc-wired-head { font: 600 10.5px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--mute); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.oc-wired-n { background: var(--wash-3); color: var(--body); border-radius: 999px;
+  padding: 1px 8px; font-size: 11px; letter-spacing: 0; }
+.oc-wired-card { background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; }
+.oc-wired-card:last-child { margin-bottom: 0; }
+.oc-wired-name { font-weight: 600; font-size: 13.5px; }
+.oc-wired-kv { display: grid; grid-template-columns: 46px 1fr; gap: 2px 10px; margin: 6px 0 0; font-size: 12px; }
+.oc-wired-kv dt { font-family: var(--mono); font-size: 10.5px; color: var(--mute); padding-top: 2px; }
+.oc-wired-kv dd { margin: 0; color: var(--body); }
+.oc-wired-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.oc-wired-cfg { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 600; }
+@media (max-width: 760px) { .oc-wired { grid-template-columns: 1fr; } }
+.oc-item-mark { font-size: 13px; line-height: 1.5; color: var(--warn-fg); text-align: center; }
+.oc-mode { display: block; border: 1px solid var(--line-strong); border-radius: 9px;
+  padding: 10px 12px; background: #fff; cursor: pointer; }
+.oc-mode.on { border-color: var(--navy); background: var(--wash-2); box-shadow: inset 0 0 0 1px var(--navy); }
+.oc-mode.oc-mode-off { opacity: .5; cursor: not-allowed; }
+.oc-mode input { margin-right: 7px; accent-color: var(--navy); }
+.oc-mode-name { font-weight: 600; font-size: 13.5px; }
+.oc-mode-why { display: block; font-size: 11.5px; color: var(--mute); margin-top: 3px; margin-left: 24px; }
+.oc-selectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 14px; margin-top: 12px; padding: 12px 14px; background: var(--wash);
+  border: 1px solid var(--line); border-radius: 9px; }
+.oc-selectors .field { margin: 0; }
+.orch-lede {
+  /* No max-width: everything else on this page runs the full column, and a
+     68ch measure left the lede stopping halfway across for no reason. */
+  margin: 6px 0 0;
+  font-size: 17px; line-height: 1.55; color: var(--body);
+}
+.oc-inv-tiles { margin: 12px 0 14px; }
+.oc-inv-tiles .card.stat .n { font-size: 26px; }
+.oc-inv-tiles .card.stat.oc-inv-sens { border-color: var(--amber, #B4761E); }
+.oc-exchanges tr.oc-ex-current td { background: rgba(0,0,0,.03); }
+.oc-ex-head { margin-top: 30px; }
+.oc-ex-eyebrow {
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 2px;
+}
+.oc-ex-title {
+  margin: 0; color: var(--orange); line-height: 1.15;
+  font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -.01em;
+  text-wrap: balance;
+}
+.oc-save .field input[type="text"] { width: 100%; }
+
+/* The lanes as the platform draws them: two columns of tickable systems,
+   each row a posture card. The demonstration renders its lanes with a drag
+   canvas (orchestration.js); the platform's are plain form controls with
+   the same auto-apply, so a tick is a real POST without a script. */
+.oc-lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0 4px; }
+.oc-lane { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; }
+.oc-lane-sources { border-top: 3px solid var(--navy); }
+.oc-lane-targets { border-top: 3px solid var(--orange); }
+.oc-lane-head { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--slate); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.oc-sys { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; }
+.oc-sys:hover { background: var(--wash); }
+.oc-sys-on { border-color: var(--line); background: var(--wash); }
+.oc-sys-name { font-size: 13px; color: var(--navy); }
+.oc-scope-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.oc-set td, .oc-exchanges td { font-size: 12.5px; }
+.flash { margin: 10px 0 14px; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line);
+  border-left: 3px solid var(--good); background: #f7fbf8; font-size: 13px; }
+@media (max-width: 700px) { .oc-lanes { grid-template-columns: 1fr; } }

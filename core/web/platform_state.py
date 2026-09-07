@@ -30,6 +30,7 @@ routes that call in here.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -288,6 +289,17 @@ class PlatformState:
         self.bulk_exports: list[dict] = [dict(r) for r in _SEED_BULK_EXPORTS]
         self.stream_partitions: list[dict] = [dict(r) for r in _SEED_STREAM_PARTITIONS]
         self.stream_exports: list[dict] = [dict(r) for r in _SEED_STREAM_EXPORTS]
+        # Orchestration (core/orchestration). What an operator SET: the
+        # current wiring and scope, the exchanges saved by name, and the
+        # disclosure consents. Deployment-wide, like the EMR configuration.
+        from core.orchestration.consents import ConsentStore
+        self.orch_selection: dict = {}
+        self.orch_scope: dict = {}
+        self.orch_exchanges: list[dict] = []
+        self.orch_consents = ConsentStore()
+        self._next_exchange_id = 1
+        self.orch_runs: list[dict] = []
+        self._next_run_id = 1
         for i, m in enumerate(_BUILTIN_MODELS, 1):
             row = dict(m)
             row.update(id=i, status="enabled", builtin=True,
@@ -454,6 +466,122 @@ class PlatformState:
 
     # ---- SQL mirror --------------------------------------------------
 
+    # ---- orchestration ---------------------------------------------
+
+    def orch_selection_get(self) -> dict:
+        with self._lock:
+            return dict(self.orch_selection)
+
+    def orch_selection_set(self, value: dict) -> None:
+        with self._lock:
+            self.orch_selection = dict(value)
+            self._persist("INSERT INTO platform_orchestration (key, value) VALUES (%s, %s) "
+                          "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                          ("selection", json.dumps(self.orch_selection)))
+
+    def orch_scope_get(self) -> dict:
+        with self._lock:
+            return dict(self.orch_scope)
+
+    def orch_scope_set(self, value: dict) -> None:
+        with self._lock:
+            self.orch_scope = dict(value)
+            self._persist("INSERT INTO platform_orchestration (key, value) VALUES (%s, %s) "
+                          "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                          ("scope", json.dumps(self.orch_scope)))
+
+    def orch_exchange_list(self) -> list[dict]:
+        with self._lock:
+            return [dict(x) for x in self.orch_exchanges]
+
+    def orch_exchange_get(self, exchange_id: int) -> Optional[dict]:
+        with self._lock:
+            for x in self.orch_exchanges:
+                if x["id"] == exchange_id:
+                    return dict(x)
+            return None
+
+    def orch_exchange_save(self, name: str, value: dict, *, by: str, at: str) -> dict:
+        """Save by name: a second save under the same name replaces the first,
+        which is what "keep this exchange" means to the person saving it."""
+        with self._lock:
+            row = {"id": None, "name": name, "value": dict(value), "saved_by": by, "saved_at": at}
+            for x in self.orch_exchanges:
+                if x["name"] == name:
+                    row["id"] = x["id"]
+                    x.update(row)
+                    break
+            else:
+                row["id"] = self._next_exchange_id
+                self._next_exchange_id += 1
+                self.orch_exchanges.append(row)
+            self._persist("INSERT INTO platform_exchanges (id, name, value, saved_by, saved_at) "
+                          "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO UPDATE SET "
+                          "name = EXCLUDED.name, value = EXCLUDED.value, "
+                          "saved_by = EXCLUDED.saved_by, saved_at = EXCLUDED.saved_at",
+                          (row["id"], name, json.dumps(row["value"]), by, at))
+            return dict(row)
+
+    def orch_exchange_delete(self, exchange_id: int) -> bool:
+        with self._lock:
+            before = len(self.orch_exchanges)
+            self.orch_exchanges = [x for x in self.orch_exchanges if x["id"] != exchange_id]
+            if len(self.orch_exchanges) == before:
+                return False
+            self._persist("DELETE FROM platform_exchanges WHERE id = %s", (exchange_id,))
+            return True
+
+    def orch_consent_grant(self, system: str, patient: str, category: str, purpose: str,
+                           *, by: str, at: str):
+        with self._lock:
+            c = self.orch_consents.grant(system, patient, category, purpose, by=by, at=at)
+            self._persist("INSERT INTO platform_consents (consent_key, system, patient_id, "
+                          "category, purpose, granted_by, granted_at) VALUES "
+                          "(%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (consent_key) DO UPDATE SET "
+                          "purpose = EXCLUDED.purpose, granted_by = EXCLUDED.granted_by, "
+                          "granted_at = EXCLUDED.granted_at",
+                          (c.key, system, patient, category, purpose, by, at))
+            return c
+
+    def orch_consent_revoke(self, system: str, patient: str, category: str) -> bool:
+        with self._lock:
+            from core.orchestration.consents import consent_key
+            gone = self.orch_consents.revoke(system, patient, category)
+            if gone:
+                self._persist("DELETE FROM platform_consents WHERE consent_key = %s",
+                              (consent_key(system, patient, category),))
+            return gone
+
+    def orch_run_next_id(self) -> int:
+        with self._lock:
+            n = self._next_run_id
+            self._next_run_id += 1
+            return n
+
+    def orch_run_add(self, value: dict) -> dict:
+        """The run, whole, as JSON: the ledger is the record, and a record
+        that survives a restart is what makes a ledger worth the name."""
+        with self._lock:
+            row = {"id": int(value["id"]), "started_at": str(value.get("started_at", "")),
+                   "value": dict(value)}
+            self.orch_runs = [r for r in self.orch_runs if r["id"] != row["id"]] + [row]
+            self._next_run_id = max(self._next_run_id, row["id"] + 1)
+            self._persist("INSERT INTO platform_orch_runs (id, started_at, value) VALUES (%s, %s, %s) "
+                          "ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value",
+                          (row["id"], row["started_at"], json.dumps(row["value"])))
+            return dict(row)
+
+    def orch_run_get(self, run_id: int) -> Optional[dict]:
+        with self._lock:
+            for r in self.orch_runs:
+                if r["id"] == run_id:
+                    return dict(r["value"])
+            return None
+
+    def orch_run_list(self) -> list[dict]:
+        with self._lock:
+            return [dict(r["value"]) for r in sorted(self.orch_runs, key=lambda r: r["id"], reverse=True)]
+
     def _persist(self, sql: str, params: tuple) -> None:
         if self._connect is None:
             return
@@ -471,6 +599,13 @@ class PlatformState:
         except Exception as exc:  # write-through is best-effort
             log.warning("platform state persist failed (in-memory state "
                         "unaffected): %s", exc)
+
+    def _load_orchestration(self, cur) -> None:
+        try:
+            _load_orchestration_rows(self, cur)
+        except Exception as exc:  # degraded, never fatal
+            log.warning("orchestration state DB load failed (empty orchestration "
+                        "state in use): %s", exc)
 
     def _load_sql(self) -> None:
         conn = self._connect()
@@ -495,11 +630,51 @@ class PlatformState:
                         "note": "", "registered_by": row[10],
                         "registered_at": ""})
                     self._next_model_id = max(self._next_model_id, row[0] + 1)
+                self._load_orchestration(cur)
             finally:
                 cur.close()
             conn.commit()
         finally:
             conn.close()
+
+
+def _load_orchestration_rows(state: "PlatformState", cur) -> None:
+    """Orchestration state, read back the way it was written. Kept apart from
+    the models load so a missing table here degrades to empty orchestration
+    state rather than to no platform state at all."""
+    from core.orchestration.consents import Consent, ConsentStore
+    cur.execute("SELECT key, value FROM platform_orchestration")
+    for key, value in cur.fetchall():
+        try:
+            parsed = json.loads(value or "{}")
+        except ValueError:
+            continue
+        if key == "selection":
+            state.orch_selection = parsed
+        elif key == "scope":
+            state.orch_scope = parsed
+    cur.execute("SELECT id, name, value, saved_by, saved_at FROM platform_exchanges ORDER BY id")
+    for row in cur.fetchall():
+        try:
+            value = json.loads(row[2] or "{}")
+        except ValueError:
+            value = {}
+        state.orch_exchanges.append({"id": row[0], "name": row[1], "value": value,
+                                     "saved_by": row[3], "saved_at": row[4]})
+        state._next_exchange_id = max(state._next_exchange_id, row[0] + 1)
+    cur.execute("SELECT id, started_at, value FROM platform_orch_runs ORDER BY id")
+    for row in cur.fetchall():
+        try:
+            value = json.loads(row[2] or "{}")
+        except ValueError:
+            continue
+        state.orch_runs.append({"id": row[0], "started_at": row[1], "value": value})
+        state._next_run_id = max(state._next_run_id, row[0] + 1)
+    cur.execute("SELECT system, patient_id, category, purpose, granted_by, granted_at "
+                "FROM platform_consents")
+    state.orch_consents = ConsentStore(
+        Consent(str(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), str(r[5]))
+        for r in cur.fetchall())
 
 
 def _schema_path() -> str:
