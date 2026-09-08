@@ -13,6 +13,10 @@
    that a cross-origin attacker cannot READ this document, and every
    state-changing form must echo it back. #}
 <meta name="csrf-token" content="{{ csrf_token }}">
+{# A page may add to the head - the Components screen puts a meta refresh
+   here while an update job is open, which is how progress renders with
+   no script. #}
+{% block head %}{% endblock %}
 </head>
 <body class="{{ 'embedded' if embedded }}">
 <header class="site-head">
@@ -133,6 +137,16 @@
     </form>
   </div>
   {% endif %}
+
+{# The maintenance banner: one line on every page while an update job is
+   open on the Components screen (core/web/components_routes.py). Plain
+   markup, no script; it disappears when the job is finished or rolled
+   back. #}
+{% if maintenance %}
+<div class="maintenance" role="status">An update of <strong>{{ maintenance.component }}</strong> is in progress,
+  step {{ maintenance.step }} of {{ maintenance.of }} ({{ maintenance.step_name }}) &mdash; finish or roll back on
+  <a href="{{ maintenance.href }}">the Components screen</a>.</div>
+{% endif %}
 
 <div class="page">
   <main class="{{ 'fullbleed' if fullbleed }}">

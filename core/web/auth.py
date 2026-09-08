@@ -200,6 +200,15 @@ PERMISSIONS[Role.DISPOSITION] = PERMISSIONS[Role.DISPOSITION] | {"report:read", 
 PERMISSIONS[Role.ADMIN] = PERMISSIONS[Role.ADMIN] | {"assistant:ops"}
 PERMISSIONS[Role.AUDITOR] = PERMISSIONS[Role.AUDITOR] | {"assistant:ops"}
 
+# Applying an update from the Components screen (core/web/
+# components_routes.py). Reading that screen is `system:admin`; applying -
+# starting a job, confirming its plan, recording its steps, rolling it
+# back, recording a restore rehearsal - is this second permission, checked
+# ON TOP of the read at every apply route, so a deployment can let someone
+# read the screen without letting them apply. Held by admin and grantable
+# separately; the System Administrator's wildcard covers it like the rest.
+PERMISSIONS[Role.ADMIN] = PERMISSIONS[Role.ADMIN] | {"system:update"}
+
 # Reading clinical content requires a stated reason, recorded in the
 # audit entry. Mirrors the DenyReadWithoutPurposeOfUse IAM condition on
 # the restore role - the same rule, enforced at the layer where a human

@@ -1,0 +1,189 @@
+{
+  "files": [
+    {
+      "bytes": 1024,
+      "kind": "fonts README",
+      "license": "SIL Open Font License 1.1",
+      "path": "core/web/static/fonts/README.md",
+      "sha256": "b036e6e56763b6b47f17703d8dab0602b69c3602223a9881296b9692f967f77f",
+      "upstream": [
+        "https://fonts.google.com/specimen/Cormorant+Garamond",
+        "https://fonts.google.com/specimen/Lora"
+      ],
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 33740,
+      "family": "Cormorant Garamond",
+      "kind": "font",
+      "path": "core/web/static/fonts/cormorant-garamond-latin-ext.woff2",
+      "sha256": "9dc38267bdee93a653200ef3c1e8060e3f1399073432c415c683b419d3b50464",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 37776,
+      "family": "Cormorant Garamond",
+      "kind": "font",
+      "path": "core/web/static/fonts/cormorant-garamond-latin.woff2",
+      "sha256": "5d618c462b7a5b74f442e1548880086af71764d9cc7d35c16ab45353da934621",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 37704,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-400-italic-latin-ext.woff2",
+      "sha256": "fcb8651977c3d752e94b6ba78ffa1bcfedc844a3568c73152dd542b93f6c63c4",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 25180,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-400-italic-latin.woff2",
+      "sha256": "351ea309178c21f5ce92cd04c36212ddb635077b87221dce11253e7c45ef8a5f",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 85272,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-400-latin-ext.woff2",
+      "sha256": "a28eb6d3ccb534ae0c94ca999371df024aab60b08c3c8a5720ee9e32fa0faaa2",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 48432,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-400-latin.woff2",
+      "sha256": "c940764593d0fe5d596be327ca7558855e018039fb78509aa21921fd3644c3e4",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 85272,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-500-latin-ext.woff2",
+      "sha256": "a28eb6d3ccb534ae0c94ca999371df024aab60b08c3c8a5720ee9e32fa0faaa2",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 48432,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-500-latin.woff2",
+      "sha256": "c940764593d0fe5d596be327ca7558855e018039fb78509aa21921fd3644c3e4",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 85272,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-600-latin-ext.woff2",
+      "sha256": "a28eb6d3ccb534ae0c94ca999371df024aab60b08c3c8a5720ee9e32fa0faaa2",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 48432,
+      "family": "Inter",
+      "kind": "font",
+      "path": "core/web/static/fonts/inter-600-latin.woff2",
+      "sha256": "c940764593d0fe5d596be327ca7558855e018039fb78509aa21921fd3644c3e4",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 12536,
+      "family": "Lora",
+      "kind": "font",
+      "path": "core/web/static/fonts/lora-italic-latin-ext.woff2",
+      "sha256": "a0f32d00d843cb108c3b6a3bdfd17d52c8f150c4adff4578b97761fb73d79286",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 22740,
+      "family": "Lora",
+      "kind": "font",
+      "path": "core/web/static/fonts/lora-italic-latin.woff2",
+      "sha256": "e93da94dec22f905fdb1f79589eb50200922d3b18f191514ca3312ffbe4ff6f0",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 20176,
+      "family": "Lora",
+      "kind": "font",
+      "path": "core/web/static/fonts/lora-latin-ext.woff2",
+      "sha256": "55606fbc76dc232c5beb8ef584d7b4f7f76e31a9f27877112e75484356462781",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 37792,
+      "family": "Lora",
+      "kind": "font",
+      "path": "core/web/static/fonts/lora-latin.woff2",
+      "sha256": "6b102ab35aa1f2b315788bb4853434ed1e52137603bf7a3da71a682276748d45",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 10052,
+      "family": "Plex Mono",
+      "kind": "font",
+      "path": "core/web/static/fonts/plex-mono-400-latin.woff2",
+      "sha256": "c36f509c0a8f9f85f29cb44bc8701d8a9e0b14c499e77a884f789ead7093a7ac",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 10060,
+      "family": "Plex Mono",
+      "kind": "font",
+      "path": "core/web/static/fonts/plex-mono-500-latin.woff2",
+      "sha256": "a76f53ca6612e7b3828eec2311098675b7f9849ae4169a8bcef6302aec02a6c0",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 40240,
+      "family": "Plex Sans",
+      "kind": "font",
+      "path": "core/web/static/fonts/plex-sans-var-latin.woff2",
+      "sha256": "056e4e2459f57a0033c8c9c844ff19d6e42ac8602027803d4345823bcc939818",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 15564,
+      "family": "Plex Serif",
+      "kind": "font",
+      "path": "core/web/static/fonts/plex-serif-300-latin.woff2",
+      "sha256": "cbd12a0193c4dc74d6702d0c859c0ccd551b72eea9e711bc19763d7bab2bae8d",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    },
+    {
+      "bytes": 14916,
+      "family": "Plex Serif",
+      "kind": "font",
+      "path": "core/web/static/fonts/plex-serif-400-latin.woff2",
+      "sha256": "9fbb32c4c07037bc1e9107ee9cbf3a84662449cb36511138d5adb80e195b9302",
+      "version": "unrecorded",
+      "version_source": "core/web/static/fonts/README.md records the upstream, no version"
+    }
+  ],
+  "generated_by": "scripts/components.py vendored"
+}

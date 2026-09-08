@@ -132,6 +132,12 @@ NAV: tuple[NavGroup, ...] = (
     NavGroup("System", (
         NavItem("controlpanel", "", "Control panel", "/system/control",
                 permissions=("system:admin",)),
+        # The third System screen (core/web/components_routes.py), last in
+        # the group. The demonstration lists Model monitoring between the
+        # two; it has no platform route yet, and an entry with no route is
+        # a bug in this table (see above), so it joins when it exists.
+        NavItem("components", "", "Components", "/system/components",
+                permissions=("system:admin",)),
     )),
     NavGroup("Governance", (
         NavItem("preflight", "6.2", "Registry & preflight", "/preflight",

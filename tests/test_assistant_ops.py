@@ -79,6 +79,26 @@ def test_an_interaction_row_is_metrics_only():
     assert "dr.chen" in params
 
 
+def test_a_feedback_row_is_metrics_only():
+    conn = RecordingConn()
+    ok = telemetry.record_feedback(
+        lambda: conn, username="dr.chen", vote="down", turn_index=2, refused=False,
+        provider="bedrock", model="us.anthropic.claude-sonnet-5",
+    )
+    assert ok and conn.committed
+    sql, params = conn.executed[0]
+    assert "assistant_feedback" in sql
+    for forbidden in ("question", "answer", "content", "snippet", "arguments"):
+        assert forbidden not in sql.lower().split("values")[0]
+    assert "down" in params and 2 in params
+
+
+def test_a_vote_that_is_not_a_vote_is_dropped_before_the_database():
+    conn = RecordingConn()
+    assert telemetry.record_feedback(lambda: conn, username="dr.chen", vote="maybe") is False
+    assert conn.executed == []
+
+
 def test_a_telemetry_failure_never_raises():
     assert telemetry.record_interaction(lambda: RecordingConn(fail_on_execute=True),
                                         username="u") is False

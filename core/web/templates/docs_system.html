@@ -177,11 +177,19 @@ full production review, sensitive categories); <strong>Population</strong>
 (cohort builder on the live OMOP layer, no-show risk, ingest &amp; mapping QA,
 holdings, reports); <strong>Integration</strong> (source &amp; target EMR
 configuration, the bulk import manager, streaming data, and the bulk and
-streaming export managers); <strong>System</strong> (the Control panel); and
+streaming export managers); <strong>System</strong> (the Control panel and Components); and
 <strong>Governance</strong> (registry &amp; preflight, the fairness screen,
 the ambient consent gate, source attributes, EMR conformance, audit,
 retention). Feature-by-feature depth is in
 <a href="/docs/features">Feature documentation</a>.</p>
+<h3>The System group</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>Screen</th><th>Requires</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Components</td><td class="mono">system:admin</td>
+      <td>Every part of the platform that can go out of date, one row each — release and build stamps, the running image, dependency pins, runtimes, the vendored front-end, infrastructure pins, EMR vendor profiles, terminology releases, the model catalogue, the synthetic corpus, the migration ledger, key ages, operator configuration, the last green gates, backups and the releases kept — with what is running, what it was built from, the latest known, and the source of each fact. Every total opens to its rows and every row to its evidence and its five-step procedure (plan, back up, apply, verify, recover). On a deployment this screen applies updates and recovers from failed ones; the demo shows it with every component current.</td></tr>
+  </tbody>
+</table></div>
 
 <h2>6. The stores</h2>
 <p>Records live as envelope-encrypted objects — each object under its own data

@@ -68,6 +68,7 @@ services:
   # actually prevents the race (no second scheduler process exists to
   # race with) - not anything about which backend holds the watermark.
   app:
+    image: ${PHI_AI_IMAGE:-phi-ai:dev}
     build:
       context: .
       dockerfile: Dockerfile
@@ -165,6 +166,7 @@ services:
   # development against synthetic data - uncomment the ports line below
   # AND set PHI_AI_WEB_DEV_IDENTITY.
   web:
+    image: ${PHI_AI_IMAGE:-phi-ai:dev}
     build:
       context: .
       dockerfile: Dockerfile
@@ -288,6 +290,7 @@ services:
     restart: unless-stopped
 
   scheduler:
+    image: ${PHI_AI_IMAGE:-phi-ai:dev}
     build:
       context: .
       dockerfile: Dockerfile
@@ -343,6 +346,7 @@ services:
   # missing AND permanently undetectable.
   verify:
     profiles: ["verify"]
+    image: ${PHI_AI_IMAGE:-phi-ai:dev}
     build:
       context: .
       dockerfile: Dockerfile
@@ -372,6 +376,7 @@ services:
   # here and simply not start it (`docker compose up -d app scheduler`)
   # if you're not using bulk export at all.
   bulk-scheduler:
+    image: ${PHI_AI_IMAGE:-phi-ai:dev}
     build:
       context: .
       dockerfile: Dockerfile
@@ -389,4 +394,57 @@ services:
     restart: unless-stopped
     depends_on:
       - app
+  # ---------------------------------------------------------------------
+  # Updater - the ONE service that holds the docker socket (proposal §9).
+  #
+  # The web process cannot replace itself, so direct image releases run
+  # here: it watches the journal's open job (platform_updates, in the
+  # index) and, for a confirmed direct job on the Running image row, runs
+  # the five steps - verify the signed release manifest against
+  # config/release_signing.pub, record the previous digest, pull and
+  # `compose up -d` the new digest, run the healthcheck, and on failure
+  # bring the previous digest back and verify again. Guided mode is
+  # always available instead: the screen prints the same commands.
+  #
+  # OPT-IN via the `updater` compose profile, like `verify`:
+  #     docker compose --profile updater up -d
+  #
+  # WHAT IT MOUNTS, AND WHY NOTHING ELSE. The socket, read-write: that is
+  # the job. The compose file and this .env at the SAME absolute path as
+  # on the host (${PWD}), because `docker compose` inside this container
+  # hands bind-mount paths to the host's daemon, which resolves them on
+  # the host - the same reason the Epic key is mounted at its own path
+  # above. The .env is read-write because the digest pin (PHI_AI_IMAGE)
+  # is written there. A releases/ directory, read-only, is where the
+  # workstation's BUILD.json, MANIFEST.sha256 and .sig are dropped
+  # (releases/, not release/: that name collides with the RELEASE file
+  # on a case-insensitive filesystem such as a Mac's).
+  # Nothing PHI-bearing: no config/, no key, no records, no restore
+  # output. `up` runs with --no-build: the images a release brings are
+  # pulled by digest, never built from a context this container lacks.
+  #
+  # THE RELEASE UNIT. Every service built from the Dockerfile carries
+  # image: ${PHI_AI_IMAGE:-phi-ai:dev}. With PHI_AI_IMAGE unset (development)
+  # compose builds the Dockerfile and tags it phi-ai:dev; with it pinned to
+  # a pulled digest (repo@sha256:...) the updater's `up --no-build` runs
+  # that image and nothing is built. One image, five services: the same
+  # digest moves all of them, and the previous digest rolls all of them
+  # back. What is NOT here yet: a registry and a pipeline that publish
+  # signed digests; today `scripts/components.py build --image-digest`
+  # records whatever digest the operator pushed.
+  updater:
+    profiles: ["updater"]
+    build:
+      context: .
+      dockerfile: Dockerfile.updater
+    command: ["python", "-m", "core.components.updater", "--root", "${PWD}", "--interval", "10"]
+    working_dir: ${PWD}
+    env_file:
+      - .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PWD}/docker-compose.yml:${PWD}/docker-compose.yml:ro
+      - ${PWD}/.env:${PWD}/.env
+      - ${PWD}/releases:${PWD}/releases:ro
+    restart: unless-stopped
 # Made by Ryan Gomez & Co. Inc.

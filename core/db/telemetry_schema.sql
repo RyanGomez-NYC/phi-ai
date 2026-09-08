@@ -63,4 +63,25 @@ CREATE INDEX IF NOT EXISTS idx_aiops_interactions_ts
     ON aiops.assistant_interactions (ts);
 CREATE INDEX IF NOT EXISTS idx_aiops_interactions_kind_ts
     ON aiops.assistant_interactions (kind, ts);
+
+-- One row per thumb a user puts on an answer: which way, which turn of
+-- their conversation, and whether that answer was a refusal. Same
+-- posture as the interactions table - metrics only, INSERT-only, the one
+-- identifying column is the username. The direct quality signal every
+-- other number on the ops page is read against.
+CREATE TABLE IF NOT EXISTS aiops.assistant_feedback (
+    id              BIGSERIAL   PRIMARY KEY,
+    ts              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    username        TEXT        NOT NULL,
+    vote            TEXT        NOT NULL
+                    CONSTRAINT ck_aiops_vote CHECK (vote IN ('up', 'down')),
+    turn_index      INTEGER,              -- position in the conversation
+    refused         BOOLEAN     NOT NULL DEFAULT false,
+    page_key        TEXT,
+    provider        TEXT,
+    model           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_aiops_feedback_ts
+    ON aiops.assistant_feedback (ts);
 -- Made by Ryan Gomez & Co. Inc.

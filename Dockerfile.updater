@@ -1,0 +1,30 @@
+# The updater service (core/components/updater.py): the one container that
+# holds the docker socket, so it needs the docker CLI and the compose
+# plugin beside the platform's own code. Both are static Go binaries,
+# copied from Docker's official CLI image rather than installed from an
+# apt repository whose key and version this file would have to pin.
+#
+# Nothing PHI-bearing is built in: no config/, no key, no records. The
+# service reaches the journal through the same .env the other services
+# use (see docker-compose.yml, service `updater`).
+FROM docker:cli AS dockercli
+
+FROM python:3.12-slim
+
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
+
+WORKDIR /app
+
+COPY requirements.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+
+COPY core/ core/
+COPY RELEASE VENDORED.json BUILD.json* ./
+
+# Runs as root on purpose: the docker socket is root-equivalent on the
+# host, and a non-root user handed the socket is no safer - only harder
+# to reason about. This is the reason the updater is a separate, small
+# service and not the web process (proposal §9).
+CMD ["python", "-m", "core.components.updater", "--root", "/app"]
+# Made by Ryan Gomez & Co. Inc.

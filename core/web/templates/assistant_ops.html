@@ -24,6 +24,10 @@ this page never shows content. Running: {{ model_description }}</p>
   <div class="card stat"><div class="n">{{ t.p95_latency_ms | round | int if t.p95_latency_ms else '—' }}<span class="muted">ms</span></div><div class="k">p95 latency</div></div>
   <div class="card stat"><div class="n">{{ t.refusals or 0 }}</div><div class="k">Refusals</div></div>
   <div class="card stat"><div class="n">{{ t.errors or 0 }}</div><div class="k">Errors</div></div>
+  {% if summary.feedback %}
+  <div class="card stat"><div class="n">{{ summary.feedback.up }}</div><div class="k">Marked helpful</div></div>
+  <div class="card stat"><div class="n">{{ summary.feedback.down }}</div><div class="k">Marked not helpful</div></div>
+  {% endif %}
 </div>
 
 <h2>By day</h2>

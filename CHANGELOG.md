@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.1.0 — 2026-09-08: the Components screen, the third System screen
+
+- **Components** (`/system/components`, System group, `system:admin`). Every part of the platform that can go out of date, one row each —
+  release and build stamps, the running image, dependency pins, runtimes, the vendored
+  front-end, infrastructure pins, EMR vendor profiles, terminology releases, the model
+  catalogue, the synthetic corpus, the migration ledger, key ages, operator configuration,
+  the last green gates, backups and the releases kept — with what is running, what it was
+  built from, the latest known, and the source of each fact. Five states — current, behind,
+  drifted, unknown, updating — and a fact that was never checked is amber, never green.
+  Three cards, one table per group, every total opening to its rows and every row to its
+  evidence, its five-step procedure (plan, back up, apply, verify, recover) in its mode
+  (direct, guided, record only), its recovery in one sentence, and its history. Reading is
+  `system:admin`; applying is a second permission, `system:update`. Dark, in its own `.cx`
+  scope. The screen states that it has no patient dimension.
+- **One registry, declared once.** `core/components/registry.py` is the contract — key,
+  group, kind, mode, backup unit, recovery, cadence, a reader and a procedure per component,
+  the five steps, the five states, the cadences and retention counts — and the screen
+  enumerates it; nothing about a component is typed into a template.
+- **One release source.** `RELEASE` at the repository root names the release; `__version__`
+  reads it, and the CHANGELOG's top heading, the tag, the build stamp and the colophon are
+  held to it, so a page can no longer print a release the CHANGELOG has moved past.
+- **The release unit is the image.** Every service built from the Dockerfile carries
+  `image: ${PHI_AI_IMAGE:-phi-ai:dev}`: unset, compose builds and tags for development;
+  pinned to a pulled digest, the updater's `up --no-build` runs it and the previous
+  digest rolls all five back together. The release drop is `releases/`, not `release/`,
+  which collides with the `RELEASE` file on a case-insensitive filesystem. The updater
+  was rehearsed against real Docker: a local registry, three signed releases (a bad
+  image whose healthcheck goes red and is rolled back, a good one that stays, a tampered
+  BUILD.json that fails closed before anything is touched).
+- **The migration ledger** (`schema_migrations`, `core/db/components_schema.sql`,
+  `core/components/ledger.py`): every `core/db/*.sql` listed by glob with its checksum, and
+  which of them ran, when and by whom — with a one-time backfill, after a `pg_dump` of the
+  schemas it touches, for the files that ran by hand. The journal tables beside it
+  (`platform_updates`, `platform_update_steps`, `platform_backups`, `platform_releases`,
+  `platform_component_acks`) hold each job's five steps, the backups and rehearsals per
+  store, the digests kept to roll back to, and the acknowledgements.
+
+- **System recovery has a runbook.** `runbooks/RUNBOOK_SYSTEM_RECOVERY.md`: the
+  operational-state dump under `system/backups/` and its restore, image rollback to the
+  previous digest, the migration `down` and the dump restore, the vocabulary schema
+  swap-back, config restore from `<name>.previous`, the JWKS re-publish, the restore
+  rehearsal per store on its 180-day cadence, and the verification sweep — healthcheck,
+  audit chain, routes, the component's own check — that alone earns "Recovered".
+- **Thumbs on an answer.** Every assistant answer carries 👍 / 👎; a vote is recorded against
+  the request it answers (`aiops.assistant_feedback`, granted in the three cloud bootstraps) and
+  the assistant operations page counts votes per feature beside its other usage cards.
+
+Tests: `tests/test_components.py`, `tests/test_components_web.py`, `tests/test_assistant.py`,
+`tests/test_assistant_ops.py`.
+
 ## 1.1.0 — completed 2026-09-06: the Orchestration the 1.1.0 release named, in the platform
 
 - **The EMR board** on the overview: one tile per vendor profile with the vendor's own posture —

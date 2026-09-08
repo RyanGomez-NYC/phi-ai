@@ -13,4 +13,6 @@ SELECT * FROM pgaadauth_create_principal_with_oid(
 GRANT USAGE ON SCHEMA aiops TO phi_ai_assistant_ops;
 GRANT INSERT, SELECT ON aiops.assistant_interactions TO phi_ai_assistant_ops;
 GRANT USAGE, SELECT ON SEQUENCE aiops.assistant_interactions_id_seq TO phi_ai_assistant_ops;
+GRANT INSERT, SELECT ON aiops.assistant_feedback TO phi_ai_assistant_ops;
+GRANT USAGE, SELECT ON SEQUENCE aiops.assistant_feedback_id_seq TO phi_ai_assistant_ops;
 -- Made by Ryan Gomez & Co. Inc.

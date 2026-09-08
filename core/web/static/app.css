@@ -1465,3 +1465,250 @@ html.is-busy { cursor: progress; }
   button[aria-busy="true"] { animation: none; box-shadow: 0 0 0 3px rgba(255, 89, 16, .45); }
   .busy-bar::before { animation: none; width: 100%; }
 }
+
+/* ---- maintenance banner ------------------------------------------------
+   One line on every page while an update job is open on the Components
+   screen (core/web/components_routes.py, rendered by base.html). Light,
+   like the pages it sits on: ink on the amber wash measures 14.9:1, the
+   navy link 12.4:1; the amber edge is a mark, the words carry the meaning. */
+.maintenance { padding: 9px 30px; border-top: 1px solid #ecd9b8; border-bottom: 1px solid #ecd9b8;
+  border-left: 4px solid var(--amber); background: var(--amber-bg); font-size: 12.5px; color: var(--ink); }
+.maintenance strong { color: var(--navy); font-weight: 600; }
+.maintenance a { color: var(--navy); text-decoration: underline; }
+.maintenance a:hover { color: var(--orange); }
+
+/* ═══ Components — the third System screen (core/web/components_routes.py)
+   Dark, in its own .cx scope. The palette is the System section's - the
+   demonstration's monitoring console (.mm), control panel (.cp) and
+   components screen (.cx) in the demonstration's stylesheet carry the
+   same nine --c-* values - repeated here rather than shared, so nothing
+   in this scope can reach a light screen and the fix for another dark
+   screen is another scope, not a selector list into this one.
+
+   The site's own tokens are remapped inside the scope (the block after
+   the palette), so every component built from them - .card, .tablewrap,
+   .pill, .status, .keyvalue, inputs, buttons, and whatever is added to
+   this screen later - comes out dark on its own; chasing components one
+   selector at a time loses the day the next one arrives light.
+   --navy is deliberately NOT remapped: several components use it as a
+   BACKGROUND with white text on top (.seg .on, .bar-fill, .side-item.on,
+   .emr-mark), and flipping it would put white text on a light ground.
+
+   Contrast MEASURED, not eyeballed: WCAG 2.x relative luminance over the
+   computed colours, every alpha overlay composited onto the ground it
+   sits on first (zebra rgba(219,230,245,.035) on the panel = #16273d;
+   hover rgba(255,138,61,.06) on the panel = #1d2636). Ratios, as
+   bg #0a1626 / panel #0f2036 / deep #0c1b2e / zebra #16273d / hover #1d2636:
+     text (all >= 4.5)
+       ink    #dbe6f5  14.41 / 13.01 / 13.74 / 11.96 / 12.04
+       dim    #7f93b0   5.80 /  5.24 /  5.53 /  4.82 /  4.85
+       slate  #a8b8cf   9.02 /  8.14 /  8.60 /  7.49 /  7.54
+       ok     #3ddc97  10.28 /  9.28 /  9.81 /  8.54 /  8.59
+       warn   #ffb020   9.94 /  8.97 /  9.48 /  8.25 /  8.30
+       bad    #ff6b57   6.48 /  5.85 /  6.18 /  5.38 /  5.42
+       accent #ff8a3d   7.75 /  6.99 /  7.39 /  6.43 /  6.48
+       ok on its tint (#153742) 7.17; bad on its tint (#2c293a) 5.04
+     non-text (all >= 3)
+       control edges --c-ctrl #54739c  3.73 / 3.37 / 3.56 (bg / panel / deep)
+       focus ring = accent 6.99 on the panel; state marks ok / warn / bad 5.85+
+     correction found by measuring: the demo remaps --faint to #6b7f9c, which
+       reads 4.02 on the panel and 3.69 on a zebra row - under 4.5 for the
+       .hint, .kicker, .field label and td.empty text built from it - so
+       --faint is remapped to dim (#7f93b0, 4.82 at worst) here. Hairlines
+       (--c-line #21344d, 1.30 on the panel) are decorative rules and card
+       edges, not control boundaries; every control edge carries --c-ctrl.
+
+   Every rule below is .cx-scoped. Nothing here can reach a light screen. */
+.cx { --c-bg: #0a1626; --c-panel: #0f2036; --c-line: #21344d;
+  --c-ink: #dbe6f5; --c-dim: #7f93b0; --c-ok: #3ddc97; --c-warn: #ffb020;
+  --c-bad: #ff6b57; --c-accent: #ff8a3d; --c-ctrl: #54739c;
+  background: var(--c-bg); color: var(--c-ink);
+  /* Bleeds to main's edges: .page > main pads 4px 26px 40px (14px at the
+     sides under 700px), measured in the browser - a 30px guess overlapped
+     the maintenance banner above it by 26px. */
+  margin: -4px -26px -40px; padding: 22px 26px 44px;
+  font-feature-settings: 'tnum' 1; }
+@media (max-width: 700px) { .cx { margin: -4px -14px -34px; padding: 18px 14px 36px; } }
+
+/* ── Remap the site's own tokens inside the scope ── */
+.cx {
+  --wash:        #0c1b2e;
+  --wash-2:      #0f2036;
+  --wash-3:      #0c1b2e;
+  --line:        #21344d;
+  --line-soft:   #1a2a40;
+  --line-strong: #54739c;
+  --ink:         #dbe6f5;
+  --body:        #dbe6f5;
+  --slate:       #a8b8cf;
+  --mute:        #7f93b0;
+  --faint:       #7f93b0;
+  --ghost:       #7f93b0;
+  --disabled:    #7f93b0;
+  --good:        #3ddc97;
+  --good-bg:     rgba(61,220,151,.12);
+  --good-line:   #24603f;
+  --warn-fg:     #ff6b57;
+  --warn-bg:     rgba(255,107,87,.12);
+  --amber:       #ffb020;
+  --amber-bg:    rgba(255,176,32,.12);
+}
+
+/* ── Type ── */
+.cx h1 { color: var(--c-ink); }
+.cx h2 { color: var(--c-ink); font-size: 15px; letter-spacing: .04em;
+  text-transform: uppercase; margin: 34px 0 14px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--c-line); font-family: var(--sans); font-weight: 500; }
+.cx h3 { color: var(--c-ink); font-size: 13px; margin: 24px 0 10px; }
+.cx .lede { color: var(--c-dim); max-width: 92ch; }
+.cx .lede strong, .cx .callout strong, .cx .sub strong { color: var(--c-ink); }
+.cx .sub, .cx .hint, .cx .muted, .cx .mute, .cx .quiet, .cx .kicker, .cx p { color: var(--c-dim); }
+.cx .v-mute { color: var(--c-dim); }
+.cx .v-good, .cx .intact { color: var(--c-ok); }
+.cx .v-warn { color: var(--c-bad); }
+.cx .v-amber { color: var(--c-warn); }
+.cx .v-navy { color: var(--c-ink); }
+.cx strong { color: var(--c-ink); }
+.cx .mono { color: inherit; }
+
+/* Links carry the console's accent, not the site's navy-on-white. */
+.cx a { color: var(--c-accent); }
+.cx a:hover { color: var(--c-ink); }
+.cx :focus-visible { outline-color: var(--c-accent); }
+
+/* ── Panels: card, stat, callout, status ── */
+.cx .card { background: var(--c-panel); border-color: var(--c-line); }
+.cx .card.stat .n { color: var(--c-ink); }
+.cx .card.stat .n.good { color: var(--c-ok); }
+.cx .card.stat .n.warn { color: var(--c-warn); }
+.cx .card.stat .k { color: var(--c-dim); }
+.cx .card-title { color: var(--c-ink); }
+.cx .card-body, .cx .card-kicker { color: var(--c-dim); }
+.cx .callout { background: var(--c-panel); border-left-color: var(--c-accent); color: var(--c-dim); }
+.cx .callout.warn { background: var(--c-panel); border-left-color: var(--c-warn); }
+.cx .status { background: var(--c-panel); border-color: var(--c-line); color: var(--c-dim); }
+.cx .status.ok { border-color: var(--c-line); background: var(--c-panel); }
+.cx .status.ok strong { color: var(--c-ok); }
+.cx .status.danger { border-color: var(--c-bad); background: var(--c-panel); }
+.cx .status.danger strong { color: var(--c-bad); }
+.cx .status.warn { border-color: var(--c-warn); background: var(--c-panel); }
+.cx .status.warn strong { color: var(--c-warn); }
+.cx .grid.stats { background: transparent; }
+
+/* ── Tables: the panel ground, hairlines that survive the dark ── */
+.cx .tablewrap { background: var(--c-panel); border-color: var(--c-line); }
+.cx table { color: var(--c-ink); }
+.cx thead th { background: #0c1b2e; color: var(--c-dim); border-bottom: 1px solid var(--c-line); }
+.cx tbody td { color: var(--c-ink); border-bottom-color: var(--c-line); }
+.cx tbody tr:hover td { background: rgba(255,138,61,.06); }
+.cx td .sub, .cx td .hint, .cx div.sub { color: var(--c-dim); }
+.cx td.empty, .cx .empty { color: var(--c-dim); }
+/* Zebra striping, composited: on dark the stripe lifts rather than sinks.
+   On the ROW only. The demo stripes the first cell too because its base
+   stylesheet gives that column a ground of its own; this one does not, and
+   a second layer on the first cell read dim text at 4.41:1 in the browser
+   sweep - one stripe keeps it at 4.82. */
+.cx .tablewrap tbody tr:nth-child(even) { background: rgba(219,230,245,.035); }
+
+/* ── Controls: every control edge carries --c-ctrl (>= 3:1) ── */
+.cx button, .cx .btn, .cx a.btn {
+  background: transparent; color: var(--c-ink); border-color: var(--c-ctrl); }
+.cx button:hover, .cx .btn:hover, .cx a.btn:hover {
+  background: transparent; border-color: var(--c-accent); color: var(--c-accent); }
+.cx button.bare, .cx .btn.bare, .cx a.bare { background: transparent; border-color: var(--c-ctrl); color: var(--c-ink); }
+.cx button.bare:hover, .cx .btn.bare:hover, .cx a.bare:hover { background: transparent; border-color: var(--c-accent); color: var(--c-accent); }
+.cx button.ghost { background: transparent; color: var(--c-dim); }
+.cx button[disabled], .cx .btn[disabled] { background: transparent; color: var(--c-dim); border-color: var(--c-line); }
+.cx input, .cx select, .cx textarea,
+.cx input[type=text], .cx input[type=date], .cx input[type=number], .cx input[type=password] {
+  background: #0c1b2e; color: var(--c-ink); border-color: var(--c-ctrl); }
+.cx input:focus, .cx select:focus, .cx textarea:focus { border-color: var(--c-accent); outline-color: var(--c-accent); }
+.cx input::placeholder, .cx textarea::placeholder { color: var(--c-dim); }
+.cx label, .cx .field label { color: var(--c-dim); }
+.cx input[type=checkbox], .cx input[type=radio] { accent-color: var(--c-accent); }
+.cx .seg { background: #0c1b2e; }
+.cx .seg a, .cx .seg button { color: var(--c-dim); }
+
+/* ── Pills, tags, chips ── */
+.cx .pill, .cx .tag { background: #0c1b2e; color: var(--c-dim); border: 1px solid var(--c-line); }
+.cx .pill.warn { color: var(--c-warn); border-color: var(--c-warn); }
+.cx .pill.good { color: var(--c-ok); border-color: var(--c-ok); }
+.cx .pill.amber { color: var(--c-warn); border-color: var(--c-warn); }
+.cx .chip { color: var(--c-ink); border-color: var(--c-ctrl); }
+.cx .chip.filled { background: #0c1b2e; border-color: #0c1b2e; }
+
+/* ── Key/value, code, details, model panels ── */
+.cx .keyvalue dt { color: var(--c-dim); }
+.cx .keyvalue dd { color: var(--c-ink); }
+.cx pre, .cx code { color: var(--c-ink); }
+.cx pre { background: #0c1b2e; }
+.cx .codeblock { border-color: var(--c-line); }
+.cx .codeblock .head { background: #0c1b2e; color: var(--c-dim); border-bottom-color: var(--c-line); }
+.cx details.fine > summary { color: var(--c-dim); }
+.cx details.fine > summary:hover { color: var(--c-accent); }
+.cx .model-panel, .cx .model-panel .mp-foot { background: var(--c-panel); border-color: var(--c-line); }
+.cx .model-panel .mp-head { border-bottom-color: var(--c-line); }
+.cx .model-panel .mp-foot { border-top-color: var(--c-line); }
+.cx .model-panel .mp-name { color: var(--c-ink); }
+.cx .model-panel .mp-kind, .cx .model-panel .mp-note, .cx .model-panel .mp-facts dt { color: var(--c-dim); }
+.cx .model-panel .mp-facts dd { color: var(--c-ink); }
+
+/* ── The screen's own marks ──
+   Built from the tokens above, so they carry the same measured contrast. */
+
+/* A stat card is a link to its rows - a total that opens. The hover lands
+   on the edge and the label, never on the figure. */
+.cx a.card { display: block; text-decoration: none; }
+.cx a.card:hover { border-color: var(--c-accent); }
+.cx a.card:hover .k { color: var(--c-ink); }
+/* The two lines under the cards: the manifest's age, then the job line. */
+.cx .cx-meta { margin: 10px 0 0; font-size: 12.5px; }
+.cx .cx-meta + .cx-meta { margin-top: 2px; }
+.cx .cx-meta.v-amber { color: var(--c-warn); font-family: var(--sans); font-size: 12.5px; }
+/* The behind / unknown drill-down: two rows, each the target of a card. */
+.cx .cx-drill { margin-top: 14px; }
+.cx .cx-drill td { padding: 9px 18px; font-size: 12px; }
+.cx .cx-drill .cx-drill-k { width: 190px; color: var(--c-dim); font-family: var(--mono);
+  font-size: 10px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+/* A source is a path or an address; it wraps rather than widening the table. */
+.cx .cx-src { font-size: 12px; overflow-wrap: anywhere; }
+/* The action: a control where the row can be applied, the word where not. */
+.cx .cx-action { color: var(--c-dim); font-size: 12px; white-space: nowrap; }
+.cx .cx-action form { display: inline-block; }
+.cx .cx-action button { font-size: 11.5px; padding: 5px 10px; }
+/* Detail: the evidence list, the five steps, the acknowledgement form. */
+.cx dl.cx-facts { display: grid; grid-template-columns: 150px 1fr; gap: 6px 18px;
+  margin: 0; padding: 14px 18px; background: var(--c-panel);
+  border: 1px solid var(--c-line); border-radius: 7px; }
+.cx dl.cx-facts dt { color: var(--c-dim); font-size: 12px; }
+.cx dl.cx-facts dd { margin: 0; color: var(--c-ink); font-size: 13px; overflow-wrap: anywhere; }
+.cx dl.cx-facts dd .sub { display: block; font-size: 11.5px; }
+@media (max-width: 600px) { .cx dl.cx-facts { grid-template-columns: 1fr; gap: 2px 0; }
+  .cx dl.cx-facts dd { margin-bottom: 8px; } }
+.cx ol.cx-steps { margin: 10px 0 0; padding-left: 26px; }
+.cx ol.cx-steps li { margin: 7px 0; line-height: 1.55; }
+.cx ol.cx-steps li .sub { display: block; font-size: 12px; }
+.cx ol.cx-steps li .v-good, .cx ol.cx-steps li .v-warn,
+.cx ol.cx-steps li .v-amber, .cx ol.cx-steps li .v-mute { margin-right: 6px; }
+.cx ol.cx-steps li.cx-step-current { padding: 8px 12px; margin-left: -12px;
+  border-left: 3px solid var(--c-warn); background: rgba(255,176,32,.08); border-radius: 0 6px 6px 0; }
+.cx .cx-cap { margin: 8px 0 0; }
+/* The job panel: the plan, then the step waiting, then finish or roll back. */
+.cx .cx-job { margin-top: 14px; padding: 14px 18px; background: var(--c-panel);
+  border: 1px solid var(--c-line); border-left: 3px solid var(--c-warn); border-radius: 7px; }
+.cx .cx-job-head { font-size: 12.5px; color: var(--c-dim); line-height: 1.7; }
+.cx .cx-plan { margin-top: 10px; }
+.cx .cx-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; max-width: 720px; }
+.cx .cx-form label { font-size: 12.5px; line-height: 1.6; }
+.cx .cx-form button { align-self: flex-start; }
+.cx .cx-form-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.cx .cx-form-row form { display: inline-block; }
+.cx .cx-job-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--c-line); }
+.cx pre.cx-instruction { padding: 12px 14px; border: 1px solid var(--c-line); border-radius: 6px;
+  font-size: 12px; line-height: 1.7; margin: 0; }
+.cx .cx-phrase { color: var(--c-warn); font-size: 13px; }
+.cx .cx-ack { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--c-line);
+  font-size: 12.5px; flex-direction: row; flex-wrap: wrap; align-items: center; max-width: none; }
+.cx .cx-ack span { color: var(--c-dim); }
+.cx .cx-ack input[type=text] { width: 260px; }
+.cx .cx-ack input[type=date] { width: auto; }

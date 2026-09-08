@@ -574,6 +574,24 @@ def test_asking_a_question_returns_an_answer_and_audits_it(kb):
     assert client.messages.create.__self__.calls, "the question should have been sent"
 
 
+def test_a_thumb_on_an_answer_is_recorded_and_shown(kb):
+    import re
+    http, post, _, _ = _web(kb)
+    body = post("what does the small profile mean?").text
+    assert "Was this answer helpful?" in body
+    token = re.search(r'name="csrf_token" value="([^"]+)"', body).group(1)
+
+    response = http.post("/assistant/feedback", data={"turn": "1", "vote": "up", "csrf_token": token})
+    assert response.status_code == 200
+    assert "Marked helpful" in response.text
+    assert "Was this answer helpful?" not in response.text
+
+    # A vote on a turn that does not exist changes nothing and is not an error.
+    response = http.post("/assistant/feedback", data={"turn": "9", "vote": "down", "csrf_token": token})
+    assert response.status_code == 200
+    assert "Marked helpful" in response.text and "not helpful" not in response.text
+
+
 def test_pasting_a_record_into_the_web_form_is_refused_before_it_is_sent(kb):
     _, post, audit, client = _web(kb)
     response = post('{"resourceType": "Observation", "subject": {"reference": "Patient/eAB12cd3"}}')

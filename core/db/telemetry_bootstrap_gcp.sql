@@ -12,4 +12,6 @@
 GRANT USAGE ON SCHEMA aiops TO "{OPS_IAM_USER}";
 GRANT INSERT, SELECT ON aiops.assistant_interactions TO "{OPS_IAM_USER}";
 GRANT USAGE, SELECT ON SEQUENCE aiops.assistant_interactions_id_seq TO "{OPS_IAM_USER}";
+GRANT INSERT, SELECT ON aiops.assistant_feedback TO "{OPS_IAM_USER}";
+GRANT USAGE, SELECT ON SEQUENCE aiops.assistant_feedback_id_seq TO "{OPS_IAM_USER}";
 -- Made by Ryan Gomez & Co. Inc.

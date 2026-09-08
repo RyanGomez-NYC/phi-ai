@@ -40,3 +40,15 @@ tfboot
 # Generated imaging frames. Ignored except for the deny rule, which is
 # Runtime state - caches, generated frames, uploaded audio. Ignored except
 # for the deny rule itself, which is protection and belongs in the repo.
+
+# Components screen (core/components): build products written by
+# scripts/components.py, the gate record, a deployment's release drop,
+# and the engine's copies of operator files. The signing PRIVATE key is a
+# *.key above; only config/release_signing.pub belongs in the tree.
+BUILD.json
+MANIFEST.sha256
+MANIFEST.sha256.sig
+components.manifest.json
+.gates/
+releases/
+config/*.previous

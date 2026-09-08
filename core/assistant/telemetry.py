@@ -30,6 +30,7 @@ from typing import Any, Callable, Optional
 log = logging.getLogger("phi-ai.assistant.telemetry")
 
 _TABLE = "aiops.assistant_interactions"
+_FEEDBACK_TABLE = "aiops.assistant_feedback"
 
 
 def record_interaction(
@@ -86,6 +87,57 @@ def record_interaction(
         return True
     except Exception as exc:
         log.warning("telemetry write failed (answer unaffected): %s", exc)
+        try:
+            conn.rollback()
+        except Exception:  # pragma: no cover
+            pass
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:  # pragma: no cover
+            pass
+
+
+def record_feedback(
+    connection_factory: Optional[Callable[[], Any]],
+    *,
+    username: str,
+    vote: str,
+    turn_index: Optional[int] = None,
+    refused: bool = False,
+    page_key: Optional[str] = None,
+    provider: str = "",
+    model: str = "",
+) -> bool:
+    """One thumb on one answer: 'up' or 'down', which turn of the
+    conversation, and whether that answer was a refusal - never the
+    question or the answer. The cheapest direct quality signal there
+    is, kept beside the usage rows so the ops page can put "how often
+    is it used" and "how often did the person say it helped" on one
+    screen. Fire-and-forget like record_interaction(): never raises."""
+    if connection_factory is None or vote not in ("up", "down"):
+        return False
+    try:
+        conn = connection_factory()
+    except Exception as exc:
+        log.warning("telemetry connection failed (vote dropped): %s", exc)
+        return False
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                f"INSERT INTO {_FEEDBACK_TABLE} "
+                "(username, vote, turn_index, refused, page_key, provider, model) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (username, vote, turn_index, refused, page_key, provider, model),
+            )
+            conn.commit()
+        finally:
+            cur.close()
+        return True
+    except Exception as exc:
+        log.warning("telemetry feedback write failed (vote dropped): %s", exc)
         try:
             conn.rollback()
         except Exception:  # pragma: no cover
@@ -160,8 +212,29 @@ def usage_summary(conn: Any, days: int = 30) -> dict:
         (days,),
     )
 
+    # Thumbs. Read last, and forgiven: a deployment whose telemetry schema
+    # predates the feedback table still gets its ops page, minus the votes.
+    feedback = None
+    try:
+        counts = _rows(
+            conn,
+            "SELECT vote, count(*) AS n "
+            f"FROM {_FEEDBACK_TABLE} WHERE ts >= now() - make_interval(days => %s) "
+            "GROUP BY 1",
+            (days,),
+        )
+        feedback = {"up": 0, "down": 0}
+        for row in counts:
+            feedback[row["vote"]] = int(row["n"])
+    except Exception as exc:
+        log.warning("feedback summary unavailable (run telemetry_schema.sql): %s", exc)
+        try:
+            conn.rollback()
+        except Exception:  # pragma: no cover
+            pass
+
     return {"days": days, "totals": totals, "by_day": by_day,
-            "by_role": by_role, "by_model": by_model}
+            "by_role": by_role, "by_model": by_model, "feedback": feedback}
 
 
 def drift_summary(conn: Any, runs: int = 10) -> list[dict]:

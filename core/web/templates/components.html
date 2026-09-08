@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}{% if row %}{{ row.name }} — {% endif %}Components — φ(ai){% endblock %}
+{% block head %}{% if open_job %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif %}{% endblock %}
+{% block body %}
+{# Components: the third System screen, the platform half. Same layout,
+   sections and words as the demonstration's screen; this one has the
+   forms the demonstration only names. No script anywhere on the page: job progress renders on
+   reload and on the meta refresh above while a job is open. Nothing here
+   is typed twice - the rows come from the registry, the group titles from
+   GROUPS, the steps from STEPS, the words from components_routes.py. #}
+{% macro fact(f) -%}
+{%- if f.known -%}<span class="mono" title="{{ f.source }}, checked {{ f.checked }}">{{ f.value }}</span>
+{%- else -%}<span class="v-amber" title="{{ f.source }}: never checked">{{ f.value }}</span>{%- endif -%}
+{%- endmacro %}
+{% macro source(s) -%}
+{%- if s.href %}<a href="{{ s.href }}" rel="noopener">{{ s.label }}</a>{% else %}{{ s.label }}{% endif -%}
+{%- endmacro %}
+<div class="cx">
+
+{% if refusal %}
+{# ── A refusal: the lock, a record-only row, a missing target ───────── #}
+<p><a class="btn bare" href="/system/components">&larr; Components</a></p>
+<h1>{{ refusal.title }}</h1>
+<div class="status danger" role="alert"><strong>Refused ({{ refusal.status }}).</strong> {{ refusal.detail }}</div>
+{% if open_job %}<p class="hint">The open job is on <a href="/system/components/{{ open_job.component }}">{{ open_job.component }}</a>.</p>{% endif %}
+
+{% elif row %}
+{# ── One component ──────────────────────────────────────────────────── #}
+<p><a class="btn bare" href="/system/components">&larr; Components</a></p>
+<h1>{{ row.name }}</h1>
+<p class="lede">{{ group_title }} &middot; {{ row.kind }}.{% if row.note %} {{ row.note }}{% endif %}
+  Every fact below carries its source and when it was checked; a fact never
+  checked reads unknown, never current.</p>
+{% if error %}<div class="status danger" role="alert"><strong>Refused.</strong> {{ error }}</div>{% endif %}
+
+<h2>Evidence</h2>
+<dl class="cx-facts">
+  <dt>Running</dt><dd>{{ fact(row.running) }} <span class="sub">{{ row.running.source }} &middot; checked {{ row.running.checked }}</span></dd>
+  <dt>Built</dt><dd>{{ fact(row.built) }} <span class="sub">{{ row.built.source }} &middot; checked {{ row.built.checked }}</span></dd>
+  <dt>Latest known</dt><dd>{{ fact(row.latest) }} <span class="sub">{{ source(row.latest_source) }} &middot; checked {{ row.latest.checked }}</span></dd>
+  <dt>Source</dt><dd>{{ source(row.source) }}</dd>
+  <dt>Checked</dt><dd class="{{ '' if row.checked_known else 'v-amber' }}">{{ row.checked }}</dd>
+  <dt>Cadence</dt><dd>{{ row.cadence }}</dd>
+  <dt>Mode</dt><dd><span class="pill">{{ row.mode_word }}</span></dd>
+  <dt>State</dt><dd><span class="{{ row.state_class }}">{{ row.state }}</span></dd>
+  <dt>Backup unit</dt><dd>{{ row.backup_unit }}</dd>
+  <dt>Recovery</dt><dd>{{ row.recovery }}</dd>
+</dl>
+
+<h2 id="job">The five steps</h2>
+<p class="hint">Plan, back up, apply, verify, recover — in
+{{ job.mode_word if job else row.mode_word }} mode. Each step runs, is verified
+and lands on the audit trail as <span class="mono">system.update_step</span>;
+{% if job %}this job is at step {{ job.n }} of {{ steps_total }}: {{ job.status_word }}.
+{% elif row.mode == 'record' %}this row is record only: nothing is applied here, and the steps say what is read instead.
+{% else %}no job is open on this row.{% endif %}</p>
+
+{% if job %}
+<div class="cx-job" id="job-{{ job.id }}">
+  <div class="cx-job-head"><span class="mono">{{ job.id }}</span> &middot; {{ job.name }} &rarr; <span class="mono">{{ job.target }}</span>
+    &middot; <span class="pill">{{ job.mode_word }}</span> &middot; started by {{ job.started_by }} {{ job.since }} &middot;
+    <span class="{{ 'v-amber' if job.open else 'v-good' }}">{{ job.status_word }}</span></div>
+  {% if job.status == 'planned' %}
+  <div class="cx-plan">
+    <h3>Plan</h3>
+    <dl class="cx-facts">
+      <dt>Changes</dt><dd><span class="mono">{{ row.running.value }}</span> &rarr; <span class="mono">{{ job.target }}</span> ({{ row.name }}, {{ job.mode_word }} mode)</dd>
+      <dt>Backup first</dt><dd>{{ row.backup_unit }}</dd>
+      <dt>Way back</dt><dd>{{ row.recovery }}</dd>
+      {% if step_rows %}<dt>Step 1</dt><dd>{{ step_rows[0].step.instruction or 'the updater reads the plan from evidence and shows it here' }}</dd>{% endif %}
+    </dl>
+    {% if can_update %}
+    <form method="post" action="/system/components/job/{{ job.id }}/confirm" class="cx-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="phrase">Nothing proceeds until you confirm the plan by typing the component and the target:
+        <span class="mono cx-phrase">{{ job.phrase }}</span></label>
+      <input type="text" id="phrase" name="phrase" autocomplete="off" required maxlength="200">
+      <button type="submit">Confirm the plan</button>
+    </form>
+    {% else %}<p class="hint">Confirming needs <span class="mono">system:update</span>.</p>{% endif %}
+  </div>
+  {% elif job.open and can_update and step_rows %}
+  {% set cur = step_rows[job.n - 1] %}
+  <form method="post" action="/system/components/job/{{ job.id }}/step" class="cx-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="step" value="{{ job.step }}">
+    <h3>Step {{ job.n }} of {{ steps_total }}: {{ job.step }}</h3>
+    {% if cur.step.instruction %}<pre class="cx-instruction">{{ cur.step.instruction }}</pre>{% endif %}
+    <p class="hint">{{ 'The updater performs this step' if cur.who == 'the updater' else 'You perform this step' }};
+      verified by {{ cur.step.verify }}{% if cur.step.runbook %} ({{ cur.step.runbook }}){% endif %}.</p>
+    <div class="cx-form-row">
+      <label><input type="radio" name="outcome" value="ok" checked> ok</label>
+      <label><input type="radio" name="outcome" value="failed"> failed</label>
+      {% if cur.step.verify == 'attest' %}<label><input type="checkbox" name="attested" value="1"> I attest this step was done (recorded as an attestation, distinct from a verification)</label>{% endif %}
+      {% if job.mode == 'direct' %}<label><input type="checkbox" name="mode" value="guided"> downgrade to guided: I ran this step myself</label>{% endif %}
+    </div>
+    <label for="evidence">Evidence (optional: the command output, the checksum, the count)</label>
+    <textarea id="evidence" name="evidence" rows="3" maxlength="2000"></textarea>
+    <button type="submit">Record {{ job.step }}</button>
+  </form>
+  {% endif %}
+  {% if job.open and can_update %}
+  <div class="cx-form-row cx-job-actions">
+    <form method="post" action="/system/components/job/{{ job.id }}/rollback">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="bare">Roll back</button></form>
+    <form method="post" action="/system/components/job/{{ job.id }}/finish">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="bare">Finish</button></form>
+    <span class="hint">Finish closes a job whose Verify passed; Roll back returns to the backup and runs Verify again.</span>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<ol class="cx-steps">
+  {% for s in step_rows %}
+  <li class="{{ 'cx-step-current' if s.current }}">{% if s.mark %}<span class="{{ s.mark_class }}">{{ s.mark }}</span> {% endif %}<strong>{{ s.step.name }}</strong>
+    <span class="sub">{{ s.step.instruction or ('the updater performs this step' if s.step.direct_capable else 'nothing to do here') }}
+      &middot; verified by {{ s.step.verify }}{% if s.step.runbook %} &middot; {{ s.step.runbook }}{% endif %}</span>
+    {% if s.record %}<span class="sub">{{ s.record.actor }}, {{ s.record.when }}{% if s.record.attested %} &middot; attested{% endif %}{% if s.record.evidence %} &middot; <span class="mono">{{ s.record.evidence }}</span>{% endif %}</span>{% endif %}</li>
+  {% endfor %}
+</ol>
+{% if procedure_error %}<p class="v-warn">{{ procedure_error }}</p>{% endif %}
+
+{% if not job and row.mode != 'record' %}
+<h3 id="update">{{ row.action_word }}</h3>
+{% if open_job %}
+<p class="hint">A job is open on <a href="/system/components/{{ open_job.component }}">{{ open_job_name }}</a>;
+  one at a time - the open job row is the lock.</p>
+{% elif can_update %}
+<form method="post" action="/system/components/{{ row.key }}/update" class="cx-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="target">Target: the release, version or digest to move to</label>
+  <input type="text" id="target" name="target" required maxlength="120" value="{{ row.latest.value if row.latest.known else '' }}">
+  {% if row.mode == 'direct' %}
+  <div class="cx-form-row">
+    <label><input type="radio" name="mode" value="direct" {{ 'checked' if updater_reachable else 'disabled' }}> direct: the updater performs the steps{% if not updater_reachable %} (the updater is not reachable, so guided it is){% endif %}</label>
+    <label><input type="radio" name="mode" value="guided" {{ 'checked' if not updater_reachable }}> guided: you run the steps, the screen verifies each</label>
+  </div>
+  {% else %}
+  <p class="hint">Guided: you run each step; the screen verifies what it can and records the rest as your attestation.</p>
+  {% endif %}
+  <button type="submit">{{ row.action_word }}</button>
+  <span class="hint">Nothing is touched until the plan is confirmed by a typed phrase.</span>
+</form>
+{% else %}
+<p class="hint">Applying needs <span class="mono">system:update</span> on top of <span class="mono">system:admin</span>.</p>
+{% endif %}
+{% endif %}
+
+{% if evidence.columns and evidence.rows %}
+<h2>Every row behind this reading ({{ "{:,}".format(evidence.rows | length) }})</h2>
+<div class="tablewrap"><table>
+  <thead><tr>{% for col in evidence.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+  <tbody>
+    {% for er in evidence.rows %}
+    <tr>{% for cell in er %}<td class="mono">{{ cell }}</td>{% endfor %}</tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+
+<h2>History</h2>
+<p class="hint">Applies and recoveries of this row, from the update journal. Every
+apply and every recovery lands here as it completes.</p>
+{% if history %}
+<div class="tablewrap"><table>
+  <thead><tr><th style="width:130px">When</th><th>What</th><th>Mode</th><th>Outcome</th></tr></thead>
+  <tbody>
+    {% for hx in history %}
+    <tr><td class="nowrap">{{ hx.when }}</td>
+      <td class="mono">{{ hx.what }}</td>
+      <td><span class="pill">{{ hx.mode_word }}</span></td>
+      <td><span class="{{ hx.outcome_class }}">{{ hx.outcome }}</span></td></tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+{% else %}
+<p class="sub">No apply or recovery recorded for this row.</p>
+{% endif %}
+
+<h2 id="ack">Acknowledge</h2>
+{% for a in acks %}
+<p class="sub">Kept as is until <span class="mono">{{ a.until }}</span> because {{ a.reason }} &mdash; {{ a.actor }}, {{ a.when }}.</p>
+{% endfor %}
+<form method="post" action="/system/components/{{ row.key }}/acknowledge" class="cx-ack cx-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <span>Acknowledge: keep as is until</span>
+  <input type="date" name="until" required min="{{ today }}" aria-label="until date">
+  <span>because</span>
+  <input type="text" name="reason" required maxlength="300" placeholder="reason" aria-label="reason">
+  <button type="submit" class="bare">Acknowledge</button>
+  <span class="hint">audited as <span class="mono">system.component_acknowledged</span></span>
+</form>
+
+<p><a class="btn bare" href="/system/components">&larr; Back to Components</a></p>
+
+{% else %}
+{# ── The registry ───────────────────────────────────────────────────── #}
+<h1>Components</h1>
+<p class="lede">Every part of the platform that can go out of date, one row
+each: what is running, what it was built from, the latest known, and where
+each fact came from.
+This screen applies updates and recovers from failed ones; every fact carries its source and when it was checked, and a fact never checked reads unknown, never current.</p>
+<p class="hint">This screen has no patient dimension: it is about the platform, not a chart.</p>
+{% if not journal_persistent %}
+<div class="status warn"><strong>In memory.</strong> The update journal's engine is not on this
+  deployment yet, so what this screen records - jobs, acknowledgements, rehearsals - is
+  lost with the process. The audit trail keeps every event regardless.</div>
+{% endif %}
+
+<div class="grid stats">
+  <a class="card stat" href="#cx-current">
+    <div class="n good">{{ cards.current }}</div>
+    <div class="k">current — the rows below</div></a>
+  <a class="card stat" href="#cx-behind">
+    <div class="n{{ ' warn' if cards.behind }}">{{ cards.behind }}</div>
+    <div class="k">behind or drifted</div></a>
+  <a class="card stat" href="#cx-unknown">
+    <div class="n{{ ' warn' if cards.unknown }}">{{ cards.unknown }}</div>
+    <div class="k">unknown</div></a>
+</div>
+<p class="hint cx-meta{{ ' v-amber' if manifest.amber }}">{% if manifest.text %}{{ manifest.text }}{% else %}Manifest produced {{ manifest.produced }}
+  by {{ manifest.by }} on <span class="mono">{{ manifest.host }}</span>{% if manifest.amber %} — older than {{ cadence.advisories }} days{% endif %}{% endif %}</p>
+{% if open_job %}
+<p class="hint cx-meta"><span class="v-amber">Update in flight</span> — {{ job_view.started_by }} is updating
+  <a href="/system/components/{{ job_view.component }}#job">{{ job_view.name }}</a>, step {{ job_view.n }} of {{ job_view.of if job_view.of else 5 }}
+  ({{ job_view.step }}), {{ job_view.status_word }}: finish or roll back from the row.</p>
+{% else %}
+<p class="hint cx-meta">No update in flight</p>
+{% endif %}
+
+{# The two cards that should read zero open here: the rows in that state,
+   or the word none. A total that cannot be opened is a claim. #}
+<div class="tablewrap cx-drill"><table>
+  <tbody>
+    {% for st, lab in [('behind', 'Behind or drifted'), ('unknown', 'Unknown')] %}
+    <tr id="cx-{{ st }}">
+      <td class="cx-drill-k">{{ lab }}</td>
+      <td>{% if not by_state[st] %}<span class="muted">none — no row reads {{ st }} against its source</span>{% else %}
+        {%- for r in by_state[st] %}{{ ' · ' if not loop.first }}<a href="/system/components/{{ r.key }}">{{ r.name }}</a>{% endfor %}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+
+<div id="cx-current">
+{% for g in groups %}
+<h2 id="cx-g-{{ g.key }}">{{ g.title }}</h2>
+<div class="tablewrap"><table>
+  <thead><tr>
+    <th>Component</th><th>Running</th><th>Built</th><th>Latest known</th>
+    <th>Source</th><th>Checked</th><th>State</th><th>Mode</th><th>Action</th>
+  </tr></thead>
+  <tbody>
+    {% for r in g.rows %}
+    <tr>
+      <td><a href="/system/components/{{ r.key }}">{{ r.name }}</a>
+        <div class="sub">{{ r.kind }}</div></td>
+      <td>{{ fact(r.running) }}</td>
+      <td>{{ fact(r.built) }}</td>
+      <td>{{ fact(r.latest) }}</td>
+      <td class="cx-src">{{ source(r.source) }}</td>
+      <td class="{{ 'muted' if r.checked_known else 'v-amber' }} nowrap">{{ r.checked }}</td>
+      <td><span class="{{ r.state_class }}">{{ r.state }}</span></td>
+      <td><span class="pill">{{ r.mode_word }}</span></td>
+      <td class="cx-action">
+        {% if r.mode == 'record' %}{{ r.action_word }}
+        {% elif can_update and not open_job and r.latest.known %}
+        <form method="post" action="/system/components/{{ r.key }}/update">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="target" value="{{ r.latest.value }}">
+          <button type="submit" class="bare">{{ r.action_word }}</button>
+        </form>
+        {% else %}<a href="/system/components/{{ r.key }}#update">{{ r.action_word }}</a>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    {% if not g.rows %}
+    <tr><td colspan="9" class="empty">No components in this group.</td></tr>
+    {% endif %}
+  </tbody>
+</table></div>
+{% endfor %}
+{% if not rows %}
+<p class="hint">No components declared: core/components/members.py has not registered any.</p>
+{% endif %}
+</div>
+
+{# ── Backups and releases ───────────────────────────────────────────── #}
+<h2 id="backups">Backups and releases</h2>
+<p class="hint">Each store: its last backup, where it is, its checksum, when a
+restore was last rehearsed, and the retention in force. Then the releases kept
+to roll back to. A rehearsal is due every {{ cadence.rehearsal }} days; {{ keep.images }} images
+and {{ keep.backups }} backups per store are kept.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Store</th><th>Last backup</th><th>Where</th><th>Checksum</th><th>Restore rehearsed</th><th>Retention</th></tr></thead>
+  <tbody>
+    {% for b in backups %}
+    <tr>
+      <td>{{ b.store }}</td>
+      <td class="nowrap {{ '' if b.last_known else 'v-amber' }}">{{ b.last }}</td>
+      <td class="mono cx-src">{{ b.where }}</td>
+      <td class="mono cx-src {{ '' if b.checksum_known else 'v-amber' }}">{{ b.checksum }}</td>
+      <td class="nowrap"><span class="{{ 'v-amber' if b.rehearsed_due else '' }}">{{ b.rehearsed }}</span>{% if b.rehearsed_by %} <span class="sub">by {{ b.rehearsed_by }}</span>{% endif %}
+        {% if can_update %}
+        <form method="post" action="/system/components/backups/{{ b.slug }}/rehearsed">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="bare" title="Record that a restore of this store was rehearsed today">Rehearsed today</button>
+        </form>
+        {% endif %}</td>
+      <td>{{ b.retention }}</td>
+    </tr>
+    {% endfor %}
+    {% if not backups %}
+    <tr><td colspan="6" class="empty">No stores recorded.</td></tr>
+    {% endif %}
+  </tbody>
+</table></div>
+<div class="tablewrap"><table>
+  <thead><tr><th style="width:140px">Release</th><th style="width:140px">Date</th><th>Commit</th></tr></thead>
+  <tbody>
+    {% for rel in releases %}
+    <tr>
+      <td class="mono">{{ rel.release }}</td>
+      <td class="mono">{{ rel.date }}</td>
+      <td class="mono">{{ rel.commit }}{% if rel.digest %} <span class="sub">{{ rel.digest }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    {% if not releases %}
+    <tr><td colspan="3" class="empty">No releases recorded.</td></tr>
+    {% endif %}
+  </tbody>
+</table></div>
+
+{# ── The journal ────────────────────────────────────────────────────── #}
+<h2>Update journal</h2>
+{% if open_job %}
+<p class="hint cx-cap"><span class="mono">{{ job_view.name }} &rarr; {{ job_view.target }}</span>,
+  started {{ job_view.since }} by {{ job_view.started_by }}, {{ job_view.mode_word }} mode
+  — open: {{ job_view.status_word }}.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th style="width:130px">Step</th><th>Outcome</th><th>Who</th></tr></thead>
+  <tbody>
+    {% for s in open_job.steps %}
+    <tr><td>{{ s.step }}</td>
+      <td><span class="{{ 'v-good' if s.status == 'done' else 'v-warn' }}">{{ s.outcome if s.outcome == 'not needed' else s.status }}</span></td>
+      <td>{{ s.actor }}</td></tr>
+    {% endfor %}
+    <tr><td>{{ job_view.step }}</td><td><span class="v-amber">waiting</span></td><td class="muted">step {{ job_view.n }} of 5</td></tr>
+  </tbody>
+</table></div>
+{% elif last_entry %}
+<p class="hint cx-cap"><span class="mono">{{ last_entry.name }}: {{ last_entry.what }}</span>,
+  {{ last_entry.when }}, {{ last_entry.mode_word }} mode
+  — the last update: <span class="{{ last_entry.outcome_class }}">{{ last_entry.outcome }}</span>.</p>
+{% if last_entry.steps %}
+<div class="tablewrap"><table>
+  <thead><tr><th style="width:130px">Step</th><th>Outcome</th><th>Who</th></tr></thead>
+  <tbody>
+    {% for name, outcome, who in last_entry.steps %}
+    <tr><td>{{ name }}</td>
+      <td><span class="{{ 'v-good' if outcome in ('done', 'not needed') else 'v-warn' }}">{{ outcome }}</span></td>
+      <td>{{ who or '' }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+{% else %}
+<p class="hint cx-cap">No update recorded yet; no job open; nothing waiting on anyone.</p>
+{% endif %}
+
+{# ── Recent component actions ───────────────────────────────────────── #}
+<h2>Recent component actions</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th style="width:130px">When</th><th>Actor</th><th>Action</th><th>Object</th></tr></thead>
+  <tbody>
+    {% for e in recent %}
+    <tr>
+      <td class="muted nowrap">{{ e.when }}</td>
+      <td>{{ e.actor }}</td>
+      <td class="mono">{{ e.action }}</td>
+      <td class="mono" style="font-size:11px">{{ e.object }}</td>
+    </tr>
+    {% endfor %}
+    {% if not recent %}
+    <tr><td colspan="4" class="empty">No component actions yet.</td></tr>
+    {% endif %}
+  </tbody>
+</table></div>
+<p class="hint" style="margin-top:10px">When is the audit trail's own clock, read
+relative to now. The full trail, with its dates, is on the
+<a href="/audit">Audit</a> screen.</p>
+
+{% endif %}
+
+</div><!-- /.cx -->
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

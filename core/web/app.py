@@ -638,6 +638,13 @@ def create_app(
             role_default_purpose(identity) if identity is not None else "treatment"
         )
 
+        # The maintenance banner (base.html): one line on every page while
+        # an update job is open on the Components screen. Read from the
+        # journal on each render; never raises.
+        from core.web import components_routes
+
+        maintenance = components_routes.maintenance_line(app)
+
         return TEMPLATES.TemplateResponse(
             request=request,
             name=template,
@@ -662,6 +669,7 @@ def create_app(
                 # screenshot in an incident report says which build it
                 # came from.
                 "release": __version__,
+                "maintenance": maintenance,
                 "embedded": request.query_params.get("embedded") == "1"
                 or request.session.get("embedded", False),
                 # Drives the ask-the-assistant drawer in base.html. False
@@ -1739,6 +1747,44 @@ def create_app(
             raise HTTPException(status_code=400, detail="unknown prompt action")
         return RedirectResponse("/assistant", status_code=303)
 
+    @app.post("/assistant/feedback", response_class=HTMLResponse)
+    def assistant_feedback(
+        request: Request,
+        turn: int = Form(...),
+        vote: str = Form(...),
+        identity: Identity = Depends(current_identity),
+    ):
+        """A thumb on one answer in this user's own conversation.
+
+        The turn is named by its position, never by content, and the
+        vote is the only thing recorded - up or down, which turn, and
+        whether that answer was a refusal - beside the usage telemetry
+        (core/assistant/telemetry.py, record_feedback). It is the
+        cheapest direct quality signal the assistant can collect, and
+        the one an evaluation rubric is calibrated against. Renders the
+        conversation again with the verdict shown, so the person sees it
+        was kept; a vote on a turn that is no longer there is ignored.
+        """
+        require(identity, "assistant:use")
+        rt = assistant_runtime()
+        conversation = _assistant_conversation(request, identity, rt)
+        if vote in ("up", "down") and 1 <= turn <= len(conversation.turns):
+            chosen = conversation.turns[turn - 1]
+            chosen.vote = vote
+            assistant_telemetry.record_feedback(
+                rt.ops_connection,
+                username=identity.username,
+                vote=vote,
+                turn_index=turn,
+                refused=chosen.refused,
+                provider=rt.settings.provider,
+                model=rt.settings.resolved_model,
+            )
+        return _assistant_page(
+            request, identity, conversation, error=None, note=None,
+            back=None, back_to=None, draft="",
+        )
+
     @app.get("/assistant/ops", response_class=HTMLResponse)
     def assistant_ops(
         request: Request,
@@ -1971,6 +2017,13 @@ def create_app(
 
     app.state.platform_state = platform_state or PlatformState()
     platform_routes.register(app, page, require, current_identity, record, reader)
+    # The Components screen (core/web/components_routes.py), the third
+    # System screen, registered after the control panel. Its journal is
+    # reached through app.state.components_journal; a deployment or a test
+    # may set one before the first request, else the module defaults it.
+    from core.web import components_routes
+
+    components_routes.register(app, page, require, current_identity, record, reader)
     from core.web import orchestration_routes
     orchestration_routes.register(app, page, require, current_identity, record, reader)
     from core.web import orchestration_pages

@@ -42,7 +42,11 @@ COPY scripts/ scripts/
 # config/ and .env, which stay out of the image deliberately (see
 # docker-compose.yml). Copied last so editing a runbook rebuilds one
 # small layer rather than reinstalling dependencies.
-COPY README.md .env.example ./
+# RELEASE is the one release source (core/__init__.py reads it), VENDORED.json
+# is what the Vendored front-end row verifies the served files against, and
+# BUILD.json is the stamp scripts/components.py build writes before the image
+# build (the wildcard keeps a development build without one working).
+COPY README.md .env.example RELEASE VENDORED.json BUILD.json* ./
 COPY docs/ docs/
 COPY runbooks/ runbooks/
 COPY deploy/aws/README.md deploy/aws/

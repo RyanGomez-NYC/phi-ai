@@ -76,6 +76,8 @@ class Turn:
     answer: str
     sources: list[str] = field(default_factory=list)
     refused: bool = False
+    # The user's own verdict on the answer - 'up', 'down', or not given.
+    vote: Optional[str] = None
     at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

@@ -267,6 +267,23 @@
                 {% endfor %}
               </div>
             {% endif %}
+            {# One thumb per answer. The form names the turn by position and
+               carries nothing else; the verdict is kept beside the usage
+               telemetry as the direct quality signal, and shown back here so
+               the person knows it was recorded. #}
+            <div class="vote">
+              {% if turn.vote %}
+                <span class="tag">Marked {{ 'helpful' if turn.vote == 'up' else 'not helpful' }} &mdash; recorded</span>
+              {% else %}
+                <form method="post" action="/assistant/feedback" class="vote-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="turn" value="{{ loop.index }}">
+                  <span class="hint">Was this answer helpful?</span>
+                  <button type="submit" name="vote" value="up" class="quiet small" title="Helpful" aria-label="Helpful">&#128077;</button>
+                  <button type="submit" name="vote" value="down" class="quiet small" title="Not helpful" aria-label="Not helpful">&#128078;</button>
+                </form>
+              {% endif %}
+            </div>
           </div>
         </div>
       {% else %}
