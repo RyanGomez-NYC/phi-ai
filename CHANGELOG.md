@@ -37,6 +37,9 @@
   `platform_component_acks`) hold each job's five steps, the backups and rehearsals per
   store, the digests kept to roll back to, and the acknowledgements.
 
+- **No keys in the repository.** The release verification key is not committed: the operator
+  places `config/release_signing.pub` on each host and the updater mounts that one file
+  read-only. The signing key never leaves the workstation.
 - **System recovery has a runbook.** `runbooks/RUNBOOK_SYSTEM_RECOVERY.md`: the
   operational-state dump under `system/backups/` and its restore, image rollback to the
   previous digest, the migration `down` and the dump restore, the vocabulary schema

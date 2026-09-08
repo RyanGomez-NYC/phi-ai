@@ -21,7 +21,8 @@ same steps, the screen prints the commands.
 Signing (proposal §5, §14 decision 3): the workstation signs
 MANIFEST.sha256 with an ed25519 private key that lives on the operator's
 machine only; the PUBLIC key ships in the tree at
-config/release_signing.pub, and this service refuses an unsigned or
+config/release_signing.pub (the host's copy, placed by the operator and
+never committed), and this service refuses an unsigned or
 altered release before pulling a layer.
 """
 

@@ -419,8 +419,9 @@ services:
   # workstation's BUILD.json, MANIFEST.sha256 and .sig are dropped
   # (releases/, not release/: that name collides with the RELEASE file
   # on a case-insensitive filesystem such as a Mac's).
-  # Nothing PHI-bearing: no config/, no key, no records, no restore
-  # output. `up` runs with --no-build: the images a release brings are
+  # Nothing PHI-bearing: of config/ only the release VERIFICATION key,
+  # one file, read-only - placed on the host by the operator, never in the
+  # repository; no secret key, no records, no restore output. `up` runs with --no-build: the images a release brings are
   # pulled by digest, never built from a context this container lacks.
   #
   # THE RELEASE UNIT. Every service built from the Dockerfile carries
@@ -446,5 +447,6 @@ services:
       - ${PWD}/docker-compose.yml:${PWD}/docker-compose.yml:ro
       - ${PWD}/.env:${PWD}/.env
       - ${PWD}/releases:${PWD}/releases:ro
+      - ${PWD}/config/release_signing.pub:${PWD}/config/release_signing.pub:ro
     restart: unless-stopped
 # Made by Ryan Gomez & Co. Inc.

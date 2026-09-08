@@ -44,7 +44,8 @@ tfboot
 # Components screen (core/components): build products written by
 # scripts/components.py, the gate record, a deployment's release drop,
 # and the engine's copies of operator files. The signing PRIVATE key is a
-# *.key above; only config/release_signing.pub belongs in the tree.
+# *.key above. The verification key config/release_signing.pub is placed on
+# each host by the operator and is never committed either: no keys in a repository.
 BUILD.json
 MANIFEST.sha256
 MANIFEST.sha256.sig
@@ -52,3 +53,4 @@ components.manifest.json
 .gates/
 releases/
 config/*.previous
+config/release_signing.pub

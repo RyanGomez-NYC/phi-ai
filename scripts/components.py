@@ -23,7 +23,7 @@ The workstation CLI for the Components screen (proposal §11).
     scripts/components.py keygen --out KEYFILE
         A new release-signing key pair: the PRIVATE key to KEYFILE (mode
         0600, outside the repository), the PUBLIC key to
-        config/release_signing.pub.
+        config/release_signing.pub - placed on each host by the operator, never committed.
     scripts/components.py verify [--dir DIR]
         Verify MANIFEST.sha256.sig against config/release_signing.pub.
 

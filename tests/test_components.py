@@ -1275,6 +1275,8 @@ def test_signature_round_trip_and_tamper(tmp_path):
 def test_the_trees_public_key_is_ed25519_and_no_private_key_is_in_the_tree():
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    if not (ROOT / "config" / "release_signing.pub").is_file():
+        pytest.skip("the verification key is placed on the host, not in the tree")
     pub = serialization.load_pem_public_key((ROOT / "config" / "release_signing.pub").read_bytes())
     assert isinstance(pub, Ed25519PublicKey)
     tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
@@ -1500,7 +1502,10 @@ def test_compose_puts_the_release_unit_on_every_dockerfile_service_and_the_updat
     assert u["build"]["dockerfile"] == "Dockerfile.updater"
     assert "/var/run/docker.sock:/var/run/docker.sock" in u["volumes"]
     assert not any(":ro" in v and "docker.sock" in v for v in u["volumes"]), "the socket is read-write"
-    assert not any("config" in v or "PRIVATE_KEY" in v or "restore-output" in v for v in u["volumes"])
+    config_mounts = [v for v in u["volumes"] if "config" in v]
+    assert config_mounts == ["${PWD}/config/release_signing.pub:${PWD}/config/release_signing.pub:ro"], \
+        "of config/, only the host's verification key, one file, read-only"
+    assert not any("PRIVATE_KEY" in v or "restore-output" in v or v.split(":")[0].endswith(".key") for v in u["volumes"])
     assert u["command"][:3] == ["python", "-m", "core.components.updater"]
     assert (ROOT / "Dockerfile.updater").read_text().startswith("#") and "docker-compose" in (ROOT / "Dockerfile.updater").read_text()
 
@@ -1509,11 +1514,14 @@ def test_the_image_carries_release_and_vendored_and_git_ignores_the_build_produc
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert re.search(r"^COPY .*\bRELEASE\b.*\bVENDORED\.json\b.*BUILD\.json\*", dockerfile, re.M)
     ignored = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "BUILD.json", "MANIFEST.sha256", "MANIFEST.sha256.sig",
-                              "components.manifest.json", "config/retention_ruleset.yaml.previous", "releases/x", ".gates/last_green.json"],
+                              "components.manifest.json", "config/retention_ruleset.yaml.previous", "releases/x", ".gates/last_green.json",
+                              "config/release_signing.pub"],
                              capture_output=True, text=True).stdout.split()
-    assert len(ignored) == 7, f"not every build product is ignored: {ignored}"
-    assert not subprocess.run(["git", "-C", str(ROOT), "check-ignore", "config/release_signing.pub", "RELEASE", "VENDORED.json"],
-                              capture_output=True, text=True).stdout.strip(), "the public key, RELEASE and VENDORED.json belong in the tree"
+    assert len(ignored) == 8, f"not every build product is ignored: {ignored}"
+    assert not subprocess.run(["git", "-C", str(ROOT), "check-ignore", "RELEASE", "VENDORED.json"],
+                              capture_output=True, text=True).stdout.strip(), "RELEASE and VENDORED.json belong in the tree"
+    assert "config/release_signing.pub" not in subprocess.run(["git", "-C", str(ROOT), "ls-files", "config"],
+                                                             capture_output=True, text=True).stdout, "no keys in the repository"
 
 
 def test_components_schema_declares_the_ledger_and_the_journal_tables():

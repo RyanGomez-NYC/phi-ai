@@ -423,7 +423,8 @@ def _running_image_procedure(ctx: Context) -> tuple[Step, ...]:
         ("scripts/components.py build --image-digest <repo@sha256:...> --sign <keyfile>   # on the workstation; "
          "the digest is the one the registry returned on push (docker push prints it), never docker inspect's "
          "RepoDigests; copy BUILD.json, MANIFEST.sha256 and MANIFEST.sha256.sig to <deployment>/releases/",
-         "The updater verifies MANIFEST.sha256.sig against config/release_signing.pub and that BUILD.json names "
+         "The updater verifies MANIFEST.sha256.sig against the host's config/release_signing.pub (placed by the "
+         "operator, never in the repository) and that BUILD.json names "
          "the target digest; the admin confirms by typing 'running_image <digest>'.", IMAGE_RUNBOOK),
         (f"grep '^PHI_AI_IMAGE=' {root / '.env'}   # the previous digest is the point of return; record it",
          "The journal records the previous digest from the env file; no recorded digest, no apply.", IMAGE_RUNBOOK),
