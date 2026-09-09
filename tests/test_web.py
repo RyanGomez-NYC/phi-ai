@@ -36,6 +36,10 @@ from core.web.data import PlatformStats  # noqa: E402
 class _FakeReader:
     def __init__(self):
         self.reads = []
+        #: resource types the screens asked the store for. A screen that
+        #: reads nothing may simply have found nothing; what tells the two
+        #: apart is whether it LOOKED, and for what.
+        self.sampled = []
 
     def stats(self):
         return PlatformStats(
@@ -76,6 +80,18 @@ class _FakeReader:
 
     def read_resource(self, storage_key):
         self.reads.append(storage_key)
+        if storage_key == "fhir/Condition/cond1.json":
+            return {"resourceType": "Condition", "id": "cond1",
+                    "subject": {"reference": "Patient/eAB12cd3"},
+                    "code": {"coding": [{"system": "http://snomed.info/sct",
+                                         "code": "44054006",
+                                         "display": "Type 2 diabetes"}]}}
+        if storage_key == "fhir/Encounter/enc1.json":
+            # period.start is what the demand curve buckets - NOT stored_at,
+            # which is when the ingestion job ran.
+            return {"resourceType": "Encounter", "id": "enc1",
+                    "subject": {"reference": "Patient/eAB12cd3"},
+                    "period": {"start": "2026-08-03T14:30:00+00:00"}}
         return {"resourceType": "Observation", "id": "obs1",
                 "subject": {"reference": "Patient/eAB12cd3"}}
 
@@ -86,6 +102,30 @@ class _FakeReader:
 
     def verify_audit_chain(self):
         return (True, 12, None)
+
+    def sample_resources(self, limit=400, resource_type=None):
+        self.sampled.append(resource_type)
+        """Mirrors LiveRecordReader.sample_resources: rows from across the
+        store, NOT the retention-filtered slice expiring_resources returns.
+        A fake that conflated the two would hide exactly the bug that
+        method was added to fix."""
+        rows = [
+            {"resource_type": "Observation", "resource_id": "obs1",
+             "patient_reference": "Patient/eAB12cd3",
+             "storage_key": "fhir/Observation/obs1.json",
+             "stored_at": datetime(2026, 8, 1, tzinfo=timezone.utc)},
+            {"resource_type": "Condition", "resource_id": "cond1",
+             "patient_reference": "Patient/eAB12cd3",
+             "storage_key": "fhir/Condition/cond1.json",
+             "stored_at": datetime(2026, 8, 2, tzinfo=timezone.utc)},
+            {"resource_type": "Encounter", "resource_id": "enc1",
+             "patient_reference": "Patient/eAB12cd3",
+             "storage_key": "fhir/Encounter/enc1.json",
+             "stored_at": datetime(2026, 8, 3, tzinfo=timezone.utc)},
+        ]
+        rows = [r for r in rows
+                if resource_type is None or r["resource_type"] == resource_type]
+        return rows[:limit]
 
     def expiring_resources(self, within_days=90):
         # NON-EMPTY on purpose. An earlier version of this fake returned

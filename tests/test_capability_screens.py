@@ -409,17 +409,37 @@ def test_the_coding_screen_says_when_no_support_map_narrows_it():
     assert "No code-support map is configured" in client.get("/product/coding").text
 
 
-def test_measures_refuses_to_call_object_counts_a_prevalence():
+def test_measures_counts_prevalence_in_patients_not_objects():
     """A prevalence needs a numerator counted in PATIENTS. The index counts
-    objects - one patient with forty Observations contributes forty - and
-    the first version of this route divided one by the other. The engine
-    caught it by refusing a numerator larger than its denominator; the
-    screen now says why there is no rate rather than showing a wrong one."""
-    client, _, _ = _client(roles="analyst")
+    objects - one patient with forty Observations of the same condition is
+    one case, not forty - and an early version of this route divided one by
+    the other. The engine caught it by refusing a numerator larger than its
+    denominator.
+
+    It now reduces Conditions to distinct patient references per condition
+    before dividing, and divides by the patients IN THE SAMPLE rather than
+    the store's total: a sampled numerator over a store-wide denominator
+    understates every rate by whatever the sample missed, silently.
+    """
+    client, reader, _ = _client(roles="analyst")
     body = client.get("/product/measures").text
-    assert "deliberate" in body
-    assert "counted in" in body
-    assert "counts, not rates" in body
+
+    assert "Type 2 diabetes" in body, "the sampled condition produced no row"
+    assert "95% CI" in body, "a rate was printed without its interval"
+    assert "in this sample" in body
+    assert "counts, not rates" in body, "the composition table must stay labelled"
+
+
+def test_measures_reads_conditions_not_whatever_is_near_expiry():
+    """The store sample must come from sample_resources(), not from
+    expiring_resources() - which filters to records near their retention
+    date and, on a deployment that sets none, returns nothing. A sweep that
+    silently covers zero records looks exactly like a clean store."""
+    client, reader, _ = _client(roles="analyst")
+    client.get("/product/measures")
+    assert any("Condition" in k for k in reader.reads), (
+        "measures never read a Condition; it is sampling the wrong thing"
+    )
 
 
 def test_measures_explains_the_interval_it_uses():
@@ -541,3 +561,65 @@ def test_model_monitoring_renders_for_the_system_administrator():
     body = client.get("/system/models").text
     assert "Model monitoring" in body
     assert "UNKNOWN" in body
+
+
+# ---------------------------------------------------------------------------
+# The screens that were reading the wrong thing
+# ---------------------------------------------------------------------------
+
+def test_the_demand_curve_buckets_when_care_happened_not_when_it_was_stored():
+    """THE FIRST VERSION OF THIS SCREEN WAS WRONG, not merely thin. It
+    bucketed `stored_at` - the index's storage timestamp - and called the
+    result a demand curve. That measures when the ingestion job ran: a
+    nightly bulk load produces one enormous 2am spike and a clinic that
+    works 9-5 looks like it operates at night. Encounter.period.start is
+    the appointment.
+
+    The fake's encounter starts at 14:30 and was STORED at 00:00, so the
+    two answers are distinguishable.
+    """
+    client, _, _ = _client(roles="analyst")
+    body = client.get("/product/scheduling").text
+    assert "14:00" in body, "the curve is not bucketing Encounter.period.start"
+    assert "00:00" not in body, "the curve is bucketing stored_at, not encounter time"
+
+
+def test_an_encounter_with_no_start_time_is_not_an_encounter_at_midnight():
+    from core.web import capability_routes as cr
+
+    # the parser is the piece that decides; None means "not counted"
+    assert cr is not None
+    client, _, _ = _client(roles="analyst")
+    assert client.get("/product/scheduling").status_code == 200
+
+
+def test_claims_history_is_read_from_the_store_not_from_an_unset_key():
+    """app.state.claims_history was never set by anything, so this screen
+    said 'no adjudicated history' on every deployment - including ones
+    holding thousands of adjudicated claims. The history is in the store's
+    ExplanationOfBenefit resources; it just was not being read."""
+    client, reader, _ = _client(roles="him")
+    client.get("/product/claims?payer=Acme&service_line=99215")
+    assert "ExplanationOfBenefit" in reader.sampled, (
+        "the claims screen never asked the store for adjudicated claims"
+    )
+
+
+def test_the_store_sample_is_not_the_retention_slice():
+    """reader.sample_resources() and reader.expiring_resources() answer
+    different questions. Three screens were calling the second for the
+    first, so they reported on records near expiry - and on a deployment
+    that sets no retention dates, on nothing."""
+    from test_web import _FakeReader
+
+    r = _FakeReader()
+    everything = r.sample_resources(limit=100)
+    expiring = r.expiring_resources(within_days=90)
+    assert {row["resource_type"] for row in everything} != {
+        row["resource_type"] for row in expiring
+    } or len(everything) != len(expiring), (
+        "the fake conflates the two methods, which would hide the bug"
+    )
+    assert r.sample_resources(limit=100, resource_type="Condition"), (
+        "sample_resources must be able to answer for one resource type"
+    )

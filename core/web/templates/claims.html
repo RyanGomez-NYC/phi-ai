@@ -18,6 +18,11 @@ argument whose premises cannot be inspected is not one. Read under the
 </div>
 {% endif %}
 
+{% if has_history %}
+<p class="hint">Adjudicated history read from this store:
+{{ payers|length }} payer(s), {{ lines|length }} service line(s).</p>
+{% endif %}
+
 <form method="get" action="/product/claims">
   <label for="payer">Payer</label>
   <input id="payer" name="payer" type="text" value="{{ payer }}">

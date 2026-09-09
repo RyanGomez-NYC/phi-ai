@@ -42,6 +42,7 @@ class RecordReader(Protocol):
     def stats(self) -> PlatformStats: ...
     def search_patients(self, term: str, limit: int = 50) -> list[dict]: ...
     def resources_for_patient(self, patient_reference: str) -> list[dict]: ...
+    def holdings_for_patients(self, references: list[str]) -> dict: ...
     def resource_index_row(self, storage_key: str) -> Optional[dict]: ...
     def read_resource(self, storage_key: str) -> dict: ...
     def read_resources(self, storage_key: str) -> list[dict]: ...
@@ -50,6 +51,8 @@ class RecordReader(Protocol):
     def read_audit_events(self, limit: int = 200, actor: Optional[str] = None) -> list[dict]: ...
     def verify_audit_chain(self) -> tuple[bool, int, Optional[str]]: ...
     def expiring_resources(self, within_days: int = 90) -> list[dict]: ...
+    def sample_resources(self, limit: int = 400,
+                         resource_type: Optional[str] = None) -> list[dict]: ...
 
 
 class LiveRecordReader:
@@ -170,6 +173,39 @@ class LiveRecordReader:
             "AND retention_until <= NOW() + (%s || ' days')::interval "
             "ORDER BY retention_until ASC LIMIT 500",
             (str(within_days),),
+        )
+
+    def sample_resources(self, limit: int = 400,
+                         resource_type: Optional[str] = None) -> list[dict]:
+        """Index rows from across the store, newest first.
+
+        WHY THIS EXISTS RATHER THAN REUSING expiring_resources(). That
+        method answers a retention question: it filters to rows with a
+        retention_until inside a window. Three screens were calling it to
+        get "a sample of the store" and were therefore reporting on
+        records that happen to be near expiry - a biased slice, and in a
+        deployment that sets no retention dates, an EMPTY one. A store-wide
+        sweep that silently reports on nothing looks identical to a clean
+        store.
+
+        Newest first is deliberate: a screen sampling the store is almost
+        always asking what the store looks like NOW, and a mapping gap
+        introduced last week matters more than one from three years ago.
+        The caller is told the sample size so nobody reads a partial sweep
+        as a complete one.
+        """
+        limit = max(1, min(int(limit), 5000))
+        if resource_type:
+            return self._query(
+                "SELECT resource_type, resource_id, patient_reference, storage_key, "
+                "stored_at FROM stored_resources WHERE resource_type = %s "
+                "ORDER BY stored_at DESC LIMIT %s",
+                (resource_type, limit),
+            )
+        return self._query(
+            "SELECT resource_type, resource_id, patient_reference, storage_key, "
+            "stored_at FROM stored_resources ORDER BY stored_at DESC LIMIT %s",
+            (limit,),
         )
 
     # -- object reads -----------------------------------------------

@@ -134,6 +134,85 @@ def register(app, page, require, current_identity, record, reader) -> None:
                 log.warning("chart read skipped %s: %s", key, exc)
         return out
 
+    def _store_sample(limit: int = 400, resource_type: Optional[str] = None) -> dict:
+        """{storage_key: resource} from across the store.
+
+        Goes through reader.sample_resources(), NOT expiring_resources().
+        The latter filters to records near their retention date - three
+        screens were using it as a store sample and were reporting on a
+        biased slice, and on a deployment that sets no retention dates, on
+        nothing at all. A sweep that silently covers zero records looks
+        exactly like a clean store.
+        """
+        out: dict[str, dict] = {}
+        for row in reader.sample_resources(limit=limit, resource_type=resource_type):
+            key = row.get("storage_key")
+            if not key:
+                continue
+            try:
+                out[key] = reader.read_resource(key)
+            except Exception as exc:
+                log.warning("store sample skipped %s: %s", key, exc)
+        return out
+
+    def _hour_of(value: str):
+        """The local hour from a FHIR dateTime, or None.
+
+        None rather than a guess: an Encounter with no start time is not
+        an encounter at midnight, and bucketing it there would put a spike
+        at 00:00 that no clinic worked. The count of undated encounters is
+        shown beside the curve instead.
+        """
+        text = (value or "").strip()
+        if len(text) < 13 or "T" not in text:
+            return None
+        try:
+            return int(text.split("T", 1)[1][:2])
+        except (ValueError, IndexError):
+            return None
+
+    def _claims_history() -> "object":
+        """Adjudicated outcomes read from the store's own ExplanationOfBenefit
+        resources.
+
+        DERIVED, NOT INJECTED. This was an app.state key nothing ever set,
+        so the screen said "no adjudicated history" on every deployment
+        including ones holding thousands of adjudicated claims. The history
+        is in the store; it just was not being read.
+
+        An EOB's `outcome` is the adjudication: FHIR R4 defines complete /
+        error / partial. Anything that is not `complete` counts as a denial
+        for this purpose, and a resource with no outcome at all is not
+        counted either way - an unadjudicated claim is not a denied one,
+        and treating it as one would inflate every rate on the screen.
+        """
+        from core.capabilities.claims import History
+
+        by_payer: dict[str, list[int]] = {}
+        by_line: dict[str, list[int]] = {}
+        for resource in _store_sample(500, resource_type="ExplanationOfBenefit").values():
+            outcome = (resource.get("outcome") or "").strip().lower()
+            if not outcome:
+                continue                      # never adjudicated; not a denial
+            denied = 1 if outcome != "complete" else 0
+            payer = ((resource.get("insurer") or {}).get("display")
+                     or (resource.get("insurer") or {}).get("reference") or "").strip()
+            if payer:
+                slot = by_payer.setdefault(payer, [0, 0])
+                slot[0] += denied
+                slot[1] += 1
+            for item in (resource.get("item") or []):
+                for coding in ((item.get("productOrService") or {}).get("coding") or []):
+                    code = (coding.get("code") or "").strip()
+                    if code:
+                        slot = by_line.setdefault(code, [0, 0])
+                        slot[0] += denied
+                        slot[1] += 1
+        return History(
+            by_payer={k: (v[0], v[1]) for k, v in by_payer.items()},
+            by_service_line={k: (v[0], v[1]) for k, v in by_line.items()},
+        )
+
     def _value_sets():
         from core.terminology.loader import configured_value_sets
 
@@ -178,14 +257,7 @@ def register(app, page, require, current_identity, record, reader) -> None:
         # A bounded sample: the sweep is O(resources) and this screen is
         # interactive. The count it sampled is shown, so nobody reads a
         # partial sweep as a complete one.
-        sampled: dict[str, dict] = {}
-        for row in reader.expiring_resources(within_days=36500)[:400]:
-            key = row.get("storage_key")
-            if key:
-                try:
-                    sampled[key] = reader.read_resource(key)
-                except Exception:
-                    continue
+        sampled = _store_sample(400)
         report = analyze(sampled)
         return page(request, "ingest_qa.html", identity, active="ingest",
                     stats=stats, report=report, sampled=len(sampled),
@@ -390,8 +462,20 @@ def register(app, page, require, current_identity, record, reader) -> None:
 
         from core.capabilities.triage import TriageError, choose_operating_point
 
+        # The platform HAS a model registry - the Control panel writes to it -
+        # and this screen was reading an app.state key nothing set, so it
+        # reported "no scorer registered" on deployments with a populated
+        # registry. Falls back to the governance registry when one is wired
+        # for model-governance use.
         registry = getattr(app.state, "model_registry", None)
-        registered = tuple(registry.registered_ids()) if registry is not None else ()
+        if registry is not None:
+            registered = tuple(registry.registered_ids())
+        else:
+            state = getattr(app.state, "platform_state", None)
+            registered = tuple(
+                m["model_id"] for m in (state.list_models() if state else [])
+                if m.get("model_id") and m.get("slot") == "triage"
+            )
 
         # The published validation set this deployment calibrated on. Held
         # by the deployment, not invented here: an operating point with no
@@ -489,16 +573,9 @@ def register(app, page, require, current_identity, record, reader) -> None:
         record(identity, "segmentation.sweep", "store", purpose)
         stats = SegmentationStats()
         excluded = []
-        sampled = 0
-        for row in reader.expiring_resources(within_days=36500)[:400]:
-            key = row.get("storage_key")
-            if not key:
-                continue
-            try:
-                resource = reader.read_resource(key)
-            except Exception:
-                continue
-            sampled += 1
+        resources = _store_sample(400)
+        sampled = len(resources)
+        for key, resource in sorted(resources.items()):
             decision = classify(resource, value_sets)
             stats.observe(decision)
             if not decision.include:
@@ -777,12 +854,36 @@ def register(app, page, require, current_identity, record, reader) -> None:
         # So prevalence comes from the OMOP layer, which counts DISTINCT
         # PERSONS, or it does not appear. Composition counts are shown
         # either way and are labelled as counts, never as rates.
-        supplied = getattr(app.state, "measure_counts", None)
+        # PATIENT-LEVEL COUNTS, COUNTED IN PATIENTS. A prevalence needs a
+        # numerator of PEOPLE: one patient with forty Observations of the
+        # same condition is one case, not forty. So the Conditions are
+        # sampled and reduced to a set of distinct patient references per
+        # condition before anything is divided.
+        #
+        # The denominator is the number of patients IN THE SAMPLE, not the
+        # store's total patient count. Dividing a sampled numerator by a
+        # store-wide denominator understates every rate by whatever
+        # fraction the sample missed, and does it silently.
+        conditions = _store_sample(600, resource_type="Condition")
+        by_condition: dict[str, set[str]] = {}
+        patients_seen: set[str] = set()
+        for key, resource in conditions.items():
+            subject = ((resource.get("subject") or {}).get("reference")
+                       or resource.get("patient_reference") or key)
+            patients_seen.add(subject)
+            for coding in ((resource.get("code") or {}).get("coding") or []):
+                label = (coding.get("display") or coding.get("code") or "").strip()
+                if label:
+                    by_condition.setdefault(label, set()).add(subject)
+
         prof = None
-        if supplied:
-            prof = profile(stats.distinct_patients, supplied)
+        if patients_seen:
+            prof = profile(len(patients_seen),
+                           {name: len(refs) for name, refs in by_condition.items()})
         return page(request, "measures.html", identity, active="measures",
                     profile=prof, stats=stats,
+                    sampled_conditions=len(conditions),
+                    sampled_patients=len(patients_seen),
                     composition=sorted((stats.resource_type_counts or {}).items()),
                     no_patient_dimension=_NO_PATIENT_DIMENSION)
 
@@ -812,7 +913,7 @@ def register(app, page, require, current_identity, record, reader) -> None:
 
         from core.capabilities.claims import History, score_claim
 
-        history = getattr(app.state, "claims_history", None) or History()
+        history = _claims_history()
         risk = None
         if payer.strip() and service_line.strip():
             record(identity, "claims.scored",
@@ -825,6 +926,8 @@ def register(app, page, require, current_identity, record, reader) -> None:
         return page(request, "claims.html", identity, active="claims",
                     risk=risk, payer=payer, service_line=service_line,
                     documented=documented == "1", patient=ctx,
+                    payers=sorted(history.by_payer),
+                    lines=sorted(history.by_service_line),
                     has_history=bool(history.by_payer or history.by_service_line))
 
     # ---- scheduling ---------------------------------------------------
@@ -851,16 +954,30 @@ def register(app, page, require, current_identity, record, reader) -> None:
         )
 
         record(identity, "scheduling.demand", "store", purpose)
+
+        # THE CURVE IS BUILT FROM WHEN CARE HAPPENED, not from when the
+        # record was written. The first version of this screen bucketed
+        # `stored_at` - the index's storage timestamp - and called the
+        # result a demand curve. It is not one: it measures when the
+        # ingestion job ran, so a nightly bulk load produces a single
+        # enormous 2am spike and a clinic that runs 9-5 looks like it
+        # operates at night. Encounter.period.start is the appointment.
+        encounters = _store_sample(600, resource_type="Encounter")
         by_hour: dict[int, int] = {}
-        for row in reader.expiring_resources(within_days=36500)[:600]:
-            stored = row.get("stored_at")
-            hour = getattr(stored, "hour", None)
-            if hour is not None:
-                by_hour[hour] = by_hour.get(hour, 0) + 1
+        undated = 0
+        for resource in encounters.values():
+            start = ((resource.get("period") or {}).get("start")
+                     or resource.get("start") or "")
+            hour = _hour_of(start)
+            if hour is None:
+                undated += 1
+                continue
+            by_hour[hour] = by_hour.get(hour, 0) + 1
         curve = [(h, by_hour.get(h, 0)) for h in range(24)]
         peak = max((n for _, n in curve), default=0)
         return page(request, "scheduling.html", identity, active="scheduling",
                     curve=curve, peak=peak, total=sum(n for _, n in curve),
+                    sampled=len(encounters), undated=undated,
                     supportive=sorted(SUPPORTIVE_ACTIONS),
                     restrictive=sorted(RESTRICTIVE_ACTIONS),
                     no_patient_dimension=_NO_PATIENT_DIMENSION)

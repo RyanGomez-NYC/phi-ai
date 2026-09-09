@@ -15,7 +15,11 @@ prints one without the other.</p>
 </div>
 
 {% if profile %}
-<h2>Prevalence</h2>
+<h2>Prevalence <span class="hint">— {{ sampled_patients }} patients across
+{{ sampled_conditions }} sampled Condition resources</span></h2>
+<p class="hint">The denominator is the patients <em>in this sample</em>, not the
+store's total. Dividing a sampled numerator by a store-wide denominator
+understates every rate by whatever the sample missed, silently.</p>
 <table class="rows">
   <thead><tr><th>Measure</th><th>Rate</th><th>95% CI</th><th>n</th></tr></thead>
   <tbody>
@@ -31,12 +35,9 @@ prints one without the other.</p>
 </table>
 {% else %}
 <div class="notice">
-  <p><strong>No prevalence is shown, and that is deliberate.</strong> A
-  prevalence needs a numerator counted in <em>patients</em>, and the index counts
-  objects — one patient with forty Observations contributes forty. Dividing
-  those by the patient count would produce a number that looks like a rate and
-  is not one. Distinct-person counts come from the OMOP layer; configure it and
-  they appear here with their intervals.</p>
+  <p><strong>No conditions in the sample</strong>, so there is nothing to
+  compute a prevalence over. That is not a statement that the store holds none —
+  it is a statement about this sample.</p>
 </div>
 {% endif %}
 
