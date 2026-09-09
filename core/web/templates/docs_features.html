@@ -119,7 +119,18 @@ review queue is the feature, not a footnote.</p>
 <h2>3. Population</h2>
 <p><strong>Cohort builder</strong> runs on the live OMOP layer and returns
 counts, never lists (the counts-never-lists rule is structural — the query path cannot
-enumerate). <strong>No-show risk</strong> and <strong>scheduling</strong> are
+enumerate). A cohort is any combination of its variables and each alone is one — a condition
+(a search over the CDM's own concept names, picked exactly or matched as typed), sex, age
+band; nothing set is every person — and the builder applies each change as it is made, so a
+definition is a URL. Its <strong>Cohort report</strong> (<span class="mono">/cohort/report</span>, the
+Report button on a cohort result) draws every population metric at the cohort's level —
+demographics, conditions, medications, measurements, procedures, utilization, risk and
+quality, where the cohort lives — as server-rendered SVG, the cohort's share beside the whole
+population's; every number opens to its rows (<span class="mono">patient:read</span>) or its
+section, counts under 11 are withheld with their complements, heightened categories are
+excluded from every breakdown, a section the CDM cannot carry says so in one sentence, and
+one audit row (<span class="mono">analytics.cohort_report</span>) is written before it runs.
+<strong>No-show risk</strong> and <strong>scheduling</strong> are
 registered predictive/optimization models under the fairness screen; the
 permitted intervention is support, never denial of scheduling.
 <strong>Ingest &amp; mapping QA</strong> queues low-confidence terminology

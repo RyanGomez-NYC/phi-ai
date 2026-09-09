@@ -1,0 +1,365 @@
+{% extends "base.html" %}
+{% from "_condition_box.html" import condition_box %}
+{#- The cohort report (core/analytics/cohort_report.py, core/web/charts.py).
+    Section titles, tile labels and chart titles are pinned to the
+    demonstration's by tests/test_cohort_report_parity.py: the words here
+    are the contract's, verbatim, and they live in this file so the test
+    can read them. Every chart is inline SVG from the helpers the route
+    passes in (no script), drawn at its natural pixel size inside a card
+    that takes the chart's own height (app.css, `.cr-charts` / `.cr-fig`);
+    every number links to its rows (patient:read, `can_rows`) or to its
+    section; every chart has a table view under it. A breakdown with ONE
+    category is not a chart: it is one sentence, the table view still
+    under it. -#}
+{% macro rows_href(cell) -%}
+/cohort/report/rows?term={{ term | urlencode }}&amp;exact={{ '1' if exact else '' }}&amp;sex={{ sex | urlencode }}&amp;band={{ band | urlencode }}&amp;cell={{ cell | urlencode }}
+{%- endmacro %}
+{% macro persons(text, cell, anchor) -%}
+{%- if can_rows and text != '< 11' and text != '—' %}<a href="{{ rows_href(cell) }}">{{ text }}</a>{% else %}<a href="#{{ anchor }}">{{ text }}</a>{% endif -%}
+{%- endmacro %}
+{% macro bars_table(rows, dim, anchor, head='category', unit='persons') -%}
+<details class="cr-table"><summary>as a table</summary>
+<div class="tablewrap"><table>
+<thead><tr><th>{{ head }}</th><th>this cohort ({{ unit }})</th><th>cohort share</th><th>everyone</th></tr></thead>
+<tbody>
+{% for r in rows %}<tr><td>{{ r.label }}</td><td class="num">{{ persons(r.cohort_n_text, dim ~ ':' ~ r.key, anchor) }}</td><td class="num">{{ r.cohort_text }}</td><td class="num">{{ r.everyone_text }}</td></tr>
+{% else %}<tr><td class="empty" colspan="4">nothing recorded</td></tr>{% endfor %}
+</tbody></table></div></details>
+{%- endmacro %}
+{% macro hist_table(bins, anchor, head='bin', unit='persons') -%}
+<details class="cr-table"><summary>as a table</summary>
+<div class="tablewrap"><table>
+<thead><tr><th>{{ head }}</th><th>{{ unit }}</th></tr></thead>
+<tbody>
+{% for b in bins %}<tr><td>{{ b.label }}</td><td class="num">{{ persons(b.n_text, b.cell, anchor) }}</td></tr>
+{% else %}<tr><td class="empty" colspan="2">nothing recorded</td></tr>{% endfor %}
+</tbody></table></div></details>
+{%- endmacro %}
+{% macro line_table(points, anchor, head, unit='persons') -%}
+<details class="cr-table"><summary>as a table</summary>
+<div class="tablewrap"><table>
+<thead><tr><th>{{ head }}</th><th>this cohort ({{ unit }})</th><th>per 1,000</th><th>everyone per 1,000</th></tr></thead>
+<tbody>
+{% for p in points %}<tr><td>{{ p.x }}</td><td class="num">{{ persons(p.cohort_n_text, p.cell, anchor) }}</td><td class="num">{{ p.cohort_text }}</td><td class="num">{{ p.everyone_text }}</td></tr>
+{% else %}<tr><td class="empty" colspan="4">nothing recorded</td></tr>{% endfor %}
+</tbody></table></div></details>
+{%- endmacro %}
+{#- One category is a sentence, not a chart. -#}
+{% macro one(r, unit='persons', two=true) -%}
+<p class="cr-one">All in one category — <strong>{{ r.label }}</strong>: {% if two %}{{ r.cohort_n_text }} {{ unit }}, {{ r.cohort_text }} of this cohort; everyone {{ r.everyone_text }}{% else %}{{ r.cohort_text }}{% if unit %} {{ unit }}{% endif %}{% endif %}.</p>
+{%- endmacro %}
+{% macro caption(title, hint='') -%}
+<figcaption><h3>{{ title }}</h3>{% if hint %}<p class="hint">{{ hint }}</p>{% endif %}</figcaption>
+{%- endmacro %}
+{% macro bars_fig(title, rows, dim, anchor, head='category', unit='persons', hint='', chart_id='') -%}
+<figure class="cr-fig">{{ caption(title, hint) }}
+{% if rows | length == 1 %}{{ one(rows[0], unit) }}{% else %}{{ bars(title, rows, chart_id=chart_id) }}{% endif %}
+{{ bars_table(rows, dim, anchor, head, unit) }}</figure>
+{%- endmacro %}
+{% macro hist_fig(title, bins, anchor, head='bin', unit='persons', hint='', chart_id='') -%}
+<figure class="cr-fig">{{ caption(title, hint) }}
+{{ hist(title, bins, chart_id=chart_id) }}
+{{ hist_table(bins, anchor, head, unit) }}</figure>
+{%- endmacro %}
+{% macro line_fig(title, points, anchor, head, unit='persons', hint='') -%}
+<figure class="cr-fig">{{ caption(title, hint) }}
+{{ line(title, points) }}
+{{ line_table(points, anchor, head, unit) }}</figure>
+{%- endmacro %}
+{#- A dimension this deployment does not carry: its title and the one sentence. -#}
+{% macro absent(title, text) -%}<div class="cr-absent"><h3>{{ title }}</h3><p class="cr-none">{{ text }}</p></div>{%- endmacro %}
+{% macro failed(sec) -%}{% if sec and sec.error %}<div class="status warn"><strong>Not drawn.</strong> {{ sec.error }}</div>{% endif %}{%- endmacro %}
+{% macro holdings_link(text) -%}
+{%- if can_holdings %}<a href="/orchestration/holdings">{{ text }}</a>{% else %}<a href="#lives">{{ text }}</a>{% endif -%}
+{%- endmacro %}
+{% block title %}Cohort report — {{ definition }} — φ(ai){% endblock %}
+{% block body %}
+<div class="kicker">5.11 · Population</div>
+{#- The h1 carries the whole definition - the condition, the selectors
+    alone, or "all persons" - and the line under it the selectors, or the
+    one phrase that says there are none (the contract's addendum, item 5). -#}
+<h1>Cohort report — {{ definition }}</h1>
+<p class="cr-def">{{ selectors or 'everyone — no selector' }}</p>
+{#- Only KNOWN conditions count: a term the corpus knows no condition by
+    is not in the definition above, and says so rather than vanishing. The
+    sentence is the builder's, word for word, except for the clause that
+    names where the names are: the builder points at the list above it, and
+    this screen - which is a report, not a search, and will never carry that
+    list - points at the condition box directly below, whose listbox drops
+    the corpus's own names into the gap. Both stacks state it identically
+    (core/analytics/cohort.UNRESOLVED_CONDITION_REPORT). -#}
+{% if unresolved %}<p class="cb-unresolved">{{ unresolved }}</p>{% endif %}
+{#- The report's own selector bar: every variable the cohort has, so a
+    reader can re-cut it here rather than going back to the builder. It
+    applies itself (data-autoapply, app.js handler 4) and Redraw is the same
+    form with no script. The condition is the BUILDER'S OWN control -
+    _condition_box.html, one definition for both screens - so the names it
+    suggests here are the corpus's own names, from the same endpoint, with
+    the same keys and the same keyboard. The box holds what the reader
+    typed when that named no condition, so their words survive to be fixed;
+    the hidden `exact` beside it rides along and a new keystroke clears it.
+    Payer is not a control: this CDM has no payer table, and the sentence
+    that says so is below (Demographics) and in the bar's own note. -#}
+<form method="get" action="/cohort/report" class="cr-selectors" data-autoapply>
+  {{ condition_box(suggest_url, value=typed, exact=exact, name='term', label='condition') }}
+  <label>sex
+    <select name="sex">
+      <option value="">any</option>
+      {# The CDM's own values, as the builder's bar reads them - not this
+         cohort's breakdown, or a cohort with no men could not be re-cut to men. #}
+      {% for v in (sexes or []) %}<option value="{{ v }}" {{ 'selected' if v == sex }}>{{ v }}</option>{% endfor %}
+      {% if sex and sex not in (sexes or []) %}<option value="{{ sex }}" selected>{{ sex }}</option>{% endif %}
+    </select></label>
+  <label>age band
+    <select name="band">
+      <option value="">any</option>
+      {% for b in ('0-17', '18-44', '45-64', '65+') %}<option value="{{ b }}" {{ 'selected' if b == band }}>{{ b }}</option>{% endfor %}
+    </select></label>
+  <button type="submit" class="bare" data-busy data-busy-label="Redrawing">Redraw</button>
+  <a class="btn bare" href="/cohort?q={{ typed | urlencode }}&amp;exact={{ '1' if exact else '' }}&amp;sex={{ sex | urlencode }}&amp;band={{ band | urlencode }}">Cohort builder</a>
+  <span class="meta">{{ payer_note }}</span>
+</form>
+
+<p class="lede">Every number here is the cohort's share, drawn beside the whole population's share, so what
+makes this cohort different is visible at a glance. Counts under 11 are withheld.</p>
+
+{% if error %}
+<div class="status warn" style="margin-top:22px"><strong>Not answered.</strong> {{ error }}</div>
+{% endif %}
+
+{% if report %}
+{% if report.withheld %}<div class="status warn" style="margin-top:18px"><strong>Code-level breakdowns withheld.</strong> {{ report.withheld }}</div>{% endif %}
+
+{# ---- 1 ---------------------------------------------------------------- #}
+<section class="cr-section" id="cohort">
+<h2>Cohort</h2>
+{{ failed(report.cohort) }}
+{% if report.cohort and not report.cohort.error %}
+<div class="cr-tiles">
+  {{ tile('persons', report.cohort.persons_text, 'distinct person_id — never diagnosis rows',
+          rows_href('') if (can_rows and report.cohort.persons) else '#demographics') }}
+  {{ tile('charts held across systems', report.lives.across_text if report.lives else '—',
+          'the store and every target that received a chart of this cohort', '#lives') }}
+  {{ tile('records in the store', report.store.records_text if report.store else '—',
+          report.store.note if (report.store and report.store.note) else 'stored resources of these charts, all types', '#lives') }}
+  {{ tile('encounters', report.cohort.encounters_text, 'visit_occurrence rows of this cohort', '#utilization') }}
+  {{ tile('encounters per person', report.cohort.per_person_text, '', '#utilization') }}
+  {{ tile('claims paid per person', 'no cost tables', report.cohort.cost, '#cost') }}
+</div>
+{% endif %}
+{% if report.matched_on %}<p class="cr-note">Matched on: {{ report.matched_on | join('; ') }}. Everyone = the {{ "{:,}".format(report.total) }} persons in this deployment's CDM.</p>{% endif %}
+</section>
+
+{# ---- 2 ---------------------------------------------------------------- #}
+<section class="cr-section" id="demographics">
+<h2>Demographics</h2>
+{{ failed(report.demographics) }}
+{% if report.demographics and not report.demographics.error %}
+<div class="cr-charts">
+{{ bars_fig('sex', report.demographics.sex, 'sex', 'demographics', 'sex') }}
+{{ bars_fig('age band', report.demographics.band, 'band', 'demographics', 'age band') }}
+</div>
+{{ absent('payer', report.demographics.payer) }}
+{{ absent('deceased', report.demographics.deceased) }}
+{% endif %}
+</section>
+
+{# ---- 3 ---------------------------------------------------------------- #}
+<section class="cr-section" id="conditions">
+<h2>Conditions</h2>
+{{ failed(report.conditions) }}
+{% if report.conditions and not report.conditions.error %}
+{% if report.conditions.withheld %}
+{{ absent('most common conditions in this cohort', report.conditions.withheld) }}
+{% endif %}
+{% if report.conditions.status_note %}
+{#- No condition named: status is the status OF a condition, so the one sentence and no chart. -#}
+{{ absent('condition status', report.conditions.status_note) }}
+{% elif report.conditions.withheld %}
+{{ absent('condition status', report.conditions.withheld) }}
+{% endif %}
+<div class="cr-charts">
+{% if not report.conditions.withheld %}
+{{ bars_fig('most common conditions in this cohort', report.conditions.top, 'condition', 'conditions', 'condition') }}
+{% if not report.conditions.status_note %}
+{{ bars_fig('condition status', report.conditions.status, 'status', 'conditions', 'status',
+            hint='The status the source stated; where it stated none, a condition with an end date is resolved and one without is active.') }}
+{% endif %}
+{% endif %}
+{{ line_fig('onset by year', report.conditions.onset, 'conditions', 'year',
+            hint="The year of each person's first recorded condition, per 1,000 persons of the group — one definition for both series, over the last 20 years.") }}
+</div>
+{% endif %}
+</section>
+
+{# ---- 4 ---------------------------------------------------------------- #}
+<section class="cr-section" id="medications">
+<h2>Medications</h2>
+{{ failed(report.medications) }}
+{% if report.medications and not report.medications.error %}
+{% if report.medications.withheld %}
+{{ absent('most common medications', report.medications.withheld) }}
+{{ absent('persons on at least one medication', report.medications.withheld) }}
+{{ absent('medications per person', report.medications.withheld) }}
+{% else %}
+<div class="cr-charts">
+{{ bars_fig('most common medications', report.medications.top, 'drug', 'medications', 'medication') }}
+{{ bars_fig('persons on at least one medication', report.medications.on_medication, 'medicated', 'medications', 'medication') }}
+{{ hist_fig('medications per person', report.medications.per_person, 'medications', 'distinct medications') }}
+</div>
+{% endif %}
+{% endif %}
+</section>
+
+{# ---- 5 ---------------------------------------------------------------- #}
+<section class="cr-section" id="measurements">
+<h2>Measurements</h2>
+{{ failed(report.measurements) }}
+{% if report.measurements and not report.measurements.error %}
+{% if report.measurements.withheld %}
+{{ absent('persons measured', report.measurements.withheld) }}
+{{ absent('abnormal share', report.measurements.withheld) }}
+{% elif not report.measurements.tests %}
+{{ absent('persons measured', 'No measurement of this cohort is recorded in the CDM.') }}
+{{ absent('abnormal share', 'No measurement of this cohort is recorded in the CDM.') }}
+{% else %}
+<p class="cr-note">The eight most-measured tests in this cohort — A1c, blood pressure and BMI first when present. Each: persons measured, abnormal share, and the latest value per person in ten bins.</p>
+<div class="cr-charts">
+{% for t in report.measurements.tests %}
+<figure class="cr-fig cr-test">{{ caption(t.label) }}
+<p class="cr-one"><strong>persons measured</strong> — {{ persons(t.measured.cohort_n_text, 'measurement:' ~ t.code, 'measurements') }} persons, {{ t.measured.cohort_text }} of this cohort; everyone {{ t.measured.everyone_text }}.</p>
+{{ bars_table([t.measured], 'measurement', 'measurements', 'test') }}
+<div class="cr-abn">
+  <span class="cr-abn-k">abnormal share</span>
+  {% if t.abnormal %}
+  <span class="cr-abn-track" aria-hidden="true"><span class="cr-abn-fill" style="width:{{ ((t.abnormal.value or 0) * 100) | round(1) }}%"></span></span>
+  <span>{{ t.abnormal.text }}{% if not t.abnormal.suppressed %} — {{ persons("{:,}".format(t.abnormal.numerator), 'measurement:' ~ t.code, 'measurements') }} of {{ "{:,}".format(t.abnormal.denominator) }} with a reference range, latest value outside it{% endif %}</span>
+  {% else %}<span>{{ t.range_note }}</span>{% endif %}
+</div>
+{% if t.hist %}
+<div class="cr-sub">latest value per person</div>
+{{ hist('latest value per person', t.hist, chart_id='cr-values-' ~ loop.index) }}
+{{ hist_table(t.hist, 'measurements', 'latest value') }}
+{% endif %}
+</figure>
+{% endfor %}
+</div>
+{% endif %}
+{% endif %}
+</section>
+
+{# ---- 6 ---------------------------------------------------------------- #}
+<section class="cr-section" id="procedures">
+<h2>Procedures, imaging, immunizations, allergies</h2>
+{{ failed(report.procedures) }}
+{% if report.procedures and not report.procedures.error %}
+{% set imaging_rows = report.imaging.rows if (report.imaging and report.imaging.rows) else [] %}
+{% if report.procedures.withheld %}{{ absent('procedures', report.procedures.withheld) }}{% endif %}
+{% if not imaging_rows %}{{ absent('imaging', report.imaging.note if (report.imaging and report.imaging.note) else 'No imaging study of this cohort is in the imaging index.') }}{% endif %}
+{% if not report.procedures.withheld or imaging_rows %}
+<div class="cr-charts">
+{% if not report.procedures.withheld %}{{ bars_fig('procedures', report.procedures.top, 'procedure', 'procedures', 'procedure') }}{% endif %}
+{% if imaging_rows %}
+<figure class="cr-fig">{{ caption('imaging') }}
+{% if imaging_rows | length == 1 %}{{ one(imaging_rows[0], 'studies', false) }}{% else %}{{ bars('imaging', imaging_rows, series=('cohort',)) }}{% endif %}
+<details class="cr-table"><summary>as a table</summary><div class="tablewrap"><table>
+<thead><tr><th>modality</th><th>studies of this cohort</th></tr></thead>
+<tbody>{% for r in imaging_rows %}<tr><td>{{ r.label }}</td><td class="num"><a href="#procedures">{{ r.n_text }}</a></td></tr>{% endfor %}</tbody>
+</table></div></details></figure>
+{% endif %}
+</div>
+{% endif %}
+{{ absent('immunizations', report.procedures.immunizations) }}
+{{ absent('allergies', report.procedures.allergies) }}
+{% endif %}
+</section>
+
+{# ---- 7 ---------------------------------------------------------------- #}
+<section class="cr-section" id="utilization">
+<h2>Utilization</h2>
+{{ failed(report.utilization) }}
+{% if report.utilization and not report.utilization.error %}
+<div class="cr-charts">
+{{ hist_fig('encounters per person', report.utilization.per_person, 'utilization', 'encounters') }}
+{{ bars_fig('encounter type', report.utilization.type, 'visit', 'utilization', 'type', 'encounters',
+            hint="The FHIR encounter class the ETL mapped each visit concept from; shares are of each group's encounters.") }}
+{{ line_fig('encounters per month', report.utilization.per_month, 'utilization', 'month', 'encounters',
+            hint='Encounters per 1,000 persons of the group, the last 24 months.') }}
+{{ bars_fig('by weekday', report.utilization.weekday, 'weekday', 'utilization', 'weekday', 'encounters') }}
+{{ bars_fig('facilities', report.utilization.facilities, 'facility', 'utilization', 'facility') }}
+</div>
+{{ absent('documents by type', report.utilization.documents) }}
+{% endif %}
+</section>
+
+{# ---- 8 ---------------------------------------------------------------- #}
+<section class="cr-section" id="cost">
+<h2>Cost</h2>
+{# The one sentence, in this file so the parity test reads the words. #}
+<p class="cr-none">This deployment's CDM carries no cost tables, so claims per person,
+billed / allowed / paid per person, patient responsibility share, payer mix by paid, claim status
+and top services are not drawn.</p>
+</section>
+
+{# ---- 9 ---------------------------------------------------------------- #}
+<section class="cr-section" id="risk">
+<h2>Risk and quality</h2>
+{{ failed(report.risk) }}
+{% if report.risk and not report.risk.error %}
+<div class="cr-charts">
+<figure class="cr-fig">{{ caption('no-show risk') }}
+{% if report.risk.noshow | length == 1 %}{{ one(report.risk.noshow[0], '', false) }}{% else %}{{ bars('no-show risk', report.risk.noshow, series=('cohort',)) }}{% endif %}
+<details class="cr-table"><summary>as a table</summary><div class="tablewrap"><table>
+<thead><tr><th>risk band</th><th>this cohort (persons)</th><th>cohort share</th></tr></thead>
+<tbody>{% for r in report.risk.noshow %}<tr><td>{{ r.label }}</td><td class="num">{{ persons(r.cohort_n_text, 'noshow:' ~ r.key, 'risk') }}</td><td class="num">{{ r.cohort_text }}</td></tr>{% endfor %}</tbody>
+</table></div></details>
+<p class="cr-note">{{ report.risk.noshow_note }}</p></figure>
+<figure class="cr-fig cr-measures">{{ caption('quality measures') }}
+{% for key, title in (('visit12', 'persons with a visit in the last 12 months'),
+                      ('a1c', 'diabetics with an A1c in the last 12 months'),
+                      ('bp', 'hypertensives with a blood pressure in the last 12 months')) %}
+{% set m = report.risk.measures[key] %}
+<div class="cr-measure">
+  <div class="cr-measure-t">{{ title }}</div>
+  <div class="cr-measure-v">{{ m.text }}</div>
+  <div class="cr-measure-f">{{ persons(m.numerator_text, m.cell_num, 'risk') }} of {% if m.cell_den %}{{ persons(m.denominator_text, m.cell_den, 'risk') }}{% else %}{{ m.denominator_text }}{% endif %}</div>
+</div>
+{% endfor %}
+<div class="cr-measure">
+  <div class="cr-measure-t">flu immunization in the last 12 months</div>
+  <div class="cr-measure-v">not in this CDM</div>
+  <div class="cr-measure-f">{{ report.risk.flu }}</div>
+</div>
+</figure>
+</div>
+{% endif %}
+</section>
+
+{# ---- 10 --------------------------------------------------------------- #}
+<section class="cr-section" id="lives">
+<h2>Where the cohort lives</h2>
+{% if report.lives %}
+<div class="cr-charts">
+<figure class="cr-fig">{{ caption('charts held by system') }}
+{% if report.lives.rows | length == 1 %}{{ one(report.lives.rows[0], 'charts', false) }}{% else %}{{ bars('charts held by system', report.lives.rows, series=('cohort',)) }}{% endif %}
+<details class="cr-table"><summary>as a table</summary><div class="tablewrap"><table>
+<thead><tr><th>system</th><th>charts of this cohort held</th><th>records moved</th><th>gap to this target</th></tr></thead>
+<tbody>{% for r in report.lives.rows %}<tr><td>{{ r.label }}</td><td class="num">{{ holdings_link(r.held_text) }}</td><td class="num">{{ r.moved_text }}</td><td class="num">{{ r.gap_text }}</td></tr>{% endfor %}</tbody>
+</table></div></details>
+{% if report.lives.note %}<p class="cr-note">{{ report.lives.note }}</p>{% endif %}</figure>
+{% if report.lives.gaps %}
+<figure class="cr-fig">{{ caption('gap to each target') }}
+{% if report.lives.gaps | length == 1 %}{{ one(report.lives.gaps[0], 'charts not yet there', false) }}{% else %}{{ bars('gap to each target', report.lives.gaps, series=('cohort',)) }}{% endif %}
+<details class="cr-table"><summary>as a table</summary><div class="tablewrap"><table>
+<thead><tr><th>target</th><th>charts of this cohort not yet there</th></tr></thead>
+<tbody>{% for r in report.lives.gaps %}<tr><td>{{ r.label }}</td><td class="num">{{ holdings_link(r.gap_text) }}</td></tr>{% endfor %}</tbody>
+</table></div></details></figure>
+{% endif %}
+</div>
+{{ absent('records moved by type', report.lives.by_type) }}
+{% if not report.lives.gaps %}{{ absent('gap to each target', 'No written delivery step of this deployment names a chart of this cohort, so there is no target to measure a gap to.') }}{% endif %}
+{% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

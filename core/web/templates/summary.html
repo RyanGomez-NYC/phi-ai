@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Summarization — φ(ai){% endblock %}
+{% block body %}
+<h1>Summarization</h1>
+<p class="lede">The chart spine: every active problem, medication, allergy,
+procedure and encounter the record actually states, dated and ordered. Built
+deterministically by <code>core/rag/spine.py</code> and rendered by
+<code>core/capabilities/summarization.py</code> — <strong>no model runs on this
+screen</strong>, which is why it carries no release gate. There is nothing
+generated here to gate.</p>
+
+{% if needs_patient %}
+  {% include "_needs_patient.html" %}
+{% else %}
+<div class="chips">
+  <span class="chip filled">{{ patient.label }}</span>
+  <span class="chip">{{ resource_count }} resources read</span>
+  <span class="chip">purpose: {{ purpose }}</span>
+</div>
+<pre class="summary mono">{{ summary }}</pre>
+<p class="hint">Read under purpose <strong>{{ purpose }}</strong> and recorded on
+the audit trail before any record was opened.</p>
+{% endif %}
+{% endblock %}

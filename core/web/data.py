@@ -127,6 +127,32 @@ class LiveRecordReader:
             (patient_reference,),
         )
 
+    def holdings_for_patients(self, references: list[str]) -> dict:
+        """The store's holdings for a SET of charts, in two queries.
+
+        The cohort report's "records in the store" and "charts held": a
+        cohort is thousands of charts, and one resources_for_patient()
+        call per chart is the loop the orchestration screens can afford
+        for a hand-picked set and a report cannot. Opaque references in,
+        counts out - nothing here names anyone.
+        """
+        refs = [r for r in references if r]
+        if not refs:
+            return {"charts": 0, "records": 0, "by_type": {}}
+        rows = self._query(
+            "SELECT resource_type, COUNT(*) AS n FROM stored_resources "
+            "WHERE patient_reference = ANY(%s) GROUP BY resource_type",
+            (refs,),
+        )
+        charts = self._query(
+            "SELECT COUNT(DISTINCT patient_reference) AS charts FROM stored_resources "
+            "WHERE patient_reference = ANY(%s)",
+            (refs,),
+        )
+        by_type = {r["resource_type"]: int(r["n"]) for r in rows}
+        return {"charts": int(charts[0]["charts"] or 0) if charts else 0,
+                "records": sum(by_type.values()), "by_type": by_type}
+
     def resource_index_row(self, storage_key: str) -> Optional[dict]:
         rows = self._query(
             "SELECT resource_type, resource_id, patient_reference, storage_key, "

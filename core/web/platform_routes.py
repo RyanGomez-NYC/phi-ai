@@ -32,6 +32,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from core.web import docs_content
 from core.web.auth import PERMISSIONS, Identity, Role
+from core.assistant.config import (
+    DEFAULT_MAX_TOKENS,
+    MAX_MAX_TOKENS,
+    MIN_MAX_TOKENS,
+    clamp_max_tokens,
+)
 from core.web.platform_state import (EMR_VENDORS, MODEL_KINDS, MODEL_SLOTS,
                                      PlatformState, _now)
 
@@ -304,6 +310,11 @@ def register(app, page, require, current_identity, record, reader) -> None:
                           "source_client_id", "source_group_id",
                           "target_vendor", "target_base_url",
                           "target_client_id", "assistant_max_tokens")},
+                    # The form's min/max/placeholder come from the same
+                    # constants the model call clamps to - see below.
+                    max_tokens_min=MIN_MAX_TOKENS,
+                    max_tokens_max=MAX_MAX_TOKENS,
+                    max_tokens_default=DEFAULT_MAX_TOKENS,
                     vendors=EMR_VENDORS)
 
     @app.post("/system/control/switch", response_class=HTMLResponse)
@@ -429,10 +440,17 @@ def register(app, page, require, current_identity, record, reader) -> None:
             if s.config_set(k, v):
                 changed.append(k)
         if "assistant_max_tokens" in form:
+            # clamp_max_tokens is core/assistant/config.py's, and the same
+            # function the model call itself applies. The bounds used to be
+            # written out here (256..4096) and again in controlpanel.html and
+            # again as an environment floor of 1024, against a library default
+            # of 8192 - four copies, no two agreeing, and the panel unable to
+            # express the code's own default. A number this file invents is a
+            # number the model call does not honour.
             try:
-                v = str(max(256, min(4096, int(str(form["assistant_max_tokens"])))))
+                v = str(clamp_max_tokens(int(str(form["assistant_max_tokens"]))))
             except ValueError:
-                v = "1500"
+                v = str(DEFAULT_MAX_TOKENS)
             if s.config_set("assistant_max_tokens", v):
                 changed.append("assistant_max_tokens")
         if changed:

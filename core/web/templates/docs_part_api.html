@@ -104,7 +104,7 @@ mutation is a POST carrying the session's CSRF token; GETs never mutate.</p>
   <tbody>
     <tr><td class="mono">/assistant · POST /assistant · /assistant/prompts</td><td>GET/POST</td><td class="mono">assistant role access</td></tr>
     <tr><td class="mono">/patients · /patients/{id}/open · POST /resource</td><td>GET/POST</td><td class="mono">identity:search / patient:read</td></tr>
-    <tr><td class="mono">/cohort</td><td>GET/POST</td><td class="mono">analytics:query</td></tr>
+    <tr><td class="mono">/cohort · /cohort/report · /cohort/report/rows</td><td>GET</td><td class="mono">analytics:query (rows: + patient:read)</td></tr>
     <tr><td class="mono">/signature · /signature/{draft_id}</td><td>GET/POST</td><td class="mono">patient:read (sign: licensed roles)</td></tr>
     <tr><td class="mono">/roi · /roi/{id} · /roi/{id}/fulfil · /deny · /production</td><td>GET/POST</td><td class="mono">roi:manage</td></tr>
     <tr><td class="mono">/documents · POST /documents · /document/source</td><td>GET/POST</td><td class="mono">patient:read (+ ingest perms)</td></tr>

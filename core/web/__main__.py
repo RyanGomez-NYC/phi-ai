@@ -288,6 +288,9 @@ def build() -> "FastAPI":  # noqa: F821
                 settings, settings.assistant_ops_username
             )
 
+        # Armed immediately, so the Control panel's model choice applies to
+        # the very first question this process answers rather than to the
+        # first one asked after somebody opened an assistant page.
         app.state.assistant = assistant_runtime.build(
             assistant_settings=assistant_settings,
             platform_settings=settings,
@@ -300,6 +303,7 @@ def build() -> "FastAPI":  # noqa: F821
             psychotherapy_reader=psychotherapy_reader,
             ops_connection=ops_connection,
         )
+        app.state.assistant.live_overrides = app.state.assistant_overrides
 
     # Release of information connects as the SAME role the reader does,
     # and that is a deliberate choice rather than a shortcut. On GCP a

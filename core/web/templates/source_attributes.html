@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Source attributes — φ(ai){% endblock %}
+{% block body %}
+<h1>Source attributes</h1>
+<p class="lede">HTI-1's question — <em>where did this actually come from?</em> —
+answered twice: per record, for the patient in context, and per model, as
+45 CFR 170.315(b)(11) obliges a certified Module to let its users record.</p>
+
+<h2>This record's provenance</h2>
+{% if needs_patient %}
+  {% include "_needs_patient.html" %}
+{% else %}
+<div class="chips"><span class="chip filled">{{ patient.label }}</span>
+  <span class="chip">{{ rows|length }} objects</span></div>
+<table class="rows"><thead><tr><th>Resource</th><th>Stored</th><th>Object</th></tr></thead><tbody>
+{% for r in rows[:60] %}
+  <tr><td>{{ r.resource_type }}</td><td class="mono small">{{ r.stored_at }}</td>
+      <td class="mono small">{{ r.storage_key }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% endif %}
+
+<h2>Per-model source attributes</h2>
+{% if models %}
+<table class="rows"><thead><tr><th>Model</th><th>Artifact</th></tr></thead><tbody>
+{% for m in models %}
+  <tr><td class="mono">{{ m.model_id }}</td>
+      <td>{% if m.valid %}<span class="chip">complete</span>{% else %}<span class="chip warn">incomplete</span> {{ m.error }}{% endif %}</td></tr>
+{% endfor %}
+</tbody></table>
+{% else %}
+<div class="notice warn">
+  <p><strong>No model has a recorded source-attribute set.</strong> That is
+  reported as absent rather than shown as a set of empty categories: the
+  artifact's own validation refuses an empty category, and filling them with
+  placeholders would manufacture exactly the thing the obligation exists to make
+  somebody actually produce.</p>
+</div>
+{% endif %}
+
+<h3>The nine categories an artifact must cover</h3>
+<p class="mono small">{{ categories|join(", ") }}</p>
+<h3>IRM characteristics</h3>
+<p class="mono small">{{ irm_characteristics|join(", ") }}</p>
+{% endblock %}

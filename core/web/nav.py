@@ -76,10 +76,14 @@ NAV: tuple[NavGroup, ...] = (
                 roles=(Role.VIEWER,)),
         NavItem("ambient", "5.14", "Ambient documentation", "/product/ambient",
                 roles=(Role.VIEWER,)),
+        NavItem("instructions", "5.3", "Patient instructions", "/product/instructions",
+                roles=_CLINICAL),
         NavItem("signature", "5.16", "Signature queue", "/signature",
                 roles=_CLINICAL),
         NavItem("patients", "", "Patients & charts", "/patients",
                 permissions=("patient:search",)),
+        NavItem("psychotherapy", "", "Psychotherapy notes", "/product/psychotherapy",
+                roles=_CLINICAL),
         NavItem("documents", "", "Document intake", "/documents",
                 permissions=("document:ingest",)),
     )),
@@ -88,18 +92,32 @@ NAV: tuple[NavGroup, ...] = (
                 roles=_RECORDS),
         NavItem("coding", "5.5", "Documentation gaps", "/product/coding",
                 roles=_RECORDS),
+        NavItem("claims", "", "Claims & billing", "/product/claims",
+                roles=_RECORDS),
         NavItem("roi", "", "Release of information", "/roi",
                 permissions=("roi:create",)),
         NavItem("segmentation", "6.1", "Sensitive categories", "/product/segmentation",
                 roles=(Role.HIM, Role.ANALYST, Role.RESEARCHER)),
+        NavItem("fairness", "6.3", "Fairness screen", "/product/fairness",
+                roles=(Role.ADMIN, Role.ANALYST, Role.RESEARCHER)),
     )),
     NavGroup("Population", (
         NavItem("cohort", "5.11", "Cohort builder", "/cohort",
                 permissions=("analytics:query",)),
+        NavItem("trials", "5.9", "Trial screening", "/product/trials",
+                roles=(Role.RESEARCHER, Role.HIM)),
+        NavItem("abstraction", "5.10", "Chart abstraction", "/product/abstraction",
+                roles=(Role.HIM, Role.RESEARCHER)),
+        NavItem("attributes", "6.6", "Source attributes", "/product/attributes",
+                roles=(Role.HIM, Role.ADMIN, Role.AUDITOR)),
         NavItem("noshow", "5.7", "No-show risk", "/product/noshow",
                 roles=(Role.ANALYST, Role.RESEARCHER, Role.HIM)),
         NavItem("ingest", "5.13", "Ingest & mapping QA", "/product/ingest",
                 roles=(Role.ANALYST, Role.RESEARCHER, Role.HIM, Role.ADMIN)),
+        NavItem("measures", "", "Population & measures", "/product/measures",
+                roles=(Role.ANALYST, Role.RESEARCHER, Role.HIM)),
+        NavItem("scheduling", "5.15", "Scheduling", "/product/scheduling",
+                roles=(Role.ANALYST, Role.HIM)),
         NavItem("overview", "", "Holdings", "/overview",
                 permissions=("patient:search", "report:read")),
         NavItem("reports", "", "Reports", "/reports",
@@ -132,10 +150,13 @@ NAV: tuple[NavGroup, ...] = (
     NavGroup("System", (
         NavItem("controlpanel", "", "Control panel", "/system/control",
                 permissions=("system:admin",)),
-        # The third System screen (core/web/components_routes.py), last in
-        # the group. The demonstration lists Model monitoring between the
-        # two; it has no platform route yet, and an entry with no route is
-        # a bug in this table (see above), so it joins when it exists.
+        # Model monitoring sits between the two, as the demonstration has
+        # it. It had no platform route for a long time, and this table's
+        # rule is that an entry with no route is a bug - so the entry
+        # waited for core/web/monitoring_routes.py rather than pointing at
+        # nothing. It exists now.
+        NavItem("modelmonitor", "", "Model monitoring", "/system/models",
+                permissions=("system:admin",)),
         NavItem("components", "", "Components", "/system/components",
                 permissions=("system:admin",)),
     )),

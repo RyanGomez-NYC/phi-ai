@@ -19,19 +19,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_web import _client  # noqa: E402
 
 
-class _FakeAssistantSettings:
-    provider = "bedrock"
-    phi_access = "none"
-    stays_in_org_cloud = True
-    reads_clinical_content = False
-
-    def describe(self):
-        return "claude via bedrock - documentation only"
+from core.assistant.config import AssistantSettings  # noqa: E402
+from core.assistant.runtime import AssistantRuntime  # noqa: E402
 
 
-class _FakeAssistantRuntime:
-    settings = _FakeAssistantSettings()
-    ops_connection = None
+def _runtime() -> AssistantRuntime:
+    """A REAL runtime carrying REAL settings, with only the edges stubbed.
+
+    THIS WAS TWO HAND-WRITTEN IMITATIONS and they went stale exactly the way
+    an imitation does. `_FakeAssistantSettings` listed four attributes and a
+    describe(); `_FakeAssistantRuntime` listed `settings` and
+    `ops_connection`. Both passed for as long as the pages under test read
+    only those, and the moment the runtime grew effective_settings() - the
+    method that applies the Control panel's model choice - these tests failed
+    with AttributeError on a class that exists only in this file. The real
+    object had gained a method; the copy of it had not.
+
+    AssistantRuntime is a plain dataclass and AssistantSettings is a frozen
+    one, so both are cheap to build for real. What is genuinely expensive is
+    the SDK client and the documentation index, and those are the two things
+    these tests never touch - so those, and only those, are None.
+    """
+    return AssistantRuntime(
+        settings=AssistantSettings(provider="bedrock", model="claude-sonnet-5"),
+        client=None,            # no page under test calls the model
+        knowledge_base=None,    # nor searches the documentation index
+    )
 
 
 def test_no_askbar_when_the_assistant_is_disabled():
@@ -42,7 +55,7 @@ def test_no_askbar_when_the_assistant_is_disabled():
 
 def test_the_askbar_is_on_every_page_when_enabled():
     client, _, _ = _client(roles="him")
-    client.app.state.assistant = _FakeAssistantRuntime()
+    client.app.state.assistant = _runtime()
     # Pages the him role can open (no /roi - the fake app wires no ROI
     # service - and no /audit, which him cannot read).
     for path in ("/overview", "/reports", "/patients"):
@@ -59,7 +72,7 @@ def test_the_assistant_section_itself_has_no_askbar():
     active != 'assistant'; the ops page sets active='assistant', so it
     exercises that branch without needing the full runtime."""
     client, _, _ = _client(roles="auditor")
-    client.app.state.assistant = _FakeAssistantRuntime()
+    client.app.state.assistant = _runtime()
     body = client.get("/assistant/ops").text
     assert 'class="askbar"' not in body
 
@@ -67,7 +80,7 @@ def test_the_assistant_section_itself_has_no_askbar():
 def test_ops_page_is_for_admin_and_auditor_only():
     for allowed in ("admin", "auditor"):
         client, _, _ = _client(roles=allowed)
-        client.app.state.assistant = _FakeAssistantRuntime()
+        client.app.state.assistant = _runtime()
         response = client.get("/assistant/ops")
         assert response.status_code == 200, allowed
         assert "Telemetry unavailable" in response.text  # unconfigured, said plainly
@@ -75,13 +88,13 @@ def test_ops_page_is_for_admin_and_auditor_only():
 
     for denied in ("him", "viewer", "analyst", "researcher"):
         client, _, _ = _client(roles=denied)
-        client.app.state.assistant = _FakeAssistantRuntime()
+        client.app.state.assistant = _runtime()
         assert client.get("/assistant/ops").status_code == 403, denied
 
 
 def test_ops_page_notes_it_never_shows_content():
     client, _, _ = _client(roles="auditor")
-    client.app.state.assistant = _FakeAssistantRuntime()
+    client.app.state.assistant = _runtime()
     body = client.get("/assistant/ops").text
     assert "counts and rates only" in body
 # Made by Ryan Gomez & Co. Inc.

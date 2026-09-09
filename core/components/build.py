@@ -20,6 +20,7 @@ says so rather than guessing what is running.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,13 +41,58 @@ def read_release(root: Path) -> Optional[str]:
     return lines[0] if lines else None
 
 
+#: Environment variables git exports to its own hooks, and which OVERRIDE
+#: `-C`. Any one of them set means `git -C somewhere_else` still operates
+#: on the repository the hook is running for.
+#:
+#: FOUND THE HARD WAY. scripts/pre_push_gates.sh runs the test suite from
+#: a pre-push hook, so every git call in that suite inherited GIT_DIR and
+#: acted on the branch being pushed instead of on its own fixture. A test
+#: that builds a throwaway repository and commits "one" into it committed
+#: "one" onto the real branch, moving HEAD to a three-file tree mid-push.
+#: The push was refused - by the gate, on unrelated failures - and the
+#: corruption was found before anything was published. It would have
+#: published on a green run.
+#:
+#: -C is a chdir, not a scope. Only removing these makes it one.
+GIT_CONTEXT_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+)
+
+
+def git_env(base: Optional[dict] = None) -> dict:
+    """A copy of the environment with git's own context removed.
+
+    Every subprocess call to git in this project goes through this, so a
+    reader asked about `root` answers about `root` no matter what invoked
+    the process.
+    """
+    env = dict(os.environ if base is None else base)
+    for name in GIT_CONTEXT_VARS:
+        env.pop(name, None)
+    return env
+
+
 def git(root: Path, *args: str) -> Optional[str]:
     """`git -C root ARGS`, stripped; None when git is missing, the
     directory is not a checkout, or the command fails. Never raises: a
-    reader that cannot answer says unknown."""
+    reader that cannot answer says unknown.
+
+    Runs with git's context variables stripped - see GIT_CONTEXT_VARS.
+    Without that, this function reports the hook's repository rather than
+    `root` whenever it is called from inside one, which is exactly when
+    the Components screen is asked what is running.
+    """
     try:
         run = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
-                             text=True, check=False, timeout=60)
+                             text=True, check=False, timeout=60, env=git_env())
     except (OSError, subprocess.SubprocessError):
         return None
     if run.returncode != 0:

@@ -117,7 +117,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
@@ -158,6 +158,39 @@ DEFAULT_MAX_TOOL_ITERATIONS = 6
 # family, and Sonnet 5 runs adaptive thinking by default - a value sized
 # to the visible answer alone truncates mid-sentence.
 DEFAULT_MAX_TOKENS = 8192
+
+# THE BOUNDS, AND THE ONLY PLACE THEY ARE WRITTEN DOWN. Every caller that
+# validates or clamps this number imports these - core/web/platform_routes.py
+# for the Control panel's form, and controlpanel.html for the input's own
+# min/max - so the operator's slider cannot express a value the model call
+# would reject, and cannot fail to express one it would accept.
+#
+# THEY DISAGREED, AND THAT WAS THE BUG. Before this, the library default
+# was 8192, the environment floor was 1024, the Control panel defaulted to
+# 1500 and clamped to 256..4096, and the HTML input carried its own copy of
+# 256/4096. So the operator UI could not express the code's own default,
+# and its floor was a tenth of it.
+#
+# WHY THE FLOOR IS 2500 AND NOT 256. max_tokens covers thinking plus the
+# visible answer. Adaptive thinking on this model family will spend most
+# of a small budget before writing anything, and the failure is silent:
+# the response comes back stop_reason="max_tokens" with EMPTY text and no
+# error. An operator who sets 256 to "keep answers short" gets an
+# assistant that returns nothing, with a control panel that told them the
+# value was acceptable.
+#
+# WHY THE CEILING IS 16000 AND NOT THE MODEL'S 128000. This call is not
+# streamed (core/assistant/session.py uses messages.create), so the whole
+# answer has to arrive inside one HTTP request. Anything much beyond this
+# risks the SDK timeout rather than a long answer. Raising it means
+# switching that call to streaming first.
+MIN_MAX_TOKENS = 2500
+MAX_MAX_TOKENS = 16000
+
+
+def clamp_max_tokens(value: int) -> int:
+    """The one place a max_tokens number is forced into range."""
+    return max(MIN_MAX_TOKENS, min(MAX_MAX_TOKENS, int(value)))
 
 # PHI access tiers, least to most capable. Ordered - see the module
 # docstring on why this is not two independent flags.
@@ -218,6 +251,50 @@ class AssistantSettings:
     # vertex provider only.
     gcp_project: Optional[str] = None
     gcp_region: Optional[str] = None
+
+    def with_overrides(
+        self,
+        *,
+        model: Optional[str] = None,
+        max_tokens: Optional[object] = None,
+    ) -> "AssistantSettings":
+        """This settings object with an operator's live choices applied.
+
+        WHAT THIS IS FOR. Everything else on this class comes from the
+        environment and is fixed for the life of the process. Two values
+        are not that: the Control panel lets a System Administrator pick
+        the foundation model and the answer-length limit while the
+        deployment is running, and a control that needs a restart to take
+        effect is not a control. This returns a NEW frozen settings with
+        those applied - the process-wide object is never mutated, so one
+        request's override cannot leak into another's.
+
+        EVERY ARGUMENT IS OPTIONAL AND BLANK MEANS "NOT SET". The platform
+        config store returns "" for a key nobody has chosen, and "" must
+        mean the environment's value rather than an empty model id.
+        A max_tokens that will not parse as an integer is likewise ignored
+        rather than guessed at: the environment's value is a working
+        configuration and a malformed override is not a reason to lose it.
+
+        max_tokens is forced into MIN_MAX_TOKENS..MAX_MAX_TOKENS by
+        clamp_max_tokens(), which is the same function the Control panel's
+        form validation calls - so a value that reaches here out of range
+        (an older row in the config table, a hand-edited database) is
+        corrected rather than sent to the model.
+        """
+        changes: dict[str, object] = {}
+
+        chosen = (model or "").strip()
+        if chosen:
+            changes["model"] = chosen
+
+        if max_tokens is not None and str(max_tokens).strip():
+            try:
+                changes["max_tokens"] = clamp_max_tokens(int(str(max_tokens).strip()))
+            except (TypeError, ValueError):
+                pass
+
+        return replace(self, **changes) if changes else self
 
     @property
     def resolved_model(self) -> str:
@@ -477,7 +554,7 @@ def settings_from_env() -> Optional[AssistantSettings]:
         model=(env_var("ASSISTANT_MODEL") or DEFAULT_MODEL).strip(),
         phi_access=phi_access,
         psychotherapy_access=psychotherapy_access,
-        max_tokens=_int_env("ASSISTANT_MAX_TOKENS", DEFAULT_MAX_TOKENS, 1024),
+        max_tokens=_int_env("ASSISTANT_MAX_TOKENS", DEFAULT_MAX_TOKENS, MIN_MAX_TOKENS),
         effort=effort,
         max_tool_iterations=_int_env(
             "ASSISTANT_MAX_TOOL_ITERATIONS", DEFAULT_MAX_TOOL_ITERATIONS, 1

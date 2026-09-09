@@ -98,8 +98,19 @@ _CONFIG_DEFAULTS = {
     "target_client_id": "",
     "rag_enabled": "on",
     "assistant_live": "on",
+    # BOTH EMPTY, AND EMPTY IS THE MEANINGFUL VALUE. "" means the operator
+    # has not chosen, so the environment's PHI_AI_ASSISTANT_MODEL and
+    # PHI_AI_ASSISTANT_MAX_TOKENS stand - see
+    # AssistantSettings.with_overrides(), which is the one place that
+    # decides what an unset override means.
+    #
+    # assistant_max_tokens was "1500" here, which was a fourth copy of a
+    # number core/assistant/config.py already owns, and 1500 was below the
+    # floor at which this model family returns an empty answer. A default
+    # written twice is a default that disagrees with itself; this file no
+    # longer has an opinion about it.
     "assistant_model": "",
-    "assistant_max_tokens": "1500",
+    "assistant_max_tokens": "",
 }
 
 _BUILTIN_MODELS = [

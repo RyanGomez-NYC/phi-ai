@@ -1,8 +1,9 @@
 # Changelog
 
-## 1.1.0 — 2026-09-08: the Components screen, the third System screen
+## 1.1.0 — 2026-09-08: the Components screen, the third System screen, in both stacks
 
-- **Components** (`/system/components`, System group, `system:admin`). Every part of the platform that can go out of date, one row each —
+- **Components** (`/system/components`, System group, `system:admin`; the demo at
+  `?p=components`). Every part of the platform that can go out of date, one row each —
   release and build stamps, the running image, dependency pins, runtimes, the vendored
   front-end, infrastructure pins, EMR vendor profiles, terminology releases, the model
   catalogue, the synthetic corpus, the migration ledger, key ages, operator configuration,
@@ -17,7 +18,10 @@
 - **One registry, declared once.** `core/components/registry.py` is the contract — key,
   group, kind, mode, backup unit, recovery, cadence, a reader and a procedure per component,
   the five steps, the five states, the cadences and retention counts — and the screen
-  enumerates it; nothing about a component is typed into a template.
+  enumerates it; nothing about a component is typed into a template. The demo's PHP mirror
+  (`www-demo/app/components.php`) is pinned to it in both directions by
+  `tests/test_components_coverage.py`: groups, steps, cadences, retention, the row set, and
+  per row the group, the name and the mode.
 - **One release source.** `RELEASE` at the repository root names the release; `__version__`
   reads it, and the CHANGELOG's top heading, the tag, the build stamp and the colophon are
   held to it, so a page can no longer print a release the CHANGELOG has moved past.
@@ -36,7 +40,14 @@
   (`platform_updates`, `platform_update_steps`, `platform_backups`, `platform_releases`,
   `platform_component_acks`) hold each job's five steps, the backups and rehearsals per
   store, the digests kept to roll back to, and the acknowledgements.
-
+- **The demo shows, the platform does.** The demo screen is information only: the same
+  layout, sections and words, every row current, every timestamp relative to the page load,
+  no form on the page — "On a deployment this screen applies updates and recovers from
+  failed ones; the demo shows it with every component current." Everything it states about
+  the Python side of the repository is emitted by a deterministic generator
+  (`www-demo/scripts/build_components.py`) whose committed output regenerates byte for byte;
+  vendor rows come from the EMR registry and model rows from the model registry, never
+  typed. The System documentation of both stacks lists the screen.
 - **No keys in the repository.** The release verification key is not committed: the operator
   places `config/release_signing.pub` on each host and the updater mounts that one file
   read-only. The signing key never leaves the workstation.
@@ -46,12 +57,9 @@
   swap-back, config restore from `<name>.previous`, the JWKS re-publish, the restore
   rehearsal per store on its 180-day cadence, and the verification sweep — healthcheck,
   audit chain, routes, the component's own check — that alone earns "Recovered".
-- **Thumbs on an answer.** Every assistant answer carries 👍 / 👎; a vote is recorded against
-  the request it answers (`aiops.assistant_feedback`, granted in the three cloud bootstraps) and
-  the assistant operations page counts votes per feature beside its other usage cards.
 
-Tests: `tests/test_components.py`, `tests/test_components_web.py`, `tests/test_assistant.py`,
-`tests/test_assistant_ops.py`.
+Tests: `tests/test_components_coverage.py` (the mirror pin, both directions);
+`tests/test_demo_components.py` — 56, file inspection and `php -r` on definition-only files.
 
 ## 1.1.0 — completed 2026-09-06: the Orchestration the 1.1.0 release named, in the platform
 

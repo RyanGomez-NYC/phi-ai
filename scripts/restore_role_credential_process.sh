@@ -17,9 +17,7 @@
 # trail records specifics.
 set -euo pipefail
 
-# Set PHI_AI_RESTORE_ROLE_ARN to your own account's restore role, e.g.
-#   arn:aws:iam::<YOUR_AWS_ACCOUNT_ID>:role/phi-ai-restore
-ROLE_ARN="${PHI_AI_RESTORE_ROLE_ARN:?set PHI_AI_RESTORE_ROLE_ARN to your restore role ARN}"
+ROLE_ARN="arn:aws:iam::514644129019:role/phi-ai-dev-restore"
 
 # Run the assume-role call on the machine's own base credentials, not on
 # the profile that invoked this script - otherwise the profile would

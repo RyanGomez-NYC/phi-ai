@@ -1712,3 +1712,152 @@ html.is-busy { cursor: progress; }
 .cx .cx-ack span { color: var(--c-dim); }
 .cx .cx-ack input[type=text] { width: 260px; }
 .cx .cx-ack input[type=date] { width: auto; }
+
+/* ═══ Cohort report — /cohort/report (core/web/product_routes.py, charts.py,
+   core/analytics/cohort_report.py). Server-rendered inline SVG on the light
+   surface: the marks carry the contract's palette (cohort #2a78d6, everyone
+   #898781, ramp #9ec5f4→#1c5cab, serious #ec835a) and every word wears the
+   page's own text tokens - identity comes from the mark beside the text.
+   ONE PIXEL SCALE. Every chart is drawn 600px wide at its natural height
+   and carries width/height attributes; .cr-svg lets it shrink in a card
+   narrower than that and never lets it grow. The cards (.cr-fig) sit in a
+   wrapped flex row aligned to the top, so a card is exactly as tall as its
+   own chart - never stretched to its neighbour's - and 638px wide (600 +
+   18px padding each side + the 1px border): two per row from a 1288px
+   column (a 1340px viewport), one below. Chart text: 12px labels and
+   values, 11px axis ticks and bin labels, tabular numerals. */
+.cr-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; }
+.cr-cta .meta { font-family: var(--mono); font-size: 10.5px; color: var(--ghost); }
+.cr-def { margin: 6px 0 0; font-family: var(--mono); font-size: 12px; color: var(--mute); }
+.cr-selectors { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 16px; }
+.cr-selectors label { display: flex; flex-direction: column; gap: 5px; font-size: 9.5px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.cr-selectors select { min-width: 150px; padding: 7px 10px; }
+.cr-selectors .meta { flex-basis: 100%; font-family: var(--mono); font-size: 10.5px; color: var(--ghost); }
+/* The condition box in the report's own bar (templates/_condition_box.html,
+   the builder's control). The bar is not the builder's composer, so the
+   input takes the frame the selects beside it have; the panel hangs off
+   .cb-search, which is the positioned element, and nothing on this bar
+   clips it (contract §8: an overflow:hidden container cuts the panel to one
+   row, so the field carries its own corners instead). */
+.cr-selectors .cr-field-q { display: flex; flex-direction: column; gap: 5px;
+  flex: 1 1 320px; min-width: 0; }
+.cr-selectors .cr-field-q > label { font-size: 9.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--faint); }
+.cr-selectors input[type=search] { width: 100%; max-width: none; box-sizing: border-box;
+  padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 5px;
+  background: #fff; color: var(--ink); font-size: 13px; -webkit-appearance: none; appearance: none; }
+.cr-selectors input[type=search]::placeholder { color: var(--ghost); }
+.cr-selectors .cr-suggest { margin-top: 3px; border-top: 1px solid var(--line-strong);
+  border-radius: 5px; }
+.cr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; margin-top: 16px; }
+.cr-tile { border: 1px solid var(--line); border-radius: 7px; padding: 14px 16px; background: #fff; }
+.cr-tile-v { font-family: var(--mono); font-size: 22px; line-height: 1.2; color: var(--navy);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cr-tile-v a { color: inherit; border-bottom: 1px solid var(--line-strong); }
+.cr-tile-v a:hover { color: var(--orange); border-color: var(--orange); }
+.cr-tile-k { font-size: 12px; color: var(--mute); margin-top: 6px; }
+.cr-tile-h { font-size: 11px; line-height: 1.5; color: var(--faint); margin-top: 3px; }
+.cr-section { margin-top: 30px; padding-top: 4px; border-top: 1px solid var(--line); }
+.cr-section h2 { margin-top: 14px; }
+/* The chart cards: a wrapped row, each card its own natural size, top-aligned. */
+.cr-charts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-top: 14px; }
+.cr-fig { flex: 0 1 638px; max-width: 100%; min-width: 0; margin: 0; padding: 14px 18px;
+  border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.cr-fig > figcaption { margin: 0 0 8px; }
+.cr-fig > figcaption h3 { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--navy); }
+.cr-fig > figcaption .hint { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
+/* The chart at its natural size: shrinks only when the card is narrower, never grows. */
+.cr-svg { display: block; max-width: 100%; height: auto; }
+.cr-svg text { font-family: var(--sans); font-size: 12px; fill: var(--slate); }
+.cr-svg .cr-a { font-size: 11px; fill: var(--mute); }
+.cr-svg .cr-v { font-family: var(--mono); font-size: 12px; fill: var(--ink); font-variant-numeric: tabular-nums; }
+.cr-svg .cr-legend text { fill: var(--mute); }
+.cr-svg .cr-grid { stroke: var(--line); }
+.cr-svg .cr-axis { stroke: var(--line-strong); }
+.cr-svg .cr-mark:hover { opacity: .85; }
+/* A breakdown with one category is a sentence, not a chart. */
+.cr-one { margin: 2px 0 0; font-size: 13px; line-height: 1.6; color: var(--body); }
+.cr-one strong { font-weight: 600; color: var(--ink); }
+.cr-sub { margin-top: 12px; font-size: 12px; color: var(--mute); }
+/* A dimension this deployment does not carry: its title and the one sentence. */
+.cr-absent { margin-top: 14px; }
+.cr-absent h3 { margin: 0; font-size: 13px; }
+.cr-none { margin: 8px 0 0; font-size: 13px; line-height: 1.6; color: var(--mute); max-width: 760px; }
+.cr-absent .cr-none { margin-top: 2px; }
+.cr-note { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--faint); max-width: 760px; }
+/* Every chart's table view, collapsed under it. */
+details.cr-table { margin-top: 6px; }
+details.cr-table > summary { font-size: 12px; color: var(--mute); cursor: pointer; }
+details.cr-table > summary:hover { color: var(--navy); }
+details.cr-table .tablewrap { margin-top: 8px; }
+details.cr-table thead th { padding: 8px 14px; }
+details.cr-table tbody td { padding: 8px 14px; font-size: 12px; }
+/* Abnormal share: status-serious, and always with its label - never colour alone. */
+.cr-abn { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px;
+  font-size: 12.5px; color: var(--body); }
+.cr-abn-k { font-family: var(--mono); font-size: 12px; color: var(--warn-fg); }
+.cr-abn-track { flex: 0 0 160px; height: 8px; border-radius: 4px; background: #fbe6dc; overflow: hidden; }
+.cr-abn-fill { display: block; height: 100%; background: #ec835a; border-radius: 0 4px 4px 0; }
+/* A measure: the rate, then numerator of denominator - each a link to its persons. */
+.cr-measure { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 18px; align-items: baseline;
+  padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+.cr-measures .cr-measure:last-child { border-bottom: 0; padding-bottom: 2px; }
+.cr-measure-t { font-size: 13px; color: var(--body); }
+.cr-measure-v { font-family: var(--mono); font-size: 18px; color: var(--navy); font-variant-numeric: tabular-nums; }
+.cr-measure-f { grid-column: 1 / -1; font-size: 11.5px; color: var(--mute); }
+@media (max-width: 700px) { .cr-measure { grid-template-columns: minmax(0, 1fr); } }
+
+/* ═══ Cohort builder — /cohort (core/web/product_routes.py, cohort.py). The
+   composer holds the condition SEARCH where its textarea was; the selectors
+   sit in its foot beside the button; the conditions matching the term are a
+   list of links, each with the persons who have it. ═══ */
+.composer input[type=search] { display: block; width: 100%; max-width: none; box-sizing: border-box;
+  border: none; border-radius: 0; padding: 15px 17px 12px; font-size: 14.5px; line-height: 1.6;
+  color: var(--ink); background: #fff; outline: none; -webkit-appearance: none; appearance: none; }
+.composer input[type=search]::placeholder { color: var(--ghost); }
+.composer .foot label { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--mute); }
+.composer .foot select { width: auto; max-width: 180px; padding: 6px 9px; font-size: 12.5px; }
+.cb-meta { margin: 8px 0 0; font-family: var(--mono); font-size: 10.5px; color: var(--ghost); }
+.cb-matches-wrap { margin-top: 22px; }
+.cb-matches-wrap h3 { margin: 0; }
+.cb-matches { list-style: none; margin: 8px 0 0; padding: 0; max-width: 760px;
+  border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.cb-matches li { display: flex; justify-content: space-between; align-items: baseline; gap: 14px;
+  padding: 8px 14px; border-top: 1px solid var(--line-soft); font-size: 13px; }
+.cb-matches li:first-child { border-top: 0; }
+.cb-matches li.on { background: var(--wash-2); }
+.cb-matches li a { color: var(--navy); }
+.cb-matches li a:hover { color: var(--orange); }
+.cb-matches .n { font-family: var(--mono); font-size: 12px; color: var(--mute);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-matches-wrap .hint { margin: 8px 0 0; max-width: 760px; line-height: 1.55; }
+
+/* The condition box is a combobox (app.js, handler 5): the panel of KNOWN
+   condition names hangs off the input, inside the composer's own frame, and
+   scrolls at twelve rows rather than pushing the page down. Hidden until
+   app.js opens it, so no-script readers see the list further down instead. */
+.cb-search { position: relative; }
+/* The composer clips its children to its rounded frame, which would cut the
+   panel off at the foot; the builder's frame keeps its corners on the parts
+   themselves instead, so the panel can hang below the box. */
+.cb-form .composer { overflow: visible; }
+.cb-form .composer input[type=search] { border-radius: 8px 8px 0 0; }
+.cb-form .composer .foot { border-radius: 0 0 8px 8px; }
+.cr-suggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+  margin: 0; padding: 4px 0; list-style: none; max-height: 264px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--line-strong); border-top: 1px solid var(--line-soft);
+  border-radius: 0 0 8px 8px; box-shadow: 0 12px 26px rgba(22, 35, 61, .12); }
+.cr-suggest-row { display: flex; justify-content: space-between; align-items: baseline;
+  gap: 14px; padding: 7px 17px; font-size: 13px; color: var(--body); cursor: pointer; }
+.cr-suggest-row:hover { background: var(--wash-3); color: var(--navy); }
+.cr-suggest-row.on, .cr-suggest-row[aria-selected="true"] {
+  background: var(--wash-3); color: var(--navy); }
+.cr-suggest-row .nm { min-width: 0; overflow-wrap: anywhere; }
+.cr-suggest-row .n { font-family: var(--mono); font-size: 11.5px; color: var(--mute);
+  font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.cr-suggest-note { padding: 8px 17px; font-size: 12px; line-height: 1.5; color: var(--faint); }
+/* Text the corpus knows no condition by: the cohort is the selectors alone,
+   and the page says so rather than counting something nobody asked for. */
+.cb-unresolved { margin: 14px 0 0; max-width: 760px; font-size: 13px; line-height: 1.6;
+  color: var(--warn-fg); }

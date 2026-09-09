@@ -25,14 +25,14 @@ import json
 import os
 import platform
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from core.components import build, ledger, manifest, vendored
 from core.components.registry import (
     CADENCE_DAYS, KEEP, STEPS, Context, Evidence, Fact, Reading, Step,
-    component, decide_state,
+    component, decide_state, now,
 )
 from core.config.settings import env_var
 
@@ -753,32 +753,99 @@ def _emr_procedure(ctx: Context) -> tuple[Step, ...]:
            backup_unit="The previous release.", recovery="The previous release.",
            cadence_days=CADENCE_DAYS["vendor_docs"], procedure=_emr_procedure)
 def read_emr_profiles(ctx: Context) -> Reading:
+    """The vendor profile table, and how long since anyone checked it.
+
+    THE ONLY HONEST QUESTION THIS ROW CAN ASK. Every field in
+    core/fhir/emr_profiles.py is a claim about somebody else's API,
+    transcribed from a page that vendor can change without telling anyone.
+    Nothing here can verify those claims are TRUE - so this asks the
+    question it can answer: when did a human last open the vendor's own
+    documentation and confirm them, and against which page.
+
+    BOTH FIELDS OR NEITHER. A doc_checked date with no doc_source is
+    somebody's memory of having checked; the reverse is a bookmark. A
+    profile carrying only one of the two is reported as an ERROR rather
+    than counted as dated, because a half-recorded check reads as a check.
+
+    A DATE OLDER THAN THE CADENCE IS NOT GREEN. It was, once: the reading
+    counted dated profiles and stopped there, so a check from three years
+    ago and one from this morning looked identical.
+    """
     from core.fhir.emr_profiles import PROFILES
 
     n = len(PROFILES)
     built = _fact(f"{n} vendor profiles", "core/fhir/emr_profiles.py PROFILES", ctx)
     running = _same(built, "PROFILES as imported by this process")
-    rows, dated = [], 0
+
+    cadence = CADENCE_DAYS["vendor_docs"]
+    today = now().date()
+    rows: list[tuple] = []
+    dated: list[str] = []
+    stale: list[str] = []
+    broken: list[str] = []
+
     for key, p in sorted(PROFILES.items()):
-        checked = getattr(p, "doc_checked", None)
-        if checked:
-            dated += 1
-        rows.append((p.name, p.auth_flow, p.assertion_algorithm, "yes" if p.supports_bulk_export else "no",
-                     ", ".join(p.writable_resources) or "none", str(checked) if checked else "not recorded"))
-    if dated == n:
-        latest = _fact(f"{n} profiles with a doc_checked date", "EMRProfile.doc_checked", ctx)
-    elif dated:
-        latest = Fact.unknown("EMRProfile.doc_checked", f"{n - dated} of {n} profiles record no doc_checked date")
+        checked, source = p.doc_checked.strip(), p.doc_source.strip()
+        if bool(checked) != bool(source):
+            broken.append(key)
+            when = "INCOMPLETE: " + ("date without a source" if checked
+                                     else "source without a date")
+        elif not checked:
+            when = "not recorded"
+        else:
+            try:
+                age = (today - date.fromisoformat(checked)).days
+            except ValueError:
+                broken.append(key)
+                age, when = None, f"INCOMPLETE: {checked!r} is not an ISO date"
+            if age is not None:
+                dated.append(key)
+                when = checked if age <= cadence else f"{checked} ({age}d - due)"
+                if age > cadence:
+                    stale.append(key)
+        rows.append((p.name, p.auth_flow, p.assertion_algorithm,
+                     "yes" if p.supports_bulk_export else "no",
+                     ", ".join(p.writable_resources) or "none", when, source or "-"))
+
+    if broken:
+        latest = Fact.unknown(
+            "EMRProfile.doc_checked",
+            f"{len(broken)} profile(s) record half a check ({', '.join(sorted(broken))}); "
+            "a date and the source that was read are only meaningful together",
+        )
+    elif not dated:
+        latest = Fact.unknown(
+            "EMRProfile.doc_checked",
+            "the profiles record no doc_checked date; a vendor page re-check has never "
+            f"been recorded (cadence {cadence} days)",
+        )
+    elif len(dated) < n:
+        latest = Fact.unknown(
+            "EMRProfile.doc_checked",
+            f"{n - len(dated)} of {n} profiles record no doc_checked date "
+            f"({', '.join(k for k in sorted(PROFILES) if k not in dated)})",
+        )
+    elif stale:
+        latest = Fact.unknown(
+            "EMRProfile.doc_checked",
+            f"{len(stale)} of {n} profiles were last checked more than {cadence} days "
+            f"ago ({', '.join(sorted(stale))})",
+        )
     else:
-        latest = Fact.unknown("EMRProfile.doc_checked",
-                              "the profiles record no doc_checked date; a vendor page re-check has never been "
-                              f"recorded (cadence {CADENCE_DAYS['vendor_docs']} days)")
+        latest = _fact(f"all {n} profiles checked within {cadence} days",
+                       "EMRProfile.doc_checked", ctx)
+
     changed = build.git(ctx.root, "log", "-1", "--format=%cs", "--", "core/fhir/emr_profiles.py")
     rows.append(("profiles last changed", changed or "unknown: no git checkout",
                  "git log -1 --format=%cs -- core/fhir/emr_profiles.py"))
+    note = ""
+    if len(dated) < n:
+        note = (f"{len(dated)} of {n} vendor profiles record which page was read and when; "
+                "the rest are behind vendor developer-portal logins")
     return _reading(ctx, "emr_profiles", running, built, latest,
-                    columns=("Vendor", "Auth flow", "Assertion", "Bulk export", "Writes", "Doc checked"), rows=rows,
-                    note="" if dated else "vendor documentation dates are not recorded in the profiles today")
+                    columns=("Vendor", "Auth flow", "Assertion", "Bulk export", "Writes",
+                             "Doc checked", "Source"),
+                    rows=rows, note=note)
 
 
 def _terminology_procedure(ctx: Context) -> tuple[Step, ...]:

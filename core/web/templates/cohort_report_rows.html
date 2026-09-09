@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Cohort rows — {{ definition }} — φ(ai){% endblock %}
+{% block body %}
+{#- The persons behind one number of the cohort report. Opaque EMR
+    references only - the same thing the patient search returns - and the
+    chart opens through the same purpose-asserting form, audited as a read. -#}
+<div class="kicker">5.11 · Population</div>
+<h1>Cohort rows — {{ definition }}</h1>
+<p class="cr-def">{{ selectors or 'everyone — no selector' }}{% if rows %} · {{ rows.label }}{% elif cell %} · {{ cell }}{% endif %}</p>
+<p class="lede">The persons behind one number of the
+<a href="/cohort/report?term={{ term | urlencode }}&amp;exact={{ '1' if exact else '' }}&amp;sex={{ sex | urlencode }}&amp;band={{ band | urlencode }}">cohort report</a>.
+References are the source EMR's opaque identifiers; opening a chart asserts a purpose of use and is
+recorded as a read against your name.</p>
+
+{% if error %}
+<div class="status warn" style="margin-top:22px"><strong>Not answered.</strong> {{ error }}</div>
+{% endif %}
+
+{% if rows %}
+<h2>{{ rows.count_text }} person{{ '' if rows.references | length == 1 else 's' }}{% if rows.truncated %} — capped; narrow the cell to see the rest{% endif %}</h2>
+{% if rows.references %}
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Patient reference</th><th></th></tr></thead>
+  <tbody>
+  {% for ref in rows.references %}
+    <tr>
+      <td class="mono">{{ ref }}</td>
+      <td>
+        <form method="post" action="/patients/{{ ref.split('/')[1] }}/open" class="row">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <select name="purpose_of_use" required aria-label="Purpose of use">
+            <option value="">Purpose of use…</option>
+            {% for code, label in purposes %}<option value="{{ code }}" {{ 'selected' if code == purpose_current }}>{{ label }}</option>{% endfor %}
+          </select>
+          <button type="submit" class="quiet small">Open</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty">No person of this cohort is in that cell.</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+{# Made by Ryan Gomez & Co. Inc. #}

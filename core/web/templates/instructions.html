@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Patient instructions — φ(ai){% endblock %}
+{% block body %}
+<h1>Patient instructions</h1>
+<p class="lede">Plain-language instructions are the one thing here written
+<em>for the patient</em>. The failure that matters is not an awkward sentence —
+it is a dose, a frequency or a follow-up the chart never stated.
+<code>core/capabilities/patient_instructions.py</code> compares every number and
+medication in the draft against the source, and <strong>a draft that introduces
+one never files</strong>.</p>
+
+{% if needs_patient %}
+  {% include "_needs_patient.html" %}
+{% else %}
+<div class="chips"><span class="chip filled">{{ patient.label }}</span></div>
+
+{% if notice %}<div class="notice warn"><p>{{ notice }}</p></div>{% endif %}
+
+<form method="post" action="/product/instructions">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="source_text">Source — the clinician's authored instructions</label>
+  <textarea id="source_text" name="source_text" rows="6">{{ draft.source_text if draft else "" }}</textarea>
+  <label for="medications">Structured medication list (comma separated)</label>
+  <input id="medications" name="medications" type="text"
+         value="{{ draft.medications|join(', ') if draft else '' }}">
+  <label for="draft_text">Draft to release to the patient</label>
+  <textarea id="draft_text" name="draft_text" rows="8">{{ draft.draft_text if draft else "" }}</textarea>
+  <button type="submit">Run the no-new-assertions check</button>
+</form>
+
+{% if draft %}
+<section class="check {{ 'pass' if draft.passed else 'fail' }}">
+  <h2>{{ "PASS" if draft.passed else "FAIL" }} — no-new-assertions check</h2>
+  {% if draft.passed %}
+    <p>Every number and medication in the draft appears in the source or the
+    structured list.</p>
+    <form method="post" action="/product/instructions/file">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit">File for signature</button>
+    </form>
+    <p class="hint">Filing stages it <strong>unsigned</strong>. Nothing reaches
+    the patient until a person signs it.</p>
+  {% else %}
+    <p>{{ draft.reason }}</p>
+    <ul>
+      {% for n in draft.new_numbers %}<li>Number not in source: <strong>{{ n }}</strong></li>{% endfor %}
+      {% for m in draft.new_medications %}<li>Medication not in source: <strong>{{ m }}</strong></li>{% endfor %}
+      {% for f in draft.new_followups %}<li>Follow-up not in source: <strong>{{ f }}</strong></li>{% endfor %}
+    </ul>
+    <p class="hint">The file control is absent, not merely disabled — a failing
+    draft has no path to a signature from this screen, and an attempt to file
+    one is refused and audited.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

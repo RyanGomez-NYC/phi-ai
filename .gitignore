@@ -38,8 +38,20 @@ tfplan*
 **/tfplan*
 tfboot
 # Generated imaging frames. Ignored except for the deny rule, which is
+# protection and belongs in the repo - see www-demo/var/ below.
+www-demo/public/cache/*
+!www-demo/public/cache/.htaccess
 # Runtime state - caches, generated frames, uploaded audio. Ignored except
 # for the deny rule itself, which is protection and belongs in the repo.
+www-demo/var/*
+!www-demo/var/.htaccess
+www-analytics/config.local.php
+
+# Every config variant, not just config.php. config.new.php carried a live DB
+# password and an API key and was one `git add -A` away from the repo on
+# 2026-09-06. The example file is the only one that belongs in history.
+www-demo/app/config*.php
+!www-demo/app/config.example.php
 
 # Components screen (core/components): build products written by
 # scripts/components.py, the gate record, a deployment's release drop,

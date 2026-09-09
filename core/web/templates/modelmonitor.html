@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Model monitoring — φ(ai){% endblock %}
+{% block body %}
+{# The .cx scope is the Components screen's dark palette, whose contrast was
+   measured rather than eyeballed. Reused, not copied: a second set of those
+   colours is how the two System screens drift apart. #}
+<div class="cx">
+<h1>Model monitoring</h1>
+
+<div class="mm-head cond-{{ condition }}">
+  <div class="mm-cond">
+    <span class="mm-led" aria-hidden="true"></span>
+    <strong>{{ condition_label }}</strong>
+  </div>
+  {% if reasons %}
+  <ul class="mm-reasons">
+    {% for r in reasons %}<li>{{ r }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+{% if condition == "unknown" %}
+<div class="notice warn">
+  <p><strong>Not checked is not the same as healthy.</strong> This panel reads
+  UNKNOWN rather than green because the instruments are not connected — a
+  monitoring screen that computes a nominal condition from an empty result set
+  is the most dangerous thing on a wall.</p>
+</div>
+{% endif %}
+
+{% if error %}<div class="notice warn"><p>{{ error }}</p></div>{% endif %}
+
+<h2>Active model</h2>
+<div class="keyvalue">
+  <div><span class="k">Model</span><span class="v mono">{{ active_model or "—" }}</span></div>
+  <div><span class="k">Provider</span><span class="v mono">{{ provider or "—" }}</span></div>
+</div>
+
+<h2>Registry <span class="count">{{ models|length }}</span></h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Slot</th><th>Provider</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for m in models %}
+    <tr><td>{{ m.name }}</td><td class="mono">{{ m.kind }}</td><td class="mono">{{ m.slot }}</td>
+        <td>{{ m.provider }}</td><td class="mono">{{ m.status | default("—") }}</td></tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No model is registered.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>Drift runs</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Run</th><th>Model</th><th>Probes</th><th>Passed</th><th>Failed probes</th></tr></thead>
+  <tbody>
+  {% for r in drift_runs %}
+    <tr><td class="mono small">{{ r.run_at }}</td><td class="mono">{{ r.model }}</td>
+        <td class="mono">{{ r.probes }}</td><td class="mono">{{ r.passed }}</td>
+        <td class="sub">{{ r.failed_probes or "—" }}</td></tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No drift probe has ever run.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+{% if usage %}
+<h2>Usage — last 30 days</h2>
+<div class="grid stats">
+  <div class="card stat"><div class="n">{{ usage.total | default(0) }}</div><div class="k">interactions</div></div>
+</div>
+{% endif %}
+</div>
+{% endblock %}

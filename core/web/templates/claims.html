@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Claims &amp; billing — φ(ai){% endblock %}
+{% block body %}
+<h1>Claims &amp; billing</h1>
+<p class="lede">Denial risk before adjudication, from this store's own history.
+<strong>Every factor is printed and cited to the counts that produced it</strong>
+— the output of this screen is an argument a biller makes to a payer, and an
+argument whose premises cannot be inspected is not one. Read under the
+<strong>payment</strong> purpose and audited as a disclosure.</p>
+
+{% if patient %}<div class="chips"><span class="chip filled">{{ patient.label }}</span></div>{% endif %}
+
+{% if not has_history %}
+<div class="notice warn">
+  <p><strong>This store holds no adjudicated claim history</strong>, so nothing
+  can be scored. That is reported rather than filled in with an industry average:
+  a denial rate borrowed from elsewhere is not a fact about your payers.</p>
+</div>
+{% endif %}
+
+<form method="get" action="/product/claims">
+  <label for="payer">Payer</label>
+  <input id="payer" name="payer" type="text" value="{{ payer }}">
+  <label for="service_line">Service line</label>
+  <input id="service_line" name="service_line" type="text" value="{{ service_line }}">
+  <label><input type="checkbox" name="documented" value="1" {% if documented %}checked{% endif %}>
+    Clinical documentation on file supports this line</label>
+  <button type="submit">Score</button>
+</form>
+
+{% if risk %}
+<section class="verdict {{ risk.band }}">
+  {% if risk.insufficient_history %}
+  <h2>Unscored</h2>
+  <p>{{ risk.insufficient_history }}</p>
+  {% else %}
+  <h2>{{ risk.score }} — {{ risk.band }} risk</h2>
+  <table class="rows"><thead><tr><th>Factor</th><th>Points</th><th>From</th></tr></thead><tbody>
+  {% for f in risk.factors %}
+    <tr><td>{{ f.name }}<div class="hint small">{{ f.explanation }}</div></td>
+        <td class="mono">+{{ f.points }}</td>
+        <td class="mono small">{{ f.numerator }}/{{ f.denominator }} = {{ "%.1f%%"|format(f.rate * 100) }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+  {% endif %}
+</section>
+<p class="hint"><strong>Advisory only.</strong> Nothing here withholds a claim or
+reorders a queue. A score that silently deprioritised low-value claims would be
+an operational prediction driving a restrictive action — see the action space on
+the no-show screen for why that needs a recorded operator basis.</p>
+{% endif %}
+{% endblock %}

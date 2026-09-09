@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Psychotherapy notes — φ(ai){% endblock %}
+{% block body %}
+<h1>Psychotherapy notes</h1>
+<p class="lede">The record class 45 CFR 164.508(a)(2) treats separately — its own
+bucket, its own key, its own database role. <strong>This screen deliberately
+offers less than every other one:</strong> no assistant prompt, no copy control,
+no export. The assistant has no tool that reaches this store unless all four
+gates below are open, and an ask box here would imply otherwise.</p>
+
+<h2>The four gates <span class="count">{{ open_count }} of 4 open</span></h2>
+<table class="rows">
+  <thead><tr><th></th><th>Gate</th><th>What it is</th></tr></thead><tbody>
+  {% for g in gates %}
+    <tr><td class="mono">{{ "OPEN" if g.on else "shut" }}</td>
+        <td>{{ g.name }}</td>
+        <td class="hint small">{{ g.detail }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if open_count < 4 %}
+<div class="notice">
+  <p>Not every gate is open, so these notes are not reachable from here — and
+  that is the default. Each of the four is deliberate and independent: the PHI
+  tier alone never reaches them, and neither does an administrator's wildcard.</p>
+</div>
+{% else %}
+<div class="notice warn">
+  <p><strong>All four gates are open.</strong> Every search and every read of
+  this store is audited as a disclosure before anything is decrypted, under the
+  reader's own name and stated purpose.</p>
+</div>
+{% endif %}
+{% endblock %}

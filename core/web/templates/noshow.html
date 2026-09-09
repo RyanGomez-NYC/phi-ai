@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}No-show risk — φ(ai){% endblock %}
+{% block body %}
+<h1>No-show risk</h1>
+<p class="lede">The score is not the hard part. <strong>What a score is allowed
+to do</strong> is. A no-show model that sends an extra reminder or offers
+transport improves access for the patients who struggle to attend; the same
+model wired to denial, deprioritization or double-booking quietly penalizes
+them — and it is the same model.</p>
+
+<div class="notice"><p>{{ no_patient_dimension }}</p></div>
+
+<form method="get" action="/product/noshow">
+  <label for="action">Proposed action</label>
+  <input id="action" name="action" type="text" value="{{ action }}"
+         placeholder="additional_reminder">
+  <label for="basis">Operator basis (required to permit a restrictive action)</label>
+  <input id="basis" name="basis" type="text" value="{{ basis }}">
+  <button type="submit">Evaluate against the action space</button>
+</form>
+
+{% if decision %}
+<section class="verdict {{ 'pass' if decision.allowed else 'fail' }}">
+  <h2>{{ "Permitted" if decision.allowed else "Refused" }} — <span class="mono">{{ decision.action }}</span></h2>
+  <p>{{ decision.reason }}</p>
+  {% if decision.override %}
+  <p class="warn"><strong>Permitted by operator override.</strong>
+  {{ decision.override.operator }} — “{{ decision.override.basis }}”. Recorded on
+  the audit trail; an override with no stated basis is no override at all.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<h2>The vocabulary is closed</h2>
+<p>An action this module has never heard of is <strong>refused, not guessed
+at</strong>. Classifying an unknown action as “probably supportive” would be the
+silent fallback the invariants prohibit — new supportive actions are added in
+code review, where somebody has to argue the classification.</p>
+<h3>Supportive — permitted on a prediction alone</h3>
+<p class="mono small">{{ supportive|join(", ") }}</p>
+<h3>Restrictive — refused without a recorded operator override</h3>
+<p class="mono small">{{ restrictive|join(", ") }}</p>
+{% endblock %}

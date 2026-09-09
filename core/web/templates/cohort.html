@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_condition_box.html" import condition_box %}
 {% block title %}Cohort builder — φ(ai){% endblock %}
 {% block body %}
 <h1>Cohort builder</h1>
@@ -13,32 +14,74 @@ construction, not by policy.</p>
   {% for b in badges %}<span class="chip filled">{{ b }}</span>{% endfor %}
 </div>
 
-<form method="post" action="/cohort">
+{# The builder. A cohort is any combination of its variables and each
+   variable alone is one: the condition is a SEARCH (its names come from the
+   CDM, never a typed row of chips), sex and age band are selectors, and
+   nothing set is "all persons". GET, so a definition is a URL a link can
+   set; data-autoapply lets app.js submit the form as its controls change,
+   and the button is the same form with no script. The hidden `exact` marks
+   a pick from the list below; typing a new term un-picks it.
+
+   The condition box is a COMBOBOX: app.js asks data-suggest (GET
+   /cohort/suggest) as the reader types and fills the listbox under the
+   input with the KNOWN condition names that match, each with its person
+   count. The control itself - the box, its panel and the hidden `exact`
+   the panel sets - is _condition_box.html, ONE definition shared with the
+   report's own selector bar, so the two screens cannot come to offer
+   different vocabularies; without script the panel never opens and the
+   server-rendered "conditions matching" list further down is the
+   fallback. #}
+<form method="get" action="/cohort" class="cb-form" data-autoapply>
   <div class="composer" style="margin-top:18px">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <textarea name="term" rows="2"
-      placeholder="A condition to count — e.g. diabetes, hypertension, heart failure, or a code prefix like E11 or I50.9">{{ term }}</textarea>
+    {{ condition_box(suggest_url, value=term, exact=exact) }}
     <div class="foot">
-      <button type="submit">Build cohort</button>
-      <span class="meta">role: omop_analyst · SELECT only · no write grant · recorded verbatim before it runs</span>
+      <label>sex
+        <select name="sex">
+          <option value="">any</option>
+          {# The options are the CDM's own values, by the selector's own expression. #}
+          {% for s in sexes %}<option value="{{ s }}" {{ 'selected' if s == sex }}>{{ s }}</option>
+          {% else %}{% if sex %}<option value="{{ sex }}" selected>{{ sex }}</option>{% endif %}{% endfor %}
+        </select></label>
+      <label>age band
+        <select name="band">
+          <option value="">any</option>
+          {% for b in bands %}<option value="{{ b }}" {{ 'selected' if b == band }}>{{ b }}</option>{% endfor %}
+        </select></label>
+      <button type="submit" data-busy data-busy-label="Counting">Build cohort</button>
+      <span class="meta">{{ payer_note }}</span>
     </div>
   </div>
 </form>
-
-{% if shortcuts %}
-<div class="starters">
-  {% for s in shortcuts[:10] %}
-  <form method="post" action="/cohort" style="display:inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="term" value="{{ s }}">
-    <button type="submit" class="starter">{{ s }}</button>
-  </form>
-  {% endfor %}
-</div>
-{% endif %}
+<p class="cb-meta">role: omop_analyst · SELECT only · no write grant · COUNT(DISTINCT person_id) · recorded verbatim before it runs</p>
 
 {% if error %}
 <div class="status warn" style="margin-top:22px"><strong>Not answered.</strong> {{ error }}</div>
+{% endif %}
+
+{# Only KNOWN conditions count: text the corpus knows no condition by
+   builds nothing, and the count below is the selectors' cohort. The
+   sentence is the contract's, verbatim (core/analytics/cohort.py). #}
+{% if unresolved %}
+<p class="cb-unresolved">{{ unresolved }}</p>
+{% endif %}
+
+{# The conditions matching the term: the CDM's concept names that contain
+   it, each with the persons who have it, the twelve most common - a GROUP
+   BY, never a list. Each is a link that sets the condition EXACTLY. #}
+{% if term | length >= 2 and (matches or matches_note) %}
+<section class="cb-matches-wrap">
+<h3>conditions matching “{{ term }}”</h3>
+{% if matches %}
+<ol class="cb-matches">
+  {% for m in matches %}
+  <li{% if exact and m.name == term %} class="on"{% endif %}><a href="/cohort?q={{ m.name | urlencode }}&amp;exact=1&amp;sex={{ sex | urlencode }}&amp;band={{ band | urlencode }}"{% if exact and m.name == term %} aria-current="true"{% endif %}>{{ m.name }}</a><span class="n">{{ m.persons_text }} persons</span></li>
+  {% endfor %}
+</ol>
+<p class="hint">Pick one to count that condition exactly; the typed term counts every condition containing it, by shortcut or code prefix as well. Counts under 11 read “&lt; 11”.</p>
+{% else %}
+<p class="cr-none">{{ matches_note }}</p>
+{% endif %}
+</section>
 {% endif %}
 
 {% if result %}
@@ -48,12 +91,19 @@ construction, not by policy.</p>
 </div>
 
 <div class="grid stats">
-  <div class="card stat"><div class="n">{{ "{:,}".format(result.patient_count) }}</div>
-    <div class="k">distinct persons — not diagnosis rows</div></div>
+  <div class="card stat"><div class="n">{{ result.patient_count_text }}</div>
+    <div class="k">distinct persons — {{ result.definition }}</div></div>
   <div class="card stat"><div class="n">{{ "{:,}".format(result.total_patients_stored) }}</div>
     <div class="k">total patients in this deployment — the denominator a zero is read against</div></div>
   <div class="card stat"><div class="n good">0</div>
     <div class="k">identifiers returned; this plane holds none</div></div>
+</div>
+
+{# The report: every population metric at this cohort's level, on its
+   own page. The button carries the whole definition. #}
+<div class="cr-cta">
+  <a class="btn" href="/cohort/report?term={{ term | urlencode }}&amp;exact={{ '1' if exact else '' }}&amp;sex={{ sex | urlencode }}&amp;band={{ band | urlencode }}">Report</a>
+  <span class="meta">charts and every population metric at this cohort's level — the cohort's share beside everyone's, counts under 11 withheld</span>
 </div>
 
 {% if result.matched_on %}
@@ -70,9 +120,9 @@ construction, not by policy.</p>
 <div class="callout">
   <div><strong>Counting, and what may be published.</strong> A patient diagnosed at
   four visits is one person, not four — the count is distinct
-  <span class="mono">person_id</span>. Counts are reported exactly here, with no
-  small-cell suppression, which is a deliberate recorded choice; the publication
-  constraint binds any derived table committed to a repository, not this screen.
+  <span class="mono">person_id</span>. A count under 11 reads “&lt; 11”: small-cell
+  suppression on the analytics plane, the same floor the report keeps; the publication
+  constraint binds any derived table committed to a repository as well.
   Resolving a cohort to names is a different surface with a different role.</div>
 </div>
 {% endif %}

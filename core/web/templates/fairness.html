@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Fairness screen — φ(ai){% endblock %}
+{% block body %}
+<h1>Fairness screen</h1>
+<p class="lede">A model's declared input schema, screened against 45 CFR 92.210 by
+<code>core/governance/fairness.py</code>. A declared protected variable fails
+outright; a named proxy candidate fails unless an operator has recorded a basis
+for it.</p>
+
+<div class="notice"><p>{{ no_patient_dimension }}</p></div>
+
+<form method="get" action="/product/fairness">
+  <label for="variables">Declared input variables, one per line</label>
+  <textarea id="variables" name="variables" rows="6"
+            placeholder="age_at_encounter&#10;zip_code&#10;prior_no_shows">{{ variables }}</textarea>
+  <button type="submit">Screen the schema</button>
+</form>
+
+{% if result %}
+<section class="verdict {{ 'pass' if result.ok else 'fail' }}">
+  <h2>{{ "PASS" if result.ok else "FAIL" }}</h2>
+  {% if result.reason %}<p>{{ result.reason }}</p>{% endif %}
+  {% if result.protected_variables_found %}
+  <p><strong>Protected variables:</strong>
+     <span class="mono">{{ result.protected_variables_found|join(", ") }}</span> —
+     these measure a protected category and fail the screen outright.</p>
+  {% endif %}
+  {% if result.unjustified_proxies %}
+  <p><strong>Proxy candidates with no recorded basis:</strong>
+     <span class="mono">{{ result.unjustified_proxies|join(", ") }}</span> —
+     flagged, never silently permitted.</p>
+  {% endif %}
+  {% if result.justified_proxies %}
+  <p><strong>Proxy candidates with a recorded basis:</strong>
+     <span class="mono">{{ result.justified_proxies|join(", ") }}</span></p>
+  {% endif %}
+</section>
+<div class="notice warn">
+  <p><strong>A pass is not a clean bill of health.</strong> This screen catches
+  <em>declared</em> protected variables and the named proxy candidates. It cannot
+  catch an undeclared proxy — a variable that correlates with a protected
+  category without saying so — and the module is explicit about that limit.</p>
+</div>
+{% endif %}
+
+<h2>What it screens against</h2>
+<p>Protected categories: <span class="mono">{{ categories|join(", ") }}</span></p>
+<details><summary>Named proxy candidates ({{ proxies|length }})</summary>
+  <p class="mono small">{{ proxies|join(", ") }}</p>
+</details>
+{% endblock %}

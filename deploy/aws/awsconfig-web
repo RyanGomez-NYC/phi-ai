@@ -6,5 +6,5 @@
 [profile phi-ai-web-restore]
 # Via a spaceless wrapper: credential_process splits on whitespace, so
 # it cannot reference this repo's space-bearing path directly.
-credential_process = /path/to/your/home/.phi-ai/restore-role-creds.sh
+credential_process = /Users/ryangomez/.phi-ai/restore-role-creds.sh
 region = us-east-1

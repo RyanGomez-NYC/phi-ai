@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Documentation gaps — φ(ai){% endblock %}
+{% block body %}
+<h1>Documentation gaps — coding integrity</h1>
+<p class="lede">Read in <strong>both directions</strong>: chart evidence for a
+diagnosis the problem list omits (a care gap first, a revenue gap second), and
+money billed with no clinical documentation on file to support it (a compliance
+gap). <strong>A tool that only finds revenue is upcoding with better
+branding.</strong> Every finding is a query for a human coder — nothing here
+changes a code or a note.</p>
+
+{% if needs_patient %}
+  {% include "_needs_patient.html" %}
+{% else %}
+<div class="chips"><span class="chip filled">{{ patient.label }}</span>
+  <span class="chip">{{ report.uncoded_support|length }} care / revenue</span>
+  <span class="chip">{{ report.unsupported_bills|length }} compliance</span></div>
+
+{% if not report.support_map_used %}
+<div class="notice warn">
+  <p><strong>No code-support map is configured</strong>, so only exact-code
+  matching ran. This report is narrower than it looks — a code relationship
+  asserted by a platform vendor rather than by your own coding policy is not a
+  default this software will ship.</p>
+</div>
+{% endif %}
+
+<h2>Care and revenue gaps <span class="count">{{ report.uncoded_support|length }}</span></h2>
+{% for u in report.uncoded_support[:60] %}
+<section class="finding">
+  <p class="query">{{ u.query }}</p>
+  <p class="hint mono small">{{ u.evidence_keys|join(" · ") }}</p>
+</section>
+{% else %}<p class="hint">None found.</p>{% endfor %}
+
+<h2>Compliance gaps <span class="count">{{ report.unsupported_bills|length }}</span></h2>
+{% for b in report.unsupported_bills[:60] %}
+<section class="finding warn">
+  <p class="query">{{ b.query }}</p>
+  <p class="hint mono small">{{ b.storage_key }}</p>
+</section>
+{% else %}<p class="hint">None found.</p>{% endfor %}
+
+{% if report.uncoded_support and not report.unsupported_bills %}
+<p class="hint">Findings in one direction only. That can be a clean chart — but a
+deployment that <em>never</em> sees the second kind is one whose coding tool has
+quietly become a revenue tool.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

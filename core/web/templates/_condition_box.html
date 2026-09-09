@@ -1,0 +1,53 @@
+{#- The condition control - ONE definition of it, for every screen that lets
+    a reader name a condition: the cohort builder (cohort.html) and the
+    report's own selector bar (cohort_report.html). It was written into the
+    builder alone first; a second copy would have let the two screens drift
+    into offering different vocabularies, different keys and different
+    keyboard behaviour, which is what "no hand-maintained lists" forbids one
+    level up. The demonstration factored the same markup into
+    www-demo/app/views/_condition_box.php for the same reason.
+
+    The markup is the contract's §5.2 and §6.1: a search box that is a
+    COMBOBOX over the corpus's OWN condition names, and the listbox it opens
+    directly under itself. The behaviour is app.js handler 5 (this interface
+    serves script-src 'self', so it cannot be inline) and the apply-on-change
+    of handler 4; nothing here depends on either. Without script the panel
+    never opens, the box is a plain search field, and the form's own button
+    submits it - on the builder the server-rendered "conditions matching"
+    list is the fallback, and on the report the Cohort builder link goes to
+    it.
+
+    The row inside the panel is the PROTOTYPE app.js clones, so the row's
+    markup lives here beside the panel rather than in a script.
+
+    Arguments:
+      suggest_url  the JSON endpoint (GET /cohort/suggest).
+      value        what the box holds - the corpus's own name once a term
+                   has resolved, the reader's own words when it named no
+                   condition, so their text survives to be fixed.
+      exact        whether that name was picked (or resolved) exactly; it
+                   rides in the hidden field app.js sets on a pick and
+                   clears on the next keystroke.
+      name         the query key this screen counts by: "q" on the builder,
+                   "term" on the report. The one difference between them.
+      label        a visible label, for a bar whose other controls have one;
+                   without it the box names itself to a screen reader.
+    One box per page, so the ids have defaults and no screen passes them. -#}
+{% macro condition_box(suggest_url, value='', exact=false, name='q', label='',
+                       box_id='cb-q', panel_id='cb-suggest') -%}
+{% if label %}<div class="cr-field-q"><label for="{{ box_id }}">{{ label }}</label>{% endif %}
+<div class="cb-search">
+  <input type="search" name="{{ name }}" placeholder="Search conditions…" value="{{ value }}"
+    id="{{ box_id }}" autocomplete="off" maxlength="200"{% if not label %} aria-label="Search conditions"{% endif %}
+    role="combobox" aria-autocomplete="list" aria-expanded="false"
+    aria-controls="{{ panel_id }}" aria-activedescendant=""
+    data-suggest="{{ suggest_url }}">
+  <ul class="cr-suggest" id="{{ panel_id }}" role="listbox" aria-label="Known conditions" hidden>
+    <li class="cr-suggest-row" role="option" aria-selected="false" data-suggest-row hidden
+      ><span class="nm"></span><span class="n"></span></li>
+  </ul>
+</div>
+{% if label %}</div>{% endif %}
+<input type="hidden" name="exact" value="{{ '1' if exact else '' }}" data-autoapply-reset data-suggest-exact>
+{%- endmacro %}
+{# Made by Ryan Gomez & Co. Inc. #}

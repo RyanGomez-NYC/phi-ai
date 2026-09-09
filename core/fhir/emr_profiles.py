@@ -95,6 +95,37 @@ class EMRProfile:
 
     write_notes: str = ""
 
+    # ---- provenance -------------------------------------------------
+    #
+    # WHEN THIS PROFILE'S FACTS WERE LAST READ OFF THE VENDOR'S OWN
+    # DOCUMENTATION, and where. Every other field here is a claim about
+    # somebody else's API, transcribed by hand from a page that vendor can
+    # change without telling anyone. Endpoints move, an algorithm is
+    # narrowed, a scope rule is added - and nothing in this repository
+    # notices, because nothing here can: a test can check that this table
+    # is SELF-consistent, never that it is TRUE.
+    #
+    # So the honest thing a test CAN check is whether anyone has looked
+    # recently, and that is what these two fields are for. The Components
+    # screen reads them (core/components/members.py read_emr_profiles) and
+    # shows the vendor-profile row as stale once the cadence in
+    # CADENCE_DAYS["vendor_docs"] has passed.
+    #
+    # BOTH OR NEITHER, AND THE READER ENFORCES IT. A date with no source is
+    # someone's memory of having checked; a source with no date is a
+    # bookmark. Only the pair is a verifiable claim - it says which page
+    # was read, so the next person can read the same one and see what
+    # changed. Leave BOTH empty for a vendor nobody has verified: an empty
+    # pair reports honestly as "not recorded", and that is a better state
+    # than a date that means nothing.
+    #
+    # doc_checked is an ISO date, YYYY-MM-DD, the day a human (or an agent
+    # acting for one) actually opened doc_source and confirmed the fields
+    # above against it. NEVER the date this file was edited, and never
+    # today's date stamped across the table to turn the row green.
+    doc_checked: str = ""
+    doc_source: str = ""
+
 
 # Confirm supported_resources against the target instance's own
 # CapabilityStatement (GET {base_url}/metadata) before ingesting from it -
@@ -232,6 +263,18 @@ def get_profile(vendor_key: str = "epic") -> EMRProfile:
 # ---------------------------------------------------------------------------
 
 CERNER = EMRProfile(
+    # Confirmed there: "JWTs must be signed using RS384 or ES384 (as of
+    # this writing), as advertised by the
+    # token_endpoint_auth_signing_alg_values_supported field on the
+    # /.well-known/smart-configuration discovery endpoint" - so RS384
+    # below is supported. And requires_token_scopes=True is that page's
+    # own rule, quoted: "Wildcard Scopes are currently not supported ...
+    # An application is currently required to specifically request each
+    # scope that it needs to run."
+    doc_checked="2026-09-08",
+    doc_source=(
+        "https://docs.oracle.com/en/industries/health/millennium-platform-apis/millennium-authorization-framework/"
+    ),
     name="Oracle Health (Cerner)",
     auth_flow="smart_backend_services",
     supported_resources=(
@@ -438,6 +481,15 @@ MEDITECH = EMRProfile(
 # and setup: the ModMed chapter of docs/EMR_CONNECTORS.md.
 # ---------------------------------------------------------------------------
 MODMED = EMRProfile(
+    # The live discovery document, which advertises
+    # token_endpoint_auth_signing_alg_values_supported including both
+    # "ES384" and "RS384". ES384 below is therefore accepted rather than
+    # obligatory at this endpoint - it is the narrower choice and it
+    # works, so it stands; a deployment that must use an RSA key can.
+    doc_checked="2026-09-08",
+    doc_source=(
+        "https://fhirmp.mmi.prod.fhir.ema-api.com/fhir/r4/.well-known/smart-configuration"
+    ),
     name="ModMed",
     # The portal's token-endpoint page (reference/post_auth-realms-fhir-
     # protocol-openid-connect-token): on the client_credentials grant
@@ -960,6 +1012,13 @@ ALTERA = EMRProfile(
 # (GET {base_url}/metadata) before ingesting from it, as with every entry
 # in this file.
 GREENWAY = EMRProfile(
+    # Confirmed there, and it is an instruction rather than a list:
+    # "Use the ES384 (ECDSA using P-384 and SHA-384) signature algorithm
+    # when generating your keys." An RSA key will not do here.
+    doc_checked="2026-09-08",
+    doc_source=(
+        "https://developers.greenwayhealth.com/developer-platform/docs/how-to-create-a-backend-services-application"
+    ),
     name="Greenway Health",
     # 'backend services use client credentials which are comprised of a
     # public/private JWKS key pair' - a signed JWT client assertion. No
@@ -1867,6 +1926,14 @@ TRUBRIDGE = EMRProfile(
 # certification pages - all read 2026-09-01. The Epic entry above sets the
 # DEPTH of this one; not one fact in it comes from Epic.
 MEDHOST = EMRProfile(
+    # The live discovery document for the tenant this profile already
+    # cites. It advertises ["RS384","ES384"], and its token_endpoint is
+    # the same https://api.mhdi10xasayd.com/smart/oauth2/token this
+    # profile records - so the endpoint has not moved either.
+    doc_checked="2026-09-08",
+    doc_source=(
+        "https://fhir.yourcareuniverse.net/tenant/7b158079-391d-484b-a078-bee596d2f165/.well-known/smart-configuration"
+    ),
     name="MEDHOST",
     # "Service client apps can obtain a token from the MEDHOST
     # authorization server using the 'client_credentials' workflow ...

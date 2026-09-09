@@ -24,6 +24,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
+from dataclasses import replace
 
 import pytest
 import yaml
@@ -233,7 +235,17 @@ class FakeUpdater:
 # ---------------------------------------------------------------------------
 
 def _git(root: Path, *args: str) -> str:
-    run = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=False)
+    """git against `root`, with git's own context variables stripped.
+
+    THIS IS NOT OPTIONAL AND IT IS NOT DEFENSIVE. `-C` is a chdir, not a
+    scope: GIT_DIR overrides it. scripts/pre_push_gates.sh runs this suite
+    from a pre-push hook, where git exports GIT_DIR - so without the
+    scrub, _git_repo() below builds its fixture and commits "one" onto the
+    branch being pushed, moving HEAD to a three-file tree in the middle of
+    the push that is verifying it.
+    """
+    run = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
+                         text=True, check=False, env=build.git_env())
     assert run.returncode == 0, f"git {' '.join(args)}: {run.stderr}"
     return run.stdout.strip()
 
@@ -591,13 +603,79 @@ def test_infra_pins_reader(tmp_path):
     assert members._satisfies("3.6.2", "~> 3.6") and not members._satisfies("4.0.0", "~> 3.6")
 
 
-def test_emr_profiles_reader_records_no_date_it_does_not_have():
+def test_emr_profiles_reader_names_the_vendors_nobody_has_checked():
+    """REPLACES test_emr_profiles_reader_records_no_date_it_does_not_have.
+
+    That test asserted every profile read "not recorded" and that the
+    reading was "unknown" - which was true, and was the problem. It did not
+    describe a behaviour; it described a gap, and pinned it. Filling in a
+    single vendor's doc_checked date would have turned it red, so the test
+    stood guard over the emptiness it was reporting.
+
+    What the reading owes an operator is not a blanket "unknown" but WHICH
+    vendors nobody has verified, so the gap is a work list rather than a
+    mood. That is what this asserts.
+    """
     r = _reading("emr_profiles", Context(root=ROOT))
-    assert r.state == "unknown"
-    assert "no doc_checked date" in r.latest.value
     assert r.running.value == r.built.value and r.built.value.endswith("vendor profiles")
-    assert all(row[-1] == "not recorded" for row in r.evidence.rows if row[0] != "profiles last changed")
-    assert r.evidence.columns[-1] == "Doc checked"
+    assert r.evidence.columns[-2:] == ("Doc checked", "Source")
+
+    from core.fhir.emr_profiles import PROFILES
+
+    dated = {k for k, p in PROFILES.items() if p.doc_checked}
+    undated = set(PROFILES) - dated
+
+    if undated:
+        assert r.state == "unknown"
+        for key in undated:
+            assert key in r.latest.value, (
+                f"{key} has no doc_checked date and the reading does not name it - "
+                "an operator cannot act on a count"
+            )
+    else:
+        assert r.state != "unknown"
+
+
+def test_a_profile_records_the_page_that_was_read_or_no_date_at_all():
+    """A date with no source is somebody's memory of having checked.
+
+    Both fields or neither - and the reader reports a half-recorded check
+    as an error rather than counting it, because half a check reads like a
+    check on the screen.
+    """
+    from core.fhir.emr_profiles import PROFILES
+
+    for key, p in PROFILES.items():
+        assert bool(p.doc_checked) == bool(p.doc_source), (
+            f"{key}: doc_checked={p.doc_checked!r} doc_source={p.doc_source!r} - "
+            "record the date AND the page it was read from, or neither"
+        )
+        if p.doc_checked:
+            datetime.strptime(p.doc_checked, "%Y-%m-%d")   # ISO, or this raises
+            assert p.doc_source.startswith("https://"), key
+
+
+def test_a_stale_check_is_not_treated_as_a_fresh_one():
+    """A date is not the same as a recent date.
+
+    The reading used to count dated profiles and stop, so a check from
+    three years ago and one from this morning were the same fact. Here
+    every profile carries a date older than the cadence, and the reading
+    still has to refuse to go green.
+    """
+    from core.components.registry import CADENCE_DAYS
+    from core.fhir import emr_profiles
+
+    cadence = CADENCE_DAYS["vendor_docs"]
+    old = (datetime.now(timezone.utc).date() - timedelta(days=cadence + 30)).isoformat()
+    patched = {
+        k: replace(p, doc_checked=old, doc_source="https://example.invalid/docs")
+        for k, p in emr_profiles.PROFILES.items()
+    }
+    with mock.patch.object(emr_profiles, "PROFILES", patched):
+        r = _reading("emr_profiles", Context(root=ROOT))
+    assert r.state == "unknown", "a check older than the cadence must not read as current"
+    assert "more than" in r.latest.value and str(cadence) in r.latest.value
 
 
 def test_terminology_reader_says_release_ids_are_not_recorded():
@@ -1576,3 +1654,132 @@ def test_docker_compose_renders_the_pinned_digest_onto_every_dockerfile_service(
     unpinned = render("")
     for name in ("app", "web", "scheduler", "verify", "bulk-scheduler"):
         assert unpinned[name]["image"] == "phi-ai:dev", name
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker CLI not on PATH")
+def test_compose_renders_on_a_clone_that_has_no_env_file(tmp_path):
+    """A FRESH CLONE renders docker-compose.yml. No .env, no --env-file.
+
+    THIS IS THE CASE THE TEST ABOVE CANNOT SEE. It writes its own env file
+    and passes --env-file, so it renders in a configuration no new
+    contributor has: on a clean checkout `docker compose config` failed
+    outright, and so did that test, because every service declared
+    `env_file: .env` and .env is gitignored. README.md tells a new
+    contributor to run the suite first and promises "the full suite runs
+    without any cloud" - the suite was red until you had provisioned one.
+
+    Two things had to be true and neither was:
+      1. .env must be OPTIONAL - `required: false` - with a committed
+         .env.defaults read before it for the values a render needs.
+      2. Every ${VAR} INTERPOLATED into a volume spec needs a default in
+         the compose file itself. env_file does not feed interpolation, so
+         .env.defaults cannot fix this one: an unset key path rendered
+         `::ro` and Compose rejected the file.
+
+    Only the tracked files are copied, so this fails if a fix ever depends
+    on something gitignored - which is the whole bug, restated.
+    """
+    tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"],
+                             capture_output=True, text=True, timeout=60)
+    if tracked.returncode != 0:
+        pytest.skip("not a git checkout")
+    clone = tmp_path / "clone"
+    for rel in filter(None, tracked.stdout.split("\0")):
+        src = ROOT / rel
+        if not src.is_file():
+            continue          # a deleted-but-staged path; nothing to copy
+        dst = clone / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(src.read_bytes())
+
+    assert (clone / "docker-compose.yml").is_file()
+    assert (clone / ".env.defaults").is_file(), (
+        ".env.defaults is not tracked - it is the fallback docker-compose.yml "
+        "reads before .env, so it has to be in the clone"
+    )
+    assert not (clone / ".env").exists(), (
+        ".env reached a clone of the tracked files. It is gitignored and holds "
+        "a deployment's buckets and key paths; it must never be committed."
+    )
+
+    run = subprocess.run(
+        ["docker", "compose", "--profile", "updater", "--profile", "verify",
+         "config", "--format", "json"],
+        cwd=clone, capture_output=True, text=True, timeout=120,
+    )
+    assert run.returncode == 0, (
+        "docker compose config failed on a clone with no .env:\n"
+        + run.stderr[-800:]
+    )
+    services = json.loads(run.stdout)["services"]
+    for name in ("app", "web", "scheduler", "verify", "bulk-scheduler"):
+        assert services[name]["image"] == "phi-ai:dev", name
+
+
+# ---------------------------------------------------------------------------
+# git's context variables override -C
+# ---------------------------------------------------------------------------
+
+def test_git_helpers_answer_about_the_directory_they_were_given(tmp_path, monkeypatch):
+    """`-C` IS A CHDIR, NOT A SCOPE, and GIT_DIR beats it.
+
+    FOUND WHILE PUBLISHING. scripts/pre_push_gates.sh runs this suite from
+    a pre-push hook, and git exports GIT_DIR to its hooks. Every git call
+    in this file therefore acted on the branch being pushed rather than on
+    its own fixture: _git_repo() built a throwaway repository and committed
+    "one" INTO THE REAL BRANCH, moving HEAD to a three-file tree in the
+    middle of the push that was verifying it. The push was refused on
+    unrelated grounds and the damage was found before anything reached a
+    remote; on a green run it would have published.
+
+    This pins both halves - the production reader and the test helper -
+    with GIT_DIR pointed somewhere else entirely, which is the condition a
+    hook creates.
+    """
+    fixture = _git_repo(tmp_path, {"RELEASE": "7.7.7\n"})
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    _git(elsewhere, "init", "-q", "-b", "main")
+
+    monkeypatch.setenv("GIT_DIR", str(elsewhere / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(elsewhere))
+
+    assert build.git(fixture, "rev-parse", "--abbrev-ref", "HEAD") == "main"
+    assert build.git(fixture, "log", "-1", "--format=%s") == "one", (
+        "build.git() reported another repository's history; GIT_DIR won over -C"
+    )
+    assert _git(fixture, "log", "-1", "--format=%s") == "one"
+
+
+def test_git_env_strips_every_variable_that_overrides_c(monkeypatch):
+    for name in build.GIT_CONTEXT_VARS:
+        monkeypatch.setenv(name, "/somewhere/else")
+    env = build.git_env()
+    assert not [n for n in build.GIT_CONTEXT_VARS if n in env]
+    assert "PATH" in env, "the scrub must not empty the environment"
+
+
+def test_the_release_manifest_enumerates_the_tree_it_was_pointed_at(tmp_path, monkeypatch):
+    """THE MANIFEST IS WHAT A RELEASE IS VERIFIED AGAINST, so building it
+    from the wrong repository is the worst form of this bug.
+
+    scripts/components.py tracked_files() runs `git ls-files`. GIT_DIR
+    overrides -C, and git exports GIT_DIR to its hooks - so a release
+    built from inside any git-invoked context enumerated the INVOKING
+    repository's files, and MANIFEST.sha256 was then signed over that
+    list. Observed: the pre-push gate ran the build and the manifest came
+    back naming another checkout's files.
+    """
+    import scripts.components as cli
+
+    root = _git_repo(tmp_path, {"RELEASE": "9.9.9\n", "README.md": "hi\n", "core/x.py": "x = 1\n"})
+    other_parent = tmp_path / "other"
+    other_parent.mkdir()
+    elsewhere = _git_repo(other_parent, {"DIFFERENT.md": "no\n"})
+
+    monkeypatch.setenv("GIT_DIR", str(elsewhere / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(elsewhere))
+
+    assert cli.tracked_files(root) == ["README.md", "RELEASE", "core/x.py"], (
+        "the manifest enumerated another repository's files"
+    )

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Ambient documentation — φ(ai){% endblock %}
+{% block body %}
+<h1>Ambient documentation</h1>
+<p class="lede">Whether this encounter may be recorded at all — and if not,
+which of the two gates said no. <strong>Consent is asked first:</strong> if
+state law does not permit the recording, whether the transcription service is
+configured safely is a question about nothing.</p>
+
+{% if patient %}<div class="chips"><span class="chip filled">{{ patient.label }}</span></div>{% endif %}
+
+<form method="get" action="/product/ambient">
+  <label for="jurisdiction">Encounter jurisdiction (two-letter state)</label>
+  <input id="jurisdiction" name="jurisdiction" type="text" maxlength="2"
+         value="{{ jurisdiction }}" placeholder="CA">
+  <label for="modality">Modality</label>
+  <select id="modality" name="modality">
+    <option value="in_person" {% if modality == "in_person" %}selected{% endif %}>In person</option>
+    <option value="telehealth" {% if modality == "telehealth" %}selected{% endif %}>Telehealth</option>
+  </select>
+  <label><input type="checkbox" name="consented" value="1" {% if consented %}checked{% endif %}> Structured consent recorded</label>
+  <label><input type="checkbox" name="attested" value="1" {% if attested %}checked{% endif %}> Verbal attestation captured at the head of the recording</label>
+  <button type="submit">Evaluate</button>
+</form>
+
+<h2>Gate 1 — state recording law {% if standard %}<span class="chip">{{ standard }}</span>{% endif %}</h2>
+<section class="verdict {{ 'pass' if decision.allowed else 'fail' }}">
+  <p><strong>{{ "Capture permitted" if decision.allowed else "Capture refused" }}</strong></p>
+  <p>{{ decision.reason }}</p>
+  {% if decision.deletion_obligation %}
+  <p class="warn"><strong>Deletion obligation:</strong> audio already captured
+  for this encounter must be deleted, not merely stopped.</p>
+  {% endif %}
+</section>
+<p class="hint">A state absent from the table is treated as <strong>all-party</strong>,
+not one-party: the cost of over-asking is a sentence at the start of a visit,
+and the cost of under-asking is a felony in Florida. An unsettled state is a
+deny with no override.</p>
+
+<h2>Gate 2 — egress evidence</h2>
+<section class="verdict {{ 'pass' if egress.allowed else 'fail' }}">
+  <p><strong>{{ "Transcription permitted" if egress.allowed else "Transcription refused" }}</strong>
+     — {{ egress.target }}</p>
+  <p>{{ egress.reason }}</p>
+</section>
+<p class="hint">Evaluated from the evidence this deployment has actually
+recorded. <strong>No evidence is a refusal, not a pass</strong> — an opt-out
+policy nobody has checked is indistinguishable from one that is not in force.</p>
+
+<h2>Audio store</h2>
+{% if store %}
+<p>Configured: <span class="mono">{{ store.store_label }}</span>, retained
+{{ store.retention_days }} days. Ambient audio is held under its <strong>own
+retention schedule</strong>,
+never the note's — the recording and the document it produced expire on
+different clocks by design.</p>
+{% else %}
+<div class="notice warn"><p>No ambient audio store is configured, so nothing can
+be captured even where both gates allow it. The store refuses to share a bucket
+whose label contains "general": ambient audio does not live with the record.</p></div>
+{% endif %}
+{% endblock %}

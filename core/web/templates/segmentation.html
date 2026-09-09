@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Sensitive categories — φ(ai){% endblock %}
+{% block body %}
+<h1>Sensitive categories</h1>
+<p class="lede">What segmentation held back from this deployment's own store.
+<code>core/governance/segmentation.py</code> decides per resource and
+<strong>fails closed</strong>: any category hit, any restricted confidentiality
+code, any unmapped sensitivity label, and any shape it cannot classify all
+exclude.</p>
+
+<div class="notice"><p>{{ no_patient_dimension }}</p></div>
+
+{% if not configured %}
+<div class="notice warn">
+  <p><strong>No sensitive-category value sets are configured</strong>, so nothing
+  can be classified and this screen reports nothing. That is deliberately not the
+  same as reporting zero: a screen showing no exclusions because no category is
+  defined looks identical to one showing none because the store holds nothing
+  sensitive. Point <code>PHI_AI_SENSITIVE_VALUE_SETS_PATH</code> at a ruleset —
+  see <code>config/sensitive_value_sets.example.yaml</code>.</p>
+</div>
+{% else %}
+<div class="chips">
+  <span class="chip filled">{{ sampled }} sampled</span>
+  <span class="chip">{{ stats.included }} included</span>
+  <span class="chip warn">{{ sampled - stats.included }} excluded</span>
+</div>
+
+<h2>Excluded, and why</h2>
+{% if decisions %}
+<table class="rows"><thead><tr><th>Object</th><th>Reason</th></tr></thead><tbody>
+{% for key, d in decisions %}
+  <tr><td class="mono small">{{ key }}</td>
+      <td>{{ d.reason }}{% if d.unclassifiable %} <span class="chip warn">unclassifiable</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody></table>
+<p class="hint">The <strong>unclassifiable</strong> rows are the interesting
+ones. An exclusion nobody can explain is a mapping gap, not a sensitive record —
+it means a resource shape or a code system this deployment has not taught the
+classifier about, and it is being withheld on the safe assumption rather than
+because anyone decided it should be.</p>
+{% else %}
+<p class="hint">Nothing in the sample was excluded.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

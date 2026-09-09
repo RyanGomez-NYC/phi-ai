@@ -251,9 +251,10 @@ truth (IdP / directory); the platform enforces what that source asserts.</p>
       {% endfor %}
       <tr>
         <td>Answer length limit<div class="hint mono" style="font-size:10.5px">assistant_max_tokens</div></td>
-        <td><input type="number" name="assistant_max_tokens" min="256" max="4096"
-             value="{{ cfg.assistant_max_tokens or '1500' }}" style="width:120px"></td>
-        <td class="mono" style="font-size:11px; color:var(--mute)">256–4096 tokens</td>
+        <td><input type="number" name="assistant_max_tokens"
+             min="{{ max_tokens_min }}" max="{{ max_tokens_max }}"
+             value="{{ cfg.assistant_max_tokens or max_tokens_default }}" style="width:120px"></td>
+        <td class="mono" style="font-size:11px; color:var(--mute)">{{ max_tokens_min }}–{{ max_tokens_max }} tokens</td>
       </tr>
       <tr>
         <td>Active assistant model / switches<div class="hint mono" style="font-size:10.5px">assistant_model · rag_enabled · assistant_live</div></td>

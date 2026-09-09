@@ -25,6 +25,22 @@
   </a>
 
   {% if identity %}
+  {# THE CONTEXT BAR. Who this session is looking at, on every screen.
+     context_chip was computed in core/web/app.py's page() and passed into
+     every template for as long as that function has existed, and NO
+     TEMPLATE EVER RENDERED IT - so the platform knew the answer and never
+     said it, while the demonstration has shown a context bar throughout.
+     Reading screen after screen without being told whose chart you are in
+     is how the wrong patient's record gets acted on. #}
+  <div class="ctx-bar{{ ' has-patient' if patient_context }}">
+    <span class="ctx-chip">{{ context_chip }}</span>
+    {% if patient_context %}
+    <form method="post" action="/patients/context/clear" class="ctx-clear">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" title="Stop following this patient">Clear</button>
+    </form>
+    {% endif %}
+  </div>
   {# Horizontal navigation: one hover/touch dropdown per group, from the
      same role-filtered table as ever. Below 1020px the bar collapses
      into the single Menu dropdown beside it. #}

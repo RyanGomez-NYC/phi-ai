@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from core.assistant import knowledge, posture, tools
 from core.assistant.conversations import ConversationStore
@@ -42,6 +42,20 @@ class AssistantRuntime:
     platform_settings: Any = None     # core.config.settings.Settings
     profile: Any = None               # core.config.scale_profile.ScaleProfile
     reader: Any = None                # core.web.data.RecordReader
+
+    # THE CONTROL PANEL'S LIVE CHOICES, read on every session rather than
+    # at startup. A callable returning {"model": ..., "max_tokens": ...},
+    # wired by core/web/app.py to the platform config store; None in a
+    # deployment with no Control panel (the CLI, the drift checker), where
+    # the environment is the whole configuration.
+    #
+    # A CALLABLE, NOT A VALUE, ON PURPOSE. An operator changes the model
+    # and expects the next answer to use it. Holding the value here would
+    # mean reading it once at build() time and needing a restart - which
+    # is exactly the bug this replaced: the panel wrote `assistant_model`
+    # and `assistant_max_tokens` to the config store, audit-logged the
+    # change, and nothing ever read them back.
+    live_overrides: Optional[Callable[[], dict]] = None
 
     # Shared across every caller on this worker, keyed by an id in each
     # user's own signed session cookie and checked against their username
@@ -85,6 +99,32 @@ class AssistantRuntime:
             + json.dumps(summary, indent=2, sort_keys=True)
         )
 
+    def effective_settings(self) -> AssistantSettings:
+        """Settings as they stand right now, operator overrides applied.
+
+        Every read of `self.settings` that reaches the model or describes
+        it to a user goes through here instead, so the Control panel, the
+        model call, the telemetry row and the on-screen description can
+        never disagree about which model answered.
+
+        A failing override provider is logged and ignored. The assistant
+        answering with the environment's model is a worse answer than the
+        operator asked for; the assistant refusing to answer because the
+        config store is briefly unreachable is no answer at all.
+        """
+        if self.live_overrides is None:
+            return self.settings
+        try:
+            chosen = self.live_overrides() or {}
+        except Exception as exc:      # noqa: BLE001 - see the docstring
+            log.warning("live assistant overrides unavailable, using the "
+                        "environment's settings: %s", exc)
+            return self.settings
+        return self.settings.with_overrides(
+            model=chosen.get("model"),
+            max_tokens=chosen.get("max_tokens"),
+        )
+
     def session_for(
         self,
         *,
@@ -100,11 +140,17 @@ class AssistantRuntime:
     ) -> AssistantSession:
         permitted = capabilities is tools.UNRESTRICTED or "report:read" in capabilities
 
+        # Resolved ONCE per session, not per read: two calls to
+        # effective_settings() inside one session could straddle an
+        # operator's change and build a toolbox for one model while
+        # calling another.
+        settings = self.effective_settings()
+
         # Belt and braces. The caller is expected not to pass `clinical`
         # in a deployment that did not enable a PHI tier, but dropping it
         # here means a caller that gets that wrong builds a toolbox with
         # no clinical tools rather than one that quietly has them.
-        if clinical is not None and not self.settings.reads_clinical_content:
+        if clinical is not None and not settings.reads_clinical_content:
             log.warning(
                 "clinical access was offered to the assistant but "
                 "PHI_AI_ASSISTANT_PHI_ACCESS is 'none' - ignoring it"
@@ -116,13 +162,13 @@ class AssistantRuntime:
         # psychotherapy pieces additionally demand the deployment's own
         # psychotherapy gate. A caller that gets either wrong builds a
         # toolbox WITHOUT those tools, never one that quietly has them.
-        if research is not None and not self.settings.allows_lookup:
+        if research is not None and not settings.allows_lookup:
             log.warning(
                 "research access was offered to the assistant but "
                 "PHI_AI_ASSISTANT_PHI_ACCESS is not 'lookup' - ignoring it"
             )
             research = None
-        if research is not None and not self.settings.psychotherapy_access and (
+        if research is not None and not settings.psychotherapy_access and (
             research.psychotherapy_connection is not None
             or research.read_psychotherapy is not None
         ):
@@ -138,12 +184,12 @@ class AssistantRuntime:
 
         return AssistantSession(
             client=self.client,
-            settings=self.settings,
+            settings=settings,
             toolbox=tools.build(
                 self.knowledge_base,
                 settings=self.platform_settings,
                 profile=self.profile,
-                assistant_settings=self.settings,
+                assistant_settings=settings,
                 reader=self.reader,
                 capabilities=capabilities,
                 clinical=clinical,

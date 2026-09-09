@@ -177,6 +177,31 @@ def load_value_sets(path: Path) -> CategoryValueSets:
     return CategoryValueSets(codes=codes, departments=departments)
 
 
+def configured_value_sets() -> Optional[CategoryValueSets]:
+    """The deployment's value sets from PHI_AI_SENSITIVE_VALUE_SETS, or
+    None when unset or unloadable.
+
+    The same answer core/assistant/tools.py gives its grounded tool, for
+    the same reason: a caller that gets None must fail closed (withhold,
+    or not build) rather than run over an empty exclusion vocabulary.
+    Re-read per call, never cached, so a config fix needs no restart.
+    """
+    from core.config.settings import env_var
+
+    path = env_var("SENSITIVE_VALUE_SETS")
+    if not path:
+        return None
+    try:
+        return load_value_sets(Path(path))
+    except Exception as exc:  # loud, and still closed
+        import logging
+
+        logging.getLogger("phi-ai.terminology").error(
+            "sensitive-category value sets failed to load: %s", exc
+        )
+        return None
+
+
 def load(
     *,
     value_sets_path: Path,

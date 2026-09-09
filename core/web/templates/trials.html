@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Trial screening — φ(ai){% endblock %}
+{% block body %}
+<h1>Trial screening</h1>
+<p class="lede">The coordinator worklist from
+<code>core/capabilities/trial_screening.py</code>: candidates ordered by how much
+inclusion evidence the chart holds, each carrying the citations a coordinator
+needs to verify the match.</p>
+
+<div class="notice"><p>{{ no_patient_dimension }} This screen asks which
+patients might be eligible, so it screens across the store rather than the chart
+in context.</p></div>
+
+<form method="get" action="/product/trials">
+  <label for="inclusion">Inclusion criteria, one per line</label>
+  <textarea id="inclusion" name="inclusion" rows="4">{{ inclusion }}</textarea>
+  <label for="exclusion">Exclusion criteria, one per line</label>
+  <textarea id="exclusion" name="exclusion" rows="3">{{ exclusion }}</textarea>
+  <button type="submit">Screen</button>
+</form>
+
+{% if candidates is not none %}
+<p class="hint">{{ screened }} charts screened · {{ candidates|length }} candidates</p>
+{% for c in candidates %}
+<section class="candidate {{ 'flagged' if c.excluded_pending_review }}">
+  <h3>{{ c.patient_reference }}
+    <span class="count">{{ c.inclusion_count }} inclusion match{{ "" if c.inclusion_count == 1 else "es" }}</span>
+    {% if c.excluded_pending_review %}<span class="chip warn">exclusion flagged — review</span>{% endif %}
+  </h3>
+  {% for m in c.inclusion_matches %}
+    <p class="crit">✓ {{ m.criterion.text }}</p>
+    {% for x in m.excerpts %}<blockquote>{{ x }}</blockquote>{% endfor %}
+    <p class="hint mono small">{{ m.citations|join(" · ") }}</p>
+  {% endfor %}
+  {% for m in c.exclusion_matches %}
+    <p class="crit warn">⚠ exclusion: {{ m.criterion.text }}</p>
+    {% for x in m.excerpts %}<blockquote>{{ x }}</blockquote>{% endfor %}
+    <p class="hint mono small">{{ m.citations|join(" · ") }}</p>
+  {% endfor %}
+</section>
+{% endfor %}
+<p class="hint"><strong>Exclusions are shown, never silently applied.</strong>
+Ruling somebody out of a trial belongs to a coordinator reading the citation,
+not to a retrieval score.</p>
+{% endif %}
+{% endblock %}

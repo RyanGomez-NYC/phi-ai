@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Scheduling — φ(ai){% endblock %}
+{% block body %}
+<h1>Scheduling optimization</h1>
+<p class="lede">The clinic's demand curve, bucketed by hour.
+<strong>Counts and arithmetic only</strong> — no patient is named on this plane,
+and no schedule is changed by a model.</p>
+
+<div class="notice"><p>{{ no_patient_dimension }}</p></div>
+
+<div class="chips">
+  <span class="chip filled">{{ "{:,}".format(total) }} behind the curve</span>
+  <span class="chip">peak {{ peak }}/hour</span>
+</div>
+
+<table class="rows">
+  <thead><tr><th>Hour</th><th>Volume</th><th></th></tr></thead><tbody>
+  {% for hour, n in curve %}
+    {% if n %}
+    <tr><td class="mono">{{ "%02d:00"|format(hour) }}</td><td class="mono">{{ n }}</td>
+        <td><span class="bar" style="width:{{ (n * 100 // peak) if peak else 0 }}%">&nbsp;</span></td></tr>
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>What the curve may be acted on with</h2>
+<p>A demand curve is an operational prediction, and this screen defers to the
+same closed vocabulary every other prediction does. <strong>Overbooking is a
+restrictive action</strong>: it takes access away from the person scheduled, so
+it needs a recorded operator basis, not a busy afternoon.</p>
+<h3>Supportive — permitted on the curve alone</h3>
+<p class="mono small">{{ supportive|join(", ") }}</p>
+<h3>Restrictive — refused without a recorded basis</h3>
+<p class="mono small">{{ restrictive|join(", ") }}</p>
+{% endblock %}

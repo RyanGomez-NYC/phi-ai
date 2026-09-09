@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Prior auth &amp; appeals — φ(ai){% endblock %}
+{% block body %}
+<h1>Prior auth &amp; appeals</h1>
+<p class="lede">An evidence packet assembled by
+<code>core/capabilities/prior_auth.py</code>: each criterion answered with the
+chart excerpts that support it, every one citable back to the stored object.
+The purpose is <strong>Payment</strong> by definition here — the engine asserts
+it and writes it that way, so this screen does not offer a choice it would then
+have to ignore.</p>
+
+{% if needs_patient %}
+  {% include "_needs_patient.html" %}
+{% else %}
+<div class="chips"><span class="chip filled">{{ patient.label }}</span></div>
+
+<form method="get" action="/product/priorauth">
+  <label for="criteria">Criteria, one per line</label>
+  <textarea id="criteria" name="criteria" rows="5"
+            placeholder="documented trial of a first-line agent&#10;imaging within 12 months">{{ criteria }}</textarea>
+  <label for="kind">Packet</label>
+  <select id="kind" name="kind">
+    <option value="prior_authorization" {% if kind == "prior_authorization" %}selected{% endif %}>Prior authorization</option>
+    <option value="appeal" {% if kind == "appeal" %}selected{% endif %}>Appeal</option>
+  </select>
+  <button type="submit">Assemble packet</button>
+</form>
+
+{% if packet %}
+  {% if packet.unmet %}
+  <div class="notice warn">
+    <p><strong>{{ packet.unmet|length }} unmet criteria.</strong> No supporting
+    chart evidence was found for these. That is a statement about the record,
+    not a clinical judgment — and it is shown rather than quietly dropped,
+    because a packet that hides what it could not support is one a payer will
+    reject and a reviewer cannot check.</p>
+  </div>
+  {% endif %}
+  {% for e in packet.evidence %}
+  <section class="criterion">
+    <h3>{{ "✓" if e.met else "✗" }} {{ e.criterion.text }}</h3>
+    {% if e.met %}
+      {% for x in e.excerpts %}<blockquote>{{ x }}</blockquote>{% endfor %}
+      <p class="hint mono small">{{ e.citations|join(" · ") }}</p>
+    {% else %}
+      <p class="hint">No supporting chart evidence found.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+  <p class="hint">Refuted and entered-in-error content is never offered as
+  supporting evidence — see the engine's own note on why.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Chart abstraction — φ(ai){% endblock %}
+{% block body %}
+<h1>Chart abstraction</h1>
+<p class="lede">The engine proposes; <strong>a named human confirms</strong>.
+<code>core/capabilities/abstraction.py</code> fills each element from the chart
+with its citations, and refuses to export while any element is unconfirmed —
+there is no partial export and no auto-confirm.</p>
+
+{% if needs_patient %}
+  {% include "_needs_patient.html" %}
+{% else %}
+<div class="chips"><span class="chip filled">{{ patient.label }}</span></div>
+
+<form method="get" action="/product/attributes">
+  <label for="elements">Measure elements, one per line</label>
+  <textarea id="elements" name="elements" rows="5"
+            placeholder="most recent HbA1c&#10;date of last retinal exam">{{ elements }}</textarea>
+  <button type="submit">Propose from the chart</button>
+</form>
+
+{% if worklist %}
+<p class="hint">{{ pending|length }} of {{ states|length }} elements still need a
+human confirmation. Export is refused until none do.</p>
+{% for s in states %}
+<section class="element">
+  <h3>{{ s.element.description }}</h3>
+  {% if s.proposed_excerpts %}
+    {% for x in s.proposed_excerpts %}<blockquote>{{ x }}</blockquote>{% endfor %}
+    <p class="hint mono small">{{ s.proposed_citations|join(" · ") }}</p>
+  {% else %}
+    <p class="hint">Nothing proposed — the chart holds no matching text. An
+    abstractor may still record this as not found in the chart.</p>
+  {% endif %}
+  <p class="hint">{{ "confirmed by " ~ s.confirmed_by if s.confirmed else "unconfirmed" }}</p>
+</section>
+{% endfor %}
+<p class="hint">Negated content — refuted, entered-in-error — is never proposed
+as evidence, the same rule prior auth applies.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

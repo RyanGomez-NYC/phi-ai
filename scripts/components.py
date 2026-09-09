@@ -66,7 +66,21 @@ def sha256_file(path: Path) -> str:
 # ---- build ---------------------------------------------------------------
 
 def tracked_files(root: Path) -> list[str]:
-    run = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, text=True, check=False)
+    """What git tracks under `root` - and under `root`, not wherever this
+    process was invoked from.
+
+    env=build.git_env() IS LOAD-BEARING HERE, more than anywhere else it
+    appears. GIT_DIR overrides -C, and git exports GIT_DIR to its hooks,
+    so a release built from inside any git-invoked context - a pre-push
+    gate, a CI step that is itself a hook, an operator's wrapper script -
+    enumerated the INVOKING repository's files. The manifest that names
+    what a release contains would then be built from the wrong tree, and
+    signed. Found when the pre-push gate ran this and the manifest came
+    back listing another checkout.
+    """
+    run = subprocess.run(["git", "-C", str(root), "ls-files", "-z"],
+                         capture_output=True, text=True, check=False,
+                         env=build.git_env())
     if run.returncode != 0:
         raise RuntimeError(f"git ls-files failed: {run.stderr.strip()} (the manifest lists what git tracks)")
     return sorted(p for p in run.stdout.split("\0") if p)

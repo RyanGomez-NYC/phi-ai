@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Ingest &amp; mapping QA — φ(ai){% endblock %}
+{% block body %}
+<h1>Ingest &amp; mapping QA</h1>
+<p class="lede">Unmapped codings, duplicate-patient candidates and display drift,
+found by <code>core/capabilities/data_quality.py</code> over this deployment's own
+store.</p>
+
+<div class="notice">
+  <p>{{ no_patient_dimension }}</p>
+</div>
+
+<div class="chips">
+  <span class="chip filled">{{ "{:,}".format(stats.total_resources) }} resources indexed</span>
+  <span class="chip">{{ "{:,}".format(stats.distinct_patients) }} patients</span>
+  <span class="chip">{{ sampled }} sampled this run</span>
+</div>
+
+<h2>Unmapped codings <span class="count">{{ report.unmapped|length }}</span></h2>
+{% if report.unmapped %}
+<table class="rows"><thead><tr><th>System</th><th>Code</th><th>Display</th><th>Object</th></tr></thead>
+<tbody>
+{% for u in report.unmapped[:50] %}
+  <tr><td class="mono">{{ u.system or "(no system)" }}</td><td class="mono">{{ u.code or "—" }}</td>
+      <td>{{ u.display or "—" }}</td><td class="mono small">{{ u.storage_key }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% else %}<p class="hint">None in the sample.</p>{% endif %}
+
+<h2>Duplicate-patient candidates <span class="count">{{ report.duplicates|length }}</span></h2>
+{% if report.duplicates %}
+<p class="hint">A worklist for Health Information Management. <strong>Never
+auto-merged</strong> — merging two charts that are not the same person is not a
+mistake this software is permitted to make on its own.</p>
+<table class="rows"><thead><tr><th>Name</th><th>Born</th><th>Charts</th></tr></thead><tbody>
+{% for d in report.duplicates %}
+  <tr><td>{{ d.name }}</td><td class="mono">{{ d.birth_date }}</td>
+      <td class="mono small">{{ d.patient_keys|join(", ") }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% else %}<p class="hint">None in the sample.</p>{% endif %}
+
+<h2>Display drift <span class="count">{{ report.drift|length }}</span></h2>
+{% if report.drift %}
+<table class="rows"><thead><tr><th>System</th><th>Code</th><th>Renders as</th></tr></thead><tbody>
+{% for f in report.drift[:50] %}
+  <tr><td class="mono">{{ f.system }}</td><td class="mono">{{ f.code }}</td>
+      <td>{{ f.displays|join(" / ") }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% else %}<p class="hint">None in the sample.</p>{% endif %}
+{% endblock %}

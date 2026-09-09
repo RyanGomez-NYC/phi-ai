@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Population health &amp; quality measures — φ(ai){% endblock %}
+{% block body %}
+<h1>Population health &amp; quality measures</h1>
+<p class="lede">Every proportion arrives with its interval. “14% have diabetes”
+reads identically whether it came from 40,000 patients or from 14 —
+<strong>the interval is what tells them apart</strong>, so this screen never
+prints one without the other.</p>
+
+<div class="notice"><p>{{ no_patient_dimension }}</p></div>
+
+<div class="chips">
+  <span class="chip filled">{{ "{:,}".format(stats.distinct_patients) }} patients</span>
+  <span class="chip">{{ "{:,}".format(stats.total_resources) }} resources</span>
+</div>
+
+{% if profile %}
+<h2>Prevalence</h2>
+<table class="rows">
+  <thead><tr><th>Measure</th><th>Rate</th><th>95% CI</th><th>n</th></tr></thead>
+  <tbody>
+  {% for p in profile.prevalences %}
+    <tr><td>{{ p.label }}</td>
+        <td class="mono">{{ p.as_text(p.point) }}</td>
+        <td class="mono">{{ p.as_text(p.low) }} – {{ p.as_text(p.high) }}</td>
+        <td class="mono small">{{ p.numerator }}/{{ p.denominator }}</td></tr>
+  {% else %}
+    <tr><td colspan="4" class="hint">No population to describe.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="notice">
+  <p><strong>No prevalence is shown, and that is deliberate.</strong> A
+  prevalence needs a numerator counted in <em>patients</em>, and the index counts
+  objects — one patient with forty Observations contributes forty. Dividing
+  those by the patient count would produce a number that looks like a rate and
+  is not one. Distinct-person counts come from the OMOP layer; configure it and
+  they appear here with their intervals.</p>
+</div>
+{% endif %}
+
+<h2>Store composition <span class="hint">— counts, not rates</span></h2>
+<table class="rows">
+  <thead><tr><th>Resource type</th><th>Objects</th></tr></thead><tbody>
+  {% for rtype, n in composition %}
+    <tr><td>{{ rtype }}</td><td class="mono">{{ "{:,}".format(n) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<p class="hint"><strong>Wilson, not Wald.</strong> The textbook interval breaks
+exactly where a clinical population is most interesting — small subgroups and
+rare conditions — and at zero cases it asserts with total confidence that a
+condition nobody in the sample has cannot occur. These intervals give an honest
+upper bound instead.</p>
+{% endblock %}

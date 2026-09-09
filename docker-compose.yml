@@ -1,5 +1,3 @@
-version: "3.9"
-
 # BYOI deployment: this compose file runs the application layer only.
 # Storage, KMS, and IAM are provisioned separately via deploy/<cloud>/
 # Terraform and referenced here via environment variables from .env.
@@ -74,7 +72,16 @@ services:
       dockerfile: Dockerfile
     command: ["sleep", "infinity"]
     env_file:
-      - .env
+      # .env.defaults is committed, .env is not. Compose applies these in
+      # order and the later file wins, so a fresh clone renders with the
+      # defaults and a real deployment overrides every one of them without
+      # editing this file. `required: false` is what lets .env be absent -
+      # a missing env_file is otherwise a hard error, which is what made
+      # `docker compose config` and one test fail on a clean checkout.
+      - path: .env.defaults
+        required: true
+      - path: .env
+        required: false
     volumes:
       # Uncomment the line matching your provider ONLY for local/dev use
       # (e.g. running docker compose directly on a laptop, with no EC2/ECS
@@ -83,7 +90,17 @@ services:
       # - ${HOME}/.aws:/home/phiai/.aws:ro
       # - ${HOME}/.config/gcloud:/home/phiai/.config/gcloud:ro
       # - ${HOME}/.azure:/home/phiai/.azure:ro
-      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      # DEFAULTED TO /dev/null, and the default is the point. env_file
+      # values do not feed ${...} interpolation - only the shell and the
+      # project .env do - so on a clone with no .env this rendered as
+      # `::ro` and Compose refused the whole file with "empty section
+      # between colons", which reads like a syntax error in a volume spec
+      # rather than a missing variable. /dev/null exists on both sides of
+      # the mount, so the file renders and `up` starts; the key is then
+      # empty and core/fhir/client.py raises its own error naming
+      # PHI_AI_FHIR_PRIVATE_KEY_PATH. A deployment sets the variable and
+      # mounts the real key at the same absolute path inside and out.
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:ro
       # FOUND AND FIXED (2026-08-17 audit, H8): the retention ruleset
       # file (runbooks/RUNBOOK_RETENTION_RULES.md's Option B,
       # config/retention_ruleset.yaml) is referenced by
@@ -125,7 +142,7 @@ services:
       # the same absolute path inside and out, like the Epic private key
       # above, so PHI_AI_ASSISTANT_API_KEY_PATH is one value that
       # works whether the process runs on the host or in this container.
-      # - ${PHI_AI_ASSISTANT_API_KEY_PATH}:${PHI_AI_ASSISTANT_API_KEY_PATH}:ro
+      # - ${PHI_AI_ASSISTANT_API_KEY_PATH:-/dev/null}:${PHI_AI_ASSISTANT_API_KEY_PATH:-/dev/null}:ro
     restart: unless-stopped
     # core.healthcheck makes 15+ real AWS API calls per run (bucket
     # versioning/encryption/object-lock/public-access checks, KMS key
@@ -184,7 +201,16 @@ services:
       # refuses to start if issuers are registered without them.
       PHI_AI_SMART_ISSUERS_PATH: "/app/config/smart_issuers.yaml"
     env_file:
-      - .env
+      # .env.defaults is committed, .env is not. Compose applies these in
+      # order and the later file wins, so a fresh clone renders with the
+      # defaults and a real deployment overrides every one of them without
+      # editing this file. `required: false` is what lets .env be absent -
+      # a missing env_file is otherwise a hard error, which is what made
+      # `docker compose config` and one test fail on a clean checkout.
+      - path: .env.defaults
+        required: true
+      - path: .env
+        required: false
     # ports:
     #   - "127.0.0.1:8080:8080"   # local dev only - see the note above
     volumes:
@@ -195,7 +221,7 @@ services:
       # - ${HOME}/.aws:/home/phiai/.aws:ro
       # - ${HOME}/.config/gcloud:/home/phiai/.config/gcloud:ro
       # - ${HOME}/.azure:/home/phiai/.azure:ro
-      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:ro
       # FOUND AND FIXED (2026-08-17 audit, H8): the retention ruleset
       # file (runbooks/RUNBOOK_RETENTION_RULES.md's Option B,
       # config/retention_ruleset.yaml) is referenced by
@@ -232,7 +258,7 @@ services:
       # See the same note on the `app` service above - bedrock and vertex
       # need nothing here, since they use the workload identity this
       # container already runs as.
-      # - ${PHI_AI_ASSISTANT_API_KEY_PATH}:${PHI_AI_ASSISTANT_API_KEY_PATH}:ro
+      # - ${PHI_AI_ASSISTANT_API_KEY_PATH:-/dev/null}:${PHI_AI_ASSISTANT_API_KEY_PATH:-/dev/null}:ro
     restart: unless-stopped
 
   # ---------------------------------------------------------------------
@@ -296,11 +322,20 @@ services:
       dockerfile: Dockerfile
     command: ["python", "-m", "core.fhir.scheduler"]
     env_file:
-      - .env
+      # .env.defaults is committed, .env is not. Compose applies these in
+      # order and the later file wins, so a fresh clone renders with the
+      # defaults and a real deployment overrides every one of them without
+      # editing this file. `required: false` is what lets .env be absent -
+      # a missing env_file is otherwise a hard error, which is what made
+      # `docker compose config` and one test fail on a clean checkout.
+      - path: .env.defaults
+        required: true
+      - path: .env
+        required: false
     volumes:
       # Same local-dev-only note as the app service above.
       # - ${HOME}/.aws:/home/phiai/.aws:ro
-      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:ro
       # Same config/ mount as the app service above, and for the same
       # reason (2026-08-17 audit, H8) - this is the service that
       # actually runs Settings.from_env() at startup and would actually
@@ -355,11 +390,20 @@ services:
       PHI_AI_VERIFY_INTERVAL_SECONDS: "86400"   # daily
       PHI_AI_VERIFY_DEEP_EVERY: "7"             # deep pass weekly
     env_file:
-      - .env
+      # .env.defaults is committed, .env is not. Compose applies these in
+      # order and the later file wins, so a fresh clone renders with the
+      # defaults and a real deployment overrides every one of them without
+      # editing this file. `required: false` is what lets .env be absent -
+      # a missing env_file is otherwise a hard error, which is what made
+      # `docker compose config` and one test fail on a clean checkout.
+      - path: .env.defaults
+        required: true
+      - path: .env
+        required: false
     volumes:
       # Same local-dev-only note as the app service above.
       # - ${HOME}/.aws:/home/phiai/.aws:ro
-      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:ro
       - ./config:/app/config:ro
     restart: unless-stopped
     depends_on:
@@ -382,11 +426,20 @@ services:
       dockerfile: Dockerfile
     command: ["python", "-m", "core.fhir.bulk_scheduler"]
     env_file:
-      - .env
+      # .env.defaults is committed, .env is not. Compose applies these in
+      # order and the later file wins, so a fresh clone renders with the
+      # defaults and a real deployment overrides every one of them without
+      # editing this file. `required: false` is what lets .env be absent -
+      # a missing env_file is otherwise a hard error, which is what made
+      # `docker compose config` and one test fail on a clean checkout.
+      - path: .env.defaults
+        required: true
+      - path: .env
+        required: false
     volumes:
       # Same local-dev-only note as the app service above.
       # - ${HOME}/.aws:/home/phiai/.aws:ro
-      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH}:${PHI_AI_FHIR_PRIVATE_KEY_PATH}:ro
+      - ${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:${PHI_AI_FHIR_PRIVATE_KEY_PATH:-/dev/null}:ro
       # Same config/ mount as the app service above, and for the same
       # reason (2026-08-17 audit, H8) - this service also runs
       # Settings.from_env() at startup and would also crash-loop without it.
@@ -441,7 +494,16 @@ services:
     command: ["python", "-m", "core.components.updater", "--root", "${PWD}", "--interval", "10"]
     working_dir: ${PWD}
     env_file:
-      - .env
+      # .env.defaults is committed, .env is not. Compose applies these in
+      # order and the later file wins, so a fresh clone renders with the
+      # defaults and a real deployment overrides every one of them without
+      # editing this file. `required: false` is what lets .env be absent -
+      # a missing env_file is otherwise a hard error, which is what made
+      # `docker compose config` and one test fail on a clean checkout.
+      - path: .env.defaults
+        required: true
+      - path: .env
+        required: false
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PWD}/docker-compose.yml:${PWD}/docker-compose.yml:ro

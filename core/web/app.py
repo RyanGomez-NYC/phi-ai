@@ -93,7 +93,7 @@ log = logging.getLogger("phi-ai.web")
 # from tests/ all break - and the failure is at import time with a
 # message about a missing directory rather than anything pointing here.
 _HERE = Path(__file__).resolve().parent
-TEMPLATES = Jinja2Templates(directory=str(_HERE / "templates"))
+from core.web.templating import TEMPLATES  # the one Jinja environment
 
 # The exact shape a source-document key can take, matching what
 # core/fhir/documents.py writes: documents/source/doc-<32 hex>.<ext>.
@@ -103,10 +103,6 @@ TEMPLATES = Jinja2Templates(directory=str(_HERE / "templates"))
 # still let the rest of the key be anything, including characters that do
 # not belong in a header. Anything not matching is refused before the
 # object is fetched.
-_SOURCE_DOCUMENT_KEY = re.compile(
-    r"^documents/source/doc-[0-9a-f]{32}\.(?:pdf|png|jpg|jpeg|tif|tiff|bmp|gif|webp)$"
-)
-
 # Session key holding the id of this user's live assistant conversation.
 # The conversation itself lives in worker memory, never in the cookie -
 # a transcript would not fit in one, and a signed cookie is not where
@@ -617,8 +613,21 @@ def create_app(
         # Context chip: the launch context when a SMART launch established
         # one, the de-identified plane for population-only roles, and an
         # honest "no launch context" otherwise.
+        from core.web.patient_context import patient_in_context
+
+        # The patient in context outranks the launch context in the chip:
+        # a SMART launch establishes one, and opening a different chart
+        # deliberately replaces it. Saying "pt X" while the screens are
+        # showing patient Y is the one thing this chip must never do.
+        in_context = patient_in_context(session)
         launch_patient = session.get("launch_patient")
-        if launch_patient:
+        if in_context:
+            chip = f"pt {in_context['label']}"
+            if session.get("launch_encounter") and (
+                launch_patient and in_context["reference"].endswith("/" + launch_patient)
+            ):
+                chip += f" · enc {session['launch_encounter']}"
+        elif launch_patient:
             chip = f"pt {launch_patient}"
             if session.get("launch_encounter"):
                 chip += f" · enc {session['launch_encounter']}"
@@ -659,6 +668,10 @@ def create_app(
                 "nav_groups": (
                     product_nav.nav_for(identity, flags) if identity is not None else []
                 ),
+                # Every template can ask who is in context, so a screen
+                # with a patient dimension can honour it and a screen
+                # without one can say so. See core/web/patient_context.py.
+                "patient_context": in_context,
                 "screen_ref": meta["ref"],
                 "screen_title": meta["title"],
                 "personas": personas,
@@ -736,168 +749,11 @@ def create_app(
         """
         return _overview(request, identity)
 
-    # ---- patient search & record view ------------------------------
+    # ---- patient search, the record view, and a document's decrypted source (core/web/record_routes.py) ----
 
-    @app.get("/patients", response_class=HTMLResponse)
-    def patient_search_form(request: Request, identity: Identity = Depends(current_identity)):
-        require(identity, "patient:search")
-        return page(request, "patients.html", identity, results=None, term="")
+    from core.web import record_routes
 
-    @app.post("/patients", response_class=HTMLResponse)
-    def patient_search(
-        request: Request,
-        term: str = Form(...),
-        identity: Identity = Depends(current_identity),
-    ):
-        # POST, not GET: a search term must not reach a proxy access log
-        # or the browser's history.
-        require(identity, "patient:search")
-        results = reader.search_patients(term)
-        record(identity, "record.search", f"patient_reference~{term}", None)
-        return page(request, "patients.html", identity, results=results, term=term)
-
-    @app.post("/patients/{patient_id}/open", response_class=HTMLResponse)
-    def patient_record(
-        request: Request,
-        patient_id: str,
-        purpose_of_use: str = Form(...),
-        identity: Identity = Depends(current_identity),
-    ):
-        require(identity, "patient:read")
-        try:
-            purpose = validate_purpose(purpose_of_use)
-            if not purpose_allowed(identity, purpose):
-                # The role dictates the purposes it may
-                # assert; refusal is audited like any
-                # other denial.
-                require(identity, f"purpose:{purpose}")
-        except NotAuthorized as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        reference = f"Patient/{patient_id}"
-        # Audit BEFORE reading - see resource_detail for the reasoning.
-        record(identity, "record.read.patient", reference, purpose)
-        resources = reader.resources_for_patient(reference)
-        return page(
-            request,
-            "patient.html",
-            identity,
-            patient_reference=reference,
-            resources=resources,
-            purpose=purpose,
-            imaging_studies=_imaging_studies(identity, reference),
-        )
-
-    @app.post("/resource", response_class=HTMLResponse)
-    def resource_detail(
-        request: Request,
-        storage_key: str = Form(...),
-        purpose_of_use: str = Form(...),
-        identity: Identity = Depends(current_identity),
-    ):
-        require(identity, "patient:read")
-        purpose = validate_purpose(purpose_of_use)
-        if not purpose_allowed(identity, purpose):
-            # The role dictates the purposes it may
-            # assert; refusal is audited like any
-            # other denial.
-            require(identity, f"purpose:{purpose}")
-
-        row = reader.resource_index_row(storage_key)
-        if row is None:
-            raise HTTPException(status_code=404, detail="not in the index")
-
-        # AUDIT BEFORE DECRYPTING, not after. If the audit write fails,
-        # the request must end having never decrypted the content - the
-        # same ordering core/fhir/purge.py uses, where the disposal entry
-        # is written before the delete. Recording afterwards means a
-        # failed audit still leaves PHI decrypted in this process, which
-        # is precisely the unlogged access the trail exists to prevent.
-        record(identity, "record.read", storage_key, purpose)
-        resource = reader.read_resource(storage_key)
-
-        ocr_text, source_key = None, None
-        if resource.get("resourceType") == "DocumentReference":
-            from core.fhir.documents import decode_ocr_text
-
-            ocr_text = decode_ocr_text(resource)
-            for entry in resource.get("content", []):
-                url = (entry.get("attachment") or {}).get("url", "")
-                if url.startswith("documents/source/"):
-                    source_key = url
-                    break
-
-        return page(
-            request,
-            "resource.html",
-            identity,
-            row=row,
-            resource=resource,
-            ocr_text=ocr_text,
-            source_key=source_key,
-            purpose=purpose,
-        )
-
-    @app.post("/document/source")
-    def document_source(
-        request: Request,
-        storage_key: str = Form(...),
-        purpose_of_use: str = Form(...),
-        identity: Identity = Depends(current_identity),
-    ):
-        """Serve the original scan behind an OCR'd DocumentReference.
-
-        The scan is the record of truth - the OCR text is derived - so a
-        clinician checking anything consequential needs the original, not
-        a transcription that misreads characters. Audited before the
-        object is decrypted, exactly like every other clinical read.
-        """
-        require(identity, "document:read")
-        try:
-            purpose = validate_purpose(purpose_of_use)
-            if not purpose_allowed(identity, purpose):
-                # The role dictates the purposes it may
-                # assert; refusal is audited like any
-                # other denial.
-                require(identity, f"purpose:{purpose}")
-        except NotAuthorized as exc:
-            # 400, not 500: a bad purpose is a malformed request, and
-            # letting NotAuthorized escape produced an opaque server error.
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        if not _SOURCE_DOCUMENT_KEY.match(storage_key):
-            # This route decrypts and returns raw bytes AND echoes the
-            # key's final segment into a Content-Disposition filename, so
-            # it must not become a general object-fetch endpoint and the
-            # key must not carry characters that do not belong in a header.
-            # The full shape is validated, not merely the prefix.
-            raise HTTPException(status_code=400, detail="not a source document key")
-
-        record(identity, "record.read.document.source", storage_key, purpose)
-
-        try:
-            payload = reader.read_object_bytes(storage_key)
-        except Exception as exc:
-            log.error("could not read source document %s: %s", storage_key, exc)
-            raise HTTPException(status_code=404, detail="source document unavailable") from exc
-
-        from fastapi.responses import Response
-
-        suffix = storage_key.rsplit(".", 1)[-1].lower()
-        media = {"pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg",
-                 "jpeg": "image/jpeg", "tif": "image/tiff", "tiff": "image/tiff",
-                 "gif": "image/gif", "bmp": "image/bmp", "webp": "image/webp"}.get(
-                     suffix, "application/octet-stream")
-        return Response(
-            content=payload,
-            media_type=media,
-            headers={
-                # inline, unlike the ROI production: this is meant to be
-                # looked at next to the extracted text, not filed away.
-                "Content-Disposition": f'inline; filename="{storage_key.rsplit("/", 1)[-1]}"',
-                "Cache-Control": "no-store",
-            },
-        )
+    record_routes.register(app, page, require, current_identity, record, reader, _imaging_studies)
 
     # ---- audit -----------------------------------------------------
 
@@ -976,171 +832,11 @@ def create_app(
         record(identity, "record.document.ingest", result.source_storage_key, "operations")
         return page(request, "documents.html", identity, result=result, error=None)
 
-    # ---- release of information ------------------------------------
+    # ---- release of information (core/web/roi_routes.py) -----------
 
-    def roi_service():
-        service = getattr(app.state, "roi", None)
-        if service is None:
-            raise HTTPException(status_code=503, detail="release of information is not configured")
-        return service
+    from core.web import roi_routes
 
-    @app.get("/roi", response_class=HTMLResponse)
-    def roi_list(
-        request: Request,
-        status: Optional[str] = None,
-        identity: Identity = Depends(current_identity),
-    ):
-        require(identity, "roi:create")
-        requests = roi_service().list_requests(status=status)
-        return page(request, "roi.html", identity, requests=requests, status=status,
-                    requester_types=REQUESTER_TYPES, error=None)
-
-    @app.post("/roi", response_class=HTMLResponse)
-    def roi_create(
-        request: Request,
-        patient_reference: str = Form(...),
-        requester_type: str = Form(...),
-        requester_detail: str = Form(...),
-        purpose_of_use: str = Form(...),
-        authorization_reference: Optional[str] = Form(None),
-        scope_start: Optional[str] = Form(None),
-        scope_end: Optional[str] = Form(None),
-        scope_resource_types: Optional[str] = Form(None),
-        identity: Identity = Depends(current_identity),
-    ):
-        require(identity, "roi:create")
-
-        error = None
-        try:
-            roi_service().create(
-                patient_reference=patient_reference,
-                requester_type=requester_type,
-                requester_detail=requester_detail,
-                purpose_of_use=purpose_of_use,
-                authorization_reference=authorization_reference,
-                created_by=identity.username,
-                scope_start=scope_start,
-                scope_end=scope_end,
-                scope_resource_types=scope_resource_types,
-            )
-        except Exception as exc:
-            error = str(exc)
-
-        return page(request, "roi.html", identity,
-                    requests=roi_service().list_requests(), status=None,
-                    requester_types=REQUESTER_TYPES, error=error)
-
-    @app.get("/roi/{request_id}", response_class=HTMLResponse)
-    def roi_detail(
-        request: Request,
-        request_id: str,
-        identity: Identity = Depends(current_identity),
-    ):
-        """The full review before anything is released.
-
-        The production preview is assembled from the index - resource
-        types and counts inside and outside the request's scope - so the
-        person deciding sees exactly what fulfilment will assemble and
-        what the scope filter will exclude, before the release exists.
-        Rendering the preview reads no clinical content (the index holds
-        none, by design), so the review itself is not a disclosure; the
-        disclosure event is written by fulfil, before any record is
-        read.
-        """
-        require(identity, "roi:create")
-        roi_request = roi_service().get(request_id)
-        if roi_request is None:
-            raise HTTPException(status_code=404, detail="no such request")
-
-        rows = reader.resources_for_patient(roi_request.patient_reference)
-        types = (
-            frozenset(t.strip() for t in
-                      roi_request.scope_resource_types.split(",") if t.strip())
-            if roi_request.scope_resource_types else None
-        )
-        by_type: dict[str, int] = {}
-        excluded_types: dict[str, int] = {}
-        for row in rows:
-            rt_name = row["resource_type"]
-            if types is not None and rt_name not in types:
-                excluded_types[rt_name] = excluded_types.get(rt_name, 0) + 1
-            else:
-                by_type[rt_name] = by_type.get(rt_name, 0) + 1
-        return page(request, "roi_detail.html", identity, active="roi",
-                    r=roi_request, by_type=sorted(by_type.items()),
-                    excluded_types=sorted(excluded_types.items()),
-                    candidate_total=sum(by_type.values()),
-                    excluded_total=sum(excluded_types.values()))
-
-    @app.post("/roi/{request_id}/fulfil", response_class=HTMLResponse)
-    def roi_fulfil(
-        request: Request,
-        request_id: str,
-        identity: Identity = Depends(current_identity),
-    ):
-        # Fulfilling a request discloses PHI, so it needs the export
-        # permission, not merely the ability to open a request. Creating
-        # and releasing are deliberately separate grants.
-        require(identity, "roi:export")
-        error = None
-        try:
-            roi_service().fulfil(request_id, fulfilled_by=identity.username)
-        except Exception as exc:
-            error = str(exc)
-        return page(request, "roi.html", identity,
-                    requests=roi_service().list_requests(), status=None,
-                    requester_types=REQUESTER_TYPES, error=error)
-
-    @app.get("/roi/{request_id}/production")
-    def roi_production(request_id: str, identity: Identity = Depends(current_identity)):
-        """Download the paginated production document.
-
-        A separate audited event from fulfilment: producing the record set
-        and later handing a copy to someone are different disclosures, and
-        an accounting that recorded only the first would understate how
-        many times the records left the system.
-        """
-        require(identity, "roi:export")
-        service = roi_service()
-        roi_request = service.get(request_id)
-        if roi_request is None or not roi_request.production_storage_key:
-            raise HTTPException(status_code=404, detail="no production document for that request")
-
-        record(identity, "roi.production.download", request_id, roi_request.purpose_of_use)
-        pdf = service.read_production(request_id)
-        if pdf is None:
-            raise HTTPException(status_code=404, detail="production document is unreadable")
-
-        from fastapi.responses import Response
-
-        return Response(
-            content=pdf,
-            media_type="application/pdf",
-            headers={
-                # attachment, not inline: a PHI document should be saved
-                # deliberately rather than rendered in a browser tab that
-                # may be shared, cached or screen-shared.
-                "Content-Disposition": f'attachment; filename="{request_id}-production.pdf"',
-                "Cache-Control": "no-store",
-            },
-        )
-
-    @app.post("/roi/{request_id}/deny", response_class=HTMLResponse)
-    def roi_deny(
-        request: Request,
-        request_id: str,
-        reason: str = Form(...),
-        identity: Identity = Depends(current_identity),
-    ):
-        require(identity, "roi:create")
-        error = None
-        try:
-            roi_service().deny(request_id, denied_by=identity.username, reason=reason)
-        except Exception as exc:
-            error = str(exc)
-        return page(request, "roi.html", identity,
-                    requests=roi_service().list_requests(), status=None,
-                    requester_types=REQUESTER_TYPES, error=error)
+    roi_routes.register(app, page, require, current_identity, record, reader)
 
     # ---- reports ---------------------------------------------------
 
@@ -1177,661 +873,17 @@ def create_app(
         intact, checked, problem = reader.verify_audit_chain()
         return JSONResponse({"intact": intact, "events_checked": checked, "problem": problem})
 
-    # ---- SMART on FHIR: in-context EHR launch -----------------------
+    # ---- smart on fhir (core/web/smart_routes.py) ----
 
-    def smart_service():
-        service = getattr(app.state, "smart", None)
-        if service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="SMART launch is not configured. Register an EMR in "
-                "config/smart_issuers.yaml - see runbooks/RUNBOOK_SMART_LAUNCH.md.",
-            )
-        return service
+    from core.web import smart_routes
 
-    @app.get("/smart/launch")
-    def smart_launch(request: Request, iss: str = "", launch: str = ""):
-        """Entry point the EMR opens. Unauthenticated BY DEFINITION - the
-        whole purpose is to establish who the user is."""
-        from fastapi.responses import RedirectResponse
+    smart_routes.register(app, page, require, current_identity, record, reader, _imaging_studies)
 
-        from core.web.smart.launch import IssuerNotAllowed, SMARTError
+    # ---- assistant (core/web/assistant_routes.py) ------------------
 
-        try:
-            return RedirectResponse(smart_service().begin(iss, launch), status_code=302)
-        except IssuerNotAllowed as exc:
-            # 403 rather than 400: this is a refusal to trust, not a
-            # malformed request, and the distinction matters when reading
-            # logs for a crafted-launch attempt.
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
-        except SMARTError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from core.web import assistant_routes
 
-    @app.get("/smart/callback")
-    def smart_callback(
-        request: Request,
-        code: str = "",
-        state: str = "",
-        error: Optional[str] = None,
-        error_description: Optional[str] = None,
-    ):
-        from fastapi.responses import RedirectResponse
-
-        from core.web.auth import Identity, store_identity_in_session, _parse_roles
-        from core.web.smart.launch import SMARTError
-
-        if error:
-            raise HTTPException(
-                status_code=400,
-                detail=f"the EMR refused the launch: {error} {error_description or ''}".strip(),
-            )
-        if not code or not state:
-            raise HTTPException(status_code=400, detail="incomplete callback from the EMR")
-
-        try:
-            context = smart_service().complete(state=state, code=code)
-        except SMARTError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        identity = Identity(
-            username=context.username,
-            email=None,
-            roles=_parse_roles(",".join(context.roles)),
-        )
-        if "session" in request.scope:
-            store_identity_in_session(
-                request.session, identity, issuer=context.issuer, fhir_user=context.fhir_user
-            )
-        else:
-            raise HTTPException(
-                status_code=503,
-                detail="PHI_AI_WEB_SESSION_SECRET is not set, so a completed SMART "
-                "launch cannot be carried across requests. Set it to enable EHR launch.",
-            )
-
-        if app.state.audit is not None:
-            app.state.audit.record(
-                actor=identity.username,
-                action="auth.smart.launch",
-                resource_key=f"{context.issuer} patient={context.patient_id or 'none'}",
-                purpose_of_use="treatment",
-            )
-
-        # Remember the presentation choice for the rest of the session:
-        # subsequent navigation inside the EHR frame must stay compact,
-        # and the redirect below is the only place that knows.
-        registered = smart_service().resolve_issuer(context.issuer)
-        request.session["embedded"] = bool(registered.embedded)
-        # Remember where "back" is. Held in the session rather than
-        # recomputed per page so a clinician who navigates deeper into the
-        # platform can still return to the chart they came from.
-        request.session["chart_url_template"] = registered.chart_url or ""
-        request.session["chart_label"] = registered.chart_label or "the EMR"
-        request.session["launch_patient"] = context.patient_id or ""
-        request.session["launch_encounter"] = context.encounter_id or ""
-
-        # Land in context. Treatment is the correct purpose for a
-        # clinician launching from a patient's chart, and it is recorded
-        # as such rather than inferred later.
-        if context.patient_id and context.record_source:
-            target = f"/smart/patient/{context.patient_id}"
-            if context.encounter_id:
-                # Land on the VISIT they launched from, not the whole
-                # record - that is what "in context" means to a clinician
-                # who is looking at one encounter.
-                target += f"?encounter={context.encounter_id}"
-            return RedirectResponse(target, status_code=302)
-
-        reason = None
-        if context.patient_id and not context.record_source:
-            reason = (
-                f"This platform's records did not come from {context.issuer}, so patient "
-                f"identifiers from it do not resolve here. Search for the patient by their "
-                "identifier in the source system this platform was populated from."
-            )
-        elif not context.patient_id:
-            reason = (
-                "The EMR did not send a patient context with this launch, so there is no "
-                "record to open. Search for the patient below."
-            )
-        return TEMPLATES.TemplateResponse(
-            request=request, name="smart_no_context.html",
-            context={"identity": identity, "purposes": PURPOSES_OF_USE, "reason": reason},
-        )
-
-    @app.get("/smart/patient/{patient_id}", response_class=HTMLResponse)
-    def smart_patient(
-        request: Request,
-        patient_id: str,
-        encounter: Optional[str] = None,
-        identity: Identity = Depends(current_identity),
-    ):
-        """The in-context landing page.
-
-        A GET, unlike the ordinary patient view which is POSTed with a
-        chosen purpose - the EMR redirect cannot POST. Purpose is
-        `treatment`, which is what a clinician launching from a patient's
-        open chart is doing, and it is recorded in the audit entry exactly
-        as an explicitly chosen one would be.
-        """
-        require(identity, "patient:read")
-        reference = f"Patient/{patient_id}"
-
-        record(identity, "record.read.patient", reference, "treatment")
-        rows = reader.resources_for_patient(reference)
-
-        encounter_total = None
-        if encounter:
-            # Encounter membership lives inside the resource, not the
-            # index - an encounter id links a patient to a specific
-            # episode on a specific date, which schema.sql keeps out. So
-            # this reads the resources, like date scoping does.
-            from core.fhir.encounter_context import resource_in_encounter
-
-            encounter_total = len(rows)
-            filtered = []
-            for row in rows:
-                try:
-                    resource = reader.read_resource(row["storage_key"])
-                except Exception as exc:
-                    # A resource that cannot be read is SHOWN, not hidden:
-                    # dropping it would quietly narrow a clinical view.
-                    log.error("could not read %s for encounter filter: %s",
-                              row["storage_key"], exc)
-                    filtered.append(row)
-                    continue
-                if resource_in_encounter(resource, encounter):
-                    filtered.append(row)
-            rows = filtered
-
-        return page(
-            request, "patient.html", identity,
-            patient_reference=reference, resources=rows, purpose="treatment",
-            launched_in_context=True, encounter_id=encounter,
-            encounter_total=encounter_total,
-            imaging_studies=_imaging_studies(identity, reference),
-        )
-
-    # ---- assistant ---------------------------------------------------
-
-    def assistant_runtime():
-        rt = getattr(app.state, "assistant", None)
-        if rt is None:
-            raise HTTPException(
-                status_code=503,
-                detail="The assistant is not enabled in this deployment. It is an "
-                "optional add-on - see runbooks/RUNBOOK_AI_ASSISTANT.md.",
-            )
-        return rt
-
-    def _assistant_conversation(request: Request, identity: Identity, rt):
-        """This user's live conversation, resumed or started.
-
-        The id lives in the signed session cookie and the conversation
-        itself in worker memory, so it expires on the same clock as the
-        identity that owns it - see core/assistant/conversations.py.
-        """
-        store = rt.conversations
-        conversation = store.get(request.session.get(_ASSISTANT_KEY), identity.username)
-        if conversation is None:
-            conversation = store.create(identity.username)
-            request.session[_ASSISTANT_KEY] = conversation.id
-        return conversation
-
-    def _assistant_page(request, identity, conversation, **context):
-        rt = assistant_runtime()
-        prompts = getattr(app.state, "prompts", None)
-        return page(
-            request,
-            "assistant.html",
-            identity,
-            conversation=conversation,
-            destination=(
-                f"{rt.settings.provider}, inside your organisation's own cloud account"
-                if rt.settings.stays_in_org_cloud
-                else "the Anthropic API, outside this deployment's cloud account"
-            ),
-            phi_access=rt.settings.phi_access,
-            # Prompt history and saved prompts - this user's only, empty
-            # when the store is unconfigured so the rail sections do not
-            # render at all.
-            saved_prompts=prompts.saved(identity.username) if prompts else [],
-            recent_prompts=prompts.recent(identity.username) if prompts else [],
-            prompts_enabled=prompts is not None,
-            **context,
-        )
-
-    def _clinical_access(identity: Identity, rt, purpose, patient_reference, storage_key):
-        """Resolve clinical tool access for one request, or None.
-
-        Returns None - meaning documentation and aggregates only - unless
-        ALL of the following hold. Each is a separate reason, and each is
-        reported to the user rather than failing silently:
-
-          - the deployment enabled a PHI tier (config, the org's decision)
-          - the caller stated a valid purpose of use
-          - at the in-context tier, the page supplied a record to bind to
-
-        The audit callback is core/web/app.py's own record(), so a
-        clinical read made through the assistant produces byte-identical
-        audit entries to one made by clicking - which is the property that
-        keeps an accounting of disclosures correct.
-        """
-        if not rt.settings.reads_clinical_content:
-            return None, None
-        if rt.reader is None:
-            return None, "the record index is not configured, so records cannot be read"
-        try:
-            resolved_purpose = validate_purpose(purpose)
-        except NotAuthorized:
-            return None, (
-                "no purpose of use was stated, so the assistant answered without "
-                "reading any records. Choose one to let it read."
-            )
-
-        if rt.settings.allows_lookup:
-            bound_patient, bound_key = None, None
-        else:
-            bound_patient, bound_key = patient_reference, storage_key
-            if not (bound_patient or bound_key):
-                return None, (
-                    "this deployment lets the assistant read only the record you "
-                    "already have open, and this question was not asked from one"
-                )
-
-        def record_read(action: str, resource_key: str) -> None:
-            # Fails closed: record() raises when no audit sink is
-            # configured, and the tool calls this BEFORE decrypting.
-            record(identity, action, resource_key, resolved_purpose)
-
-        return (
-            AssistantClinicalAccess(
-                reader=rt.reader,
-                record_read=record_read,
-                purpose=resolved_purpose,
-                tier=rt.settings.phi_access,
-                patient_reference=bound_patient,
-                storage_key=bound_key,
-            ),
-            None,
-        )
-
-    def _analytics_access(identity: Identity, rt, purpose):
-        """Population-query access for one request, or None.
-
-        Deliberately NOT gated on the PHI tier that governs record
-        reading. They are different questions with different answers: an
-        analyst counting cohorts has no business opening a chart, and a
-        clinician reading one chart has no business running population
-        queries. Each is gated by its own permission and its own database
-        role, so an organisation can enable either alone.
-
-        A purpose of use is NOT required to reach these tools, and that is
-        a deliberate difference from clinical reads. A cohort count
-        discloses no individual, so demanding a per-question purpose would
-        be ceremony; the query itself is what gets audited, verbatim, and
-        that is the record worth keeping. Name search DOES identify people
-        and is permissioned separately for exactly that reason.
-        """
-        if rt.analytics_connection is None and rt.identity_connection is None:
-            return None
-        if not (identity.can("analytics:query") or identity.can("identity:search")):
-            return None
-
-        def record_query(action: str, detail: str) -> None:
-            record(identity, action, detail, purpose or "operations")
-
-        return AssistantAnalyticsAccess(
-            analytics_connection=rt.analytics_connection,
-            identity_connection=rt.identity_connection,
-            record_query=record_query,
-            purpose=purpose,
-        )
-
-    def _research_access(identity: Identity, rt, purpose):
-        """Cross-record research access for one request, or None.
-
-        Search snippets ARE clinical text, so unlike the analytics
-        gate above this one demands everything a clinical read demands:
-        the lookup tier (searching every chart at once has no in-context
-        analogue) and a validated purpose of use - the `research` code
-        is what a researcher normally states. On top of that, each piece
-        follows its own permission: general search appears only for
-        `research:search` (the researcher role), the psychotherapy
-        pieces only for `psychotherapy:read` AND only where the
-        deployment's own psychotherapy gate is on
-        (core/assistant/config.py). The audit callback is the same
-        record() every other path uses, so a search or note read made
-        through the assistant is indistinguishable in the trail from
-        one that could have been made by hand.
-        """
-        if not rt.settings.allows_lookup:
-            return None
-        wants_search = (
-            rt.research_search_connection is not None
-            and identity.can("research:search")
-        )
-        wants_psych = (
-            rt.settings.psychotherapy_access
-            and identity.can("psychotherapy:read")
-            and (
-                rt.psychotherapy_search_connection is not None
-                or rt.psychotherapy_reader is not None
-            )
-        )
-        if not (wants_search or wants_psych):
-            return None
-        try:
-            resolved_purpose = validate_purpose(purpose)
-        except NotAuthorized:
-            return None
-
-        def record_research(action: str, detail: str) -> None:
-            # Fails closed, before any search runs or any note is
-            # decrypted - record() raises when no audit sink exists.
-            record(identity, action, detail, resolved_purpose)
-
-        return AssistantResearchAccess(
-            search_connection=rt.research_search_connection if wants_search else None,
-            psychotherapy_connection=(
-                rt.psychotherapy_search_connection if wants_psych else None
-            ),
-            read_psychotherapy=rt.psychotherapy_reader if wants_psych else None,
-            record=record_research,
-            purpose=resolved_purpose,
-        )
-
-    @app.get("/assistant", response_class=HTMLResponse)
-    def assistant_view(request: Request, identity: Identity = Depends(current_identity)):
-        require(identity, "assistant:use")
-        rt = assistant_runtime()
-        conversation = _assistant_conversation(request, identity, rt)
-
-        # ?prefill=<row id>: put a history/saved prompt INTO the composer
-        # so the person can edit and explicitly press Ask. A click must
-        # never fire the model by itself - a model call costs seconds,
-        # money, and an audit entry, and none of those belong on a
-        # single unconfirmed click. The id is an opaque integer (never
-        # the prompt text) so nothing sensitive rides in the URL, and
-        # the lookup is scoped to the caller's own rows.
-        draft = ""
-        prefill = request.query_params.get("prefill")
-        prompts = getattr(app.state, "prompts", None)
-        if prefill and prompts is not None:
-            try:
-                wanted = int(prefill)
-            except ValueError:
-                wanted = None
-            if wanted is not None:
-                for row in prompts.saved(identity.username) + prompts.recent(identity.username):
-                    if row["id"] == wanted:
-                        draft = row["prompt"]
-                        break
-
-        return _assistant_page(
-            request, identity, conversation, error=None, note=None,
-            back=None, back_to=None, draft=draft,
-        )
-
-    @app.post("/assistant", response_class=HTMLResponse)
-    def assistant_ask(
-        request: Request,
-        question: str = Form(""),
-        page_key: Optional[str] = Form(None),
-        back: Optional[str] = Form(None),
-        action: str = Form("ask"),
-        purpose_of_use: Optional[str] = Form(None),
-        context_patient: Optional[str] = Form(None),
-        context_key: Optional[str] = Form(None),
-        identity: Identity = Depends(current_identity),
-    ):
-        """Continue this user's conversation with the assistant.
-
-        POST, like every other form here, and for the same reason: a
-        question is free text a user typed, and free text does not belong
-        in a URL that reaches proxy logs and browser history. The answer
-        is rendered in the response rather than redirected to, so no part
-        of it appears in a query string either.
-
-        `page_key` says which page the question was asked FROM. It is a
-        key into a server-side table of phrases, never a URL - see
-        core/web/assistant_pages.py for why that distinction is the whole
-        design of this parameter. `back` is validated as a same-origin
-        path before it is ever rendered as a link.
-
-        `context_patient` / `context_key` name the record the user
-        already has open, and matter only where the deployment enabled
-        the in-context PHI tier. They are a REQUEST for access, not a
-        grant of it: core/assistant/tools.py re-derives the permitted
-        object keys from the index and refuses anything outside them, so
-        a forged value widens nothing.
-        """
-        require(identity, "assistant:use")
-        rt = assistant_runtime()
-
-        return_path = safe_return_path(back)
-        conversation = _assistant_conversation(request, identity, rt)
-
-        if action == "clear":
-            rt.conversations.discard(conversation.id)
-            conversation = rt.conversations.create(identity.username)
-            request.session[_ASSISTANT_KEY] = conversation.id
-            return _assistant_page(
-                request, identity, conversation, error=None, note=None,
-                back=return_path, back_to=back_label(return_path),
-            )
-
-        clinical, clinical_note = _clinical_access(
-            identity, rt, purpose_of_use, context_patient, context_key
-        )
-        analytics = _analytics_access(identity, rt, purpose_of_use)
-        research = _research_access(identity, rt, purpose_of_use)
-
-        # Built per request with the caller's CURRENT permissions, seeded
-        # with the conversation so far. A role that changed between
-        # questions takes effect on the next one rather than being frozen
-        # into a long-lived object - see core/assistant/tools.py.
-        session = rt.session_for(
-            actor=identity.username,
-            capabilities=identity.permissions(),
-            audit=app.state.audit,
-            require_audit=True,
-            history=conversation.messages,
-            turn_starts=conversation.turn_starts,
-            clinical=clinical,
-            analytics=analytics,
-            research=research,
-        )
-
-        # Prompt history: recorded on the attempt, not the outcome - a
-        # prompt that errored is exactly the one worth re-running.
-        # Best-effort by construction (see core/web/prompt_store.py);
-        # the audit entry the session writes is the record of use.
-        if question.strip() and getattr(app.state, "prompts", None):
-            app.state.prompts.record(identity.username, question, page_key)
-
-        error = None
-        reply = None
-        asked_at = time.monotonic()
-        # The Control panel's switches, honored before any model call.
-        # Both refusals are stated in place; the question was already
-        # recorded, and the audit entry the session writes still gates
-        # actual reads.
-        pstate = getattr(app.state, "platform_state", None)
-        if pstate is not None and pstate.config_get("rag_enabled", "on") != "on":
-            error = ("Retrieval is DISABLED by the System Administrator "
-                     "(Control panel · PHI RAG). The assistant cannot read "
-                     "the platform's stores while it is off, and it will not "
-                     "answer questions about records without reading them.")
-        elif pstate is not None and pstate.config_get("assistant_live", "on") != "on":
-            error = ("Live model calls are switched OFF by the System "
-                     "Administrator (Control panel · foundation model). No "
-                     "request left for the model; switch it back on to ask.")
-        try:
-            if error is None:
-                reply = session.ask(question, page_context=describe_page(page_key))
-        except RuntimeError as exc:
-            # Audit logging unavailable. The question was not sent; say so
-            # in place rather than losing the page to a 503.
-            error = str(exc)
-        except Exception as exc:
-            log.error("assistant request failed: %s", exc)
-            error = "The assistant is currently unavailable. The question was not answered."
-        else:
-            if reply is not None:
-                conversation.messages, conversation.turn_starts = session.export_history()
-                conversation.record(
-                    Turn(
-                        question=question.strip(),
-                        answer=reply.text,
-                        sources=reply.sources,
-                        refused=reply.refused,
-                    ),
-                    max_turns=rt.conversations.max_turns,
-                )
-
-        # Telemetry: metrics only, never the question or the answer
-        # (core/db/telemetry_schema.sql's header is the contract).
-        # Fire-and-forget by construction - record_interaction() cannot
-        # raise - and skipped entirely when the ops role is unconfigured.
-        assistant_telemetry.record_interaction(
-            rt.ops_connection,
-            username=identity.username,
-            roles=",".join(sorted(r.value for r in identity.roles)),
-            page_key=page_key or None,
-            provider=rt.settings.provider,
-            model=rt.settings.resolved_model,
-            latency_ms=int((time.monotonic() - asked_at) * 1000),
-            input_tokens=reply.input_tokens if reply else 0,
-            output_tokens=reply.output_tokens if reply else 0,
-            tool_calls=len(reply.tools_used) if reply else 0,
-            tools_used=",".join(reply.tools_used) if reply else "",
-            phi_reads=reply.phi_reads if reply else 0,
-            refused=bool(reply and reply.refused),
-            truncated=bool(reply and reply.truncated),
-            error=error is not None,
-        )
-
-        return _assistant_page(
-            request, identity, conversation, error=error, note=clinical_note,
-            back=return_path, back_to=back_label(return_path),
-        )
-
-    @app.post("/assistant/prompts", response_class=HTMLResponse)
-    def assistant_prompt_action(
-        request: Request,
-        prompt_id: int = Form(...),
-        prompt_action: str = Form(...),
-        label: Optional[str] = Form(None),
-        identity: Identity = Depends(current_identity),
-    ):
-        """Save, unsave or delete one of the caller's own prompts.
-
-        The store scopes every statement to the caller's username, so a
-        forged prompt_id belonging to someone else updates zero rows -
-        the same quiet non-result an expired id gets. Nothing here needs
-        auditing: these are bookmarks over text the audit trail already
-        holds (see core/db/prompts_schema.sql).
-        """
-        require(identity, "assistant:use")
-        prompts = getattr(app.state, "prompts", None)
-        if prompts is None:
-            raise HTTPException(status_code=404, detail="prompt history is not configured")
-        if prompt_action == "save":
-            prompts.save(identity.username, prompt_id, label)
-        elif prompt_action == "unsave":
-            prompts.unsave(identity.username, prompt_id)
-        elif prompt_action == "delete":
-            prompts.delete(identity.username, prompt_id)
-        else:
-            raise HTTPException(status_code=400, detail="unknown prompt action")
-        return RedirectResponse("/assistant", status_code=303)
-
-    @app.post("/assistant/feedback", response_class=HTMLResponse)
-    def assistant_feedback(
-        request: Request,
-        turn: int = Form(...),
-        vote: str = Form(...),
-        identity: Identity = Depends(current_identity),
-    ):
-        """A thumb on one answer in this user's own conversation.
-
-        The turn is named by its position, never by content, and the
-        vote is the only thing recorded - up or down, which turn, and
-        whether that answer was a refusal - beside the usage telemetry
-        (core/assistant/telemetry.py, record_feedback). It is the
-        cheapest direct quality signal the assistant can collect, and
-        the one an evaluation rubric is calibrated against. Renders the
-        conversation again with the verdict shown, so the person sees it
-        was kept; a vote on a turn that is no longer there is ignored.
-        """
-        require(identity, "assistant:use")
-        rt = assistant_runtime()
-        conversation = _assistant_conversation(request, identity, rt)
-        if vote in ("up", "down") and 1 <= turn <= len(conversation.turns):
-            chosen = conversation.turns[turn - 1]
-            chosen.vote = vote
-            assistant_telemetry.record_feedback(
-                rt.ops_connection,
-                username=identity.username,
-                vote=vote,
-                turn_index=turn,
-                refused=chosen.refused,
-                provider=rt.settings.provider,
-                model=rt.settings.resolved_model,
-            )
-        return _assistant_page(
-            request, identity, conversation, error=None, note=None,
-            back=None, back_to=None, draft="",
-        )
-
-    @app.get("/assistant/ops", response_class=HTMLResponse)
-    def assistant_ops(
-        request: Request,
-        days: int = 30,
-        identity: Identity = Depends(current_identity),
-    ):
-        """Usage, performance, compliance and drift metrics for the
-        assistant - the operational answer to "how is this AI feature
-        behaving", which a deployment that enabled it owes whoever
-        signed off on enabling it. Gated by assistant:ops (admin and
-        auditor), narrower than report:read because the rows name which
-        staff member asked how many questions. Everything rendered here
-        is counts and rates; the questions themselves are only in the
-        audit trail."""
-        require(identity, "assistant:ops")
-        rt = assistant_runtime()
-
-        summary = drift = ops_error = None
-        if rt.ops_connection is None:
-            ops_error = (
-                "Assistant telemetry is not configured. Set "
-                "PHI_AI_ASSISTANT_OPS_USERNAME to the aiops role "
-                "(core/db/telemetry_bootstrap_<cloud>.sql) to record and "
-                "report usage."
-            )
-        else:
-            try:
-                conn = rt.ops_connection()
-                try:
-                    summary = assistant_telemetry.usage_summary(conn, days=days)
-                    drift = assistant_telemetry.drift_summary(conn)
-                finally:
-                    conn.close()
-            except Exception as exc:
-                log.error("assistant ops summary failed: %s", exc)
-                ops_error = f"Could not read telemetry: {exc}"
-
-        return page(
-            request,
-            "assistant_ops.html",
-            identity,
-            active="assistant",
-            summary=summary,
-            drift=drift,
-            ops_error=ops_error,
-            model_description=rt.settings.describe(),
-        )
+    assistant_routes.register(app, page, require, current_identity, record, reader, record_actor)
 
     # ---- imaging -----------------------------------------------------
 
@@ -2001,6 +1053,17 @@ def create_app(
         record_actor(persona, "session.persona", f"persona/{persona}")
         return RedirectResponse("/", status_code=303)
 
+    # ---- capability screens (core/web/capability_routes.py) --------
+    #
+    # BEFORE product_routes, and the order is load-bearing: these are
+    # bespoke /product/<key> routes and product_routes registers the
+    # generic /product/{key} catch-all, which Starlette would otherwise
+    # match first and render the static worked example over the live one.
+
+    from core.web import capability_routes
+
+    capability_routes.register(app, page, require, current_identity, record, reader)
+
     # ---- v1 product screens (core/web/product_routes.py) ----------
 
     from core.web import product_routes
@@ -2016,6 +1079,7 @@ def create_app(
     from core.web.platform_state import PlatformState
 
     app.state.platform_state = platform_state or PlatformState()
+
     platform_routes.register(app, page, require, current_identity, record, reader)
     # The Components screen (core/web/components_routes.py), the third
     # System screen, registered after the control panel. Its journal is
@@ -2024,6 +1088,10 @@ def create_app(
     from core.web import components_routes
 
     components_routes.register(app, page, require, current_identity, record, reader)
+    # Model monitoring, the System group's middle screen.
+    from core.web import monitoring_routes
+
+    monitoring_routes.register(app, page, require, current_identity, record, reader)
     from core.web import orchestration_routes
     orchestration_routes.register(app, page, require, current_identity, record, reader)
     from core.web import orchestration_pages
