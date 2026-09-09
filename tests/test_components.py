@@ -1783,3 +1783,32 @@ def test_the_release_manifest_enumerates_the_tree_it_was_pointed_at(tmp_path, mo
     assert cli.tracked_files(root) == ["README.md", "RELEASE", "core/x.py"], (
         "the manifest enumerated another repository's files"
     )
+
+
+def test_the_pre_push_gate_unexports_gits_context_before_it_runs_anything():
+    """The belt to git_env()'s braces.
+
+    This gate runs the test suite from inside a pre-push hook, where git
+    exports GIT_DIR - and GIT_DIR overrides -C. Every git call made by
+    anything the gate runs therefore acted on the branch being pushed. On
+    2026-09-09 a fixture's commit landed on that branch and its `git init`
+    set core.bare=true on the main repository.
+
+    Scrubbing per call (build.git_env) fixes the calls that exist. This
+    unset fixes the ones that do not exist yet - a test, a script, a tool
+    the gate grows later - which is why both are here and why this test
+    guards the cheaper, broader one.
+    """
+    gate = (ROOT / "scripts" / "pre_push_gates.sh").read_text(encoding="utf-8")
+    assert "unset GIT_DIR" in gate, (
+        "the pre-push gate no longer unexports git's context; a git call "
+        "anywhere under it will act on the repository being pushed"
+    )
+    for name in build.GIT_CONTEXT_VARS:
+        assert name in gate, f"{name} overrides -C and the gate does not unset it"
+
+    # And it must happen before anything is executed: the gate's own
+    # rev-parse wants the hook's repository, the gates do not.
+    unset_at = gate.index("unset GIT_DIR")
+    first_gate = gate.index("pre-push gate 1/")
+    assert unset_at < first_gate, "the unset must precede the first gate"
