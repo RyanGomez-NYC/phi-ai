@@ -84,6 +84,19 @@ of this limitation.
 
 ## Warnings
 
+- **`purge_protection_enabled` must be `true` for the customer-managed key
+  to exist at all, and it is irreversible.** Azure requires purge
+  protection on a Key Vault before that vault's key may encrypt a storage
+  account, so `azurerm_storage_account_customer_managed_key.store` cannot
+  be created while the variable sits at its `false` default. `storage.tf`
+  fails this at plan time via a `lifecycle` precondition; before that
+  existed it surfaced ~20 minutes into `terraform apply` with everything
+  else already built. Turning it on can never be undone for this vault:
+  after a `terraform destroy` the name stays reserved for
+  `soft_delete_retention_days` (7) and no principal, Owner included, can
+  purge it early. Leaving it `false` costs the CMK only - the
+  application-level envelope encryption in `core/crypto/envelope.py` is
+  unaffected.
 - **A locked immutability policy can never be unlocked**, and is
   irreversible for the full retention duration - not shortenable by you,
   by Microsoft Support, or by any principal, matching AWS COMPLIANCE mode

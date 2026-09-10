@@ -155,13 +155,31 @@ variable "purge_protection_enabled" {
     genuinely irreversible once turned on, and is now the only
     irreversible storage-side protection this stack offers on any cloud.
 
+    READ THIS FIRST - false does not actually work with this stack as
+    written. Azure requires a Key Vault to have BOTH soft delete and purge
+    protection before that vault's key may encrypt a storage account, and
+    storage.tf provisions exactly such a customer-managed key
+    (azurerm_storage_account_customer_managed_key.store) unconditionally.
+    So while false is still the default here - nothing irreversible should
+    become true by default - it is a default you must consciously override
+    for a complete apply, not a working configuration. storage.tf carries a
+    lifecycle precondition that says so at PLAN time; before that existed,
+    this surfaced as a provider error twenty minutes into `terraform apply`
+    with every other resource already built (found that way, 2026-09-10).
+    Choosing false means choosing to have no customer-managed key.
+
     DISABLED (false, the default): a deleted vault or key enters Azure's
       mandatory soft-delete state (on by default, cannot be turned off -
       see versions.tf's provider features block) but can still be purged
       early by a sufficiently-privileged principal, and the vault name
       frees up once purged. This is what makes the dev teardown flow
       (`terraform destroy` with purge_soft_delete_on_destroy = true in
-      versions.tf) actually work without leaving a name reserved.
+      versions.tf) actually work without leaving a name reserved. Note
+      what it costs, per the paragraph above: the storage account falls
+      back to Microsoft-managed encryption at rest. Application-level
+      envelope encryption (core/crypto/envelope.py's AzureKMS wrapping
+      per-object DEKs with this vault's key) is UNAFFECTED either way -
+      the CMK is a second layer beneath it, not the only one.
 
     ENABLED (true): once on, per Microsoft's own documentation this cannot
       be turned back off for the lifetime of the vault - even an

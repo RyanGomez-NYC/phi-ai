@@ -255,6 +255,32 @@ resource "azurerm_storage_account_customer_managed_key" "store" {
   # the same AuthorizationFailed race keyvault.tf's own time_sleep exists
   # to absorb.
   depends_on = [time_sleep.storage_cmk_rbac_propagation]
+
+  # Azure REFUSES to let a Key Vault key encrypt a storage account unless
+  # that vault has BOTH soft delete (always on, not optional) and purge
+  # protection. Soft delete is guaranteed; purge protection is
+  # var.purge_protection_enabled, which defaults to FALSE - so the default
+  # configuration of this stack cannot create this resource at all.
+  #
+  # Without this precondition that surfaces as a provider error
+  # ("Key Vault ... must be configured for both Purge Protection and Soft
+  # Delete") roughly twenty minutes into `terraform apply`, AFTER the
+  # storage account, vault, key, identities and both time_sleeps have been
+  # created - i.e. at the most expensive possible moment to discover it.
+  # Found exactly that way on a real first apply, 2026-09-10. Checking it
+  # here moves the failure to `terraform plan`, before anything is built.
+  #
+  # This is deliberately a precondition rather than a `default = true` on
+  # the variable: purge protection is IRREVERSIBLE for the life of the
+  # vault, and nothing irreversible should become true by default. The
+  # operator has to choose it, knowing the cost (see the variable's own
+  # description, and runbooks/RUNBOOK_AZURE_SETUP.md Step 2).
+  lifecycle {
+    precondition {
+      condition     = var.purge_protection_enabled
+      error_message = "purge_protection_enabled must be true: Azure requires Key Vault purge protection before a vault key may encrypt a storage account, so this CMK resource cannot be created while it is false. Setting it to true is IRREVERSIBLE for the life of this vault - after a `terraform destroy` the vault name stays reserved for keyvault.tf's soft_delete_retention_days and cannot be purged early by anyone, including an Owner. See RUNBOOK_AZURE_SETUP.md Step 2."
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------

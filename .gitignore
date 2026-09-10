@@ -1,10 +1,18 @@
 # Secrets and deployment-specific configuration. docs/RELEASE_CHECKLIST.md
 # §1 relies on every one of these patterns being here; keep them in sync.
 .env
+# Every local env variant: .env.azure / .env.aws (per-cloud output_fragment
+# captures) and .env.backup-* (taken before any merge). These hold real
+# secrets - session secret, Epic client id. The two committed templates below
+# are re-included deliberately.
+.env.*
+!.env.example
+!.env.defaults
 *.pem
 *.key
 terraform.tfvars
 backend.hcl
+*.tfplan
 *.tfstate
 *.tfstate.*
 

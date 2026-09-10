@@ -51,6 +51,20 @@ terraform {
 }
 
 provider "azurerm" {
+  # REQUIRED, not optional, given storage.tf's shared_access_key_enabled =
+  # false. Without this the provider authenticates Storage DATA-PLANE calls
+  # (the post-create Blob Service health check, and creating the two
+  # containers) with a shared account key, which that very setting forbids -
+  # so `terraform apply` fails partway through with a 403
+  # KeyBasedAuthenticationNotPermitted, leaving azurerm_storage_account.store
+  # created-but-tainted and every downstream container, CMK wiring and blob
+  # role assignment unapplied. The management-plane calls that create the
+  # account itself are unaffected, which is why the failure appears only
+  # after the account exists. Setting this makes the provider use the same
+  # Azure AD identity for the data plane that core/storage/azure_blob.py's
+  # DefaultAzureCredential already uses at runtime - the two now match.
+  storage_use_azuread = true
+
   features {
     key_vault {
       # Azure Key Vault soft-delete is on by default and cannot be disabled -

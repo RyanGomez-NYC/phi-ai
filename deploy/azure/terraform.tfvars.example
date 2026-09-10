@@ -29,11 +29,19 @@ phi_retention_days   = 1
 audit_retention_days = 1
 
 
-# Key Vault purge protection - disabled by default so a dev stack can
-# actually be torn down and re-applied under the same vault name. Unlike
-# the retention settings above, this one IS irreversible once enabled.
-# See purge_protection_enabled's own description in variables.tf.
-purge_protection_enabled = false
+# Key Vault purge protection. MUST be true for a complete apply: Azure
+# requires it before a vault key may encrypt a storage account, so
+# storage.tf's customer-managed key cannot be created while this is false
+# (storage.tf has a precondition that says so at plan time). Set false only
+# if you deliberately want no CMK - the dev teardown flow is easier, and
+# the storage account falls back to Microsoft-managed encryption at rest.
+# Application-level envelope encryption is unaffected either way.
+#
+# Unlike the retention settings above, this one IS irreversible once
+# enabled: after a `terraform destroy` the vault name stays reserved for
+# keyvault.tf's soft_delete_retention_days and cannot be purged early by
+# anyone, including an Owner. See variables.tf's own description.
+purge_protection_enabled = true
 
 # --- Access ---
 # Your own Azure AD object ID, so local dev/testing can actually run

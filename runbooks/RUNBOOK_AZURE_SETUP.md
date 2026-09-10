@@ -19,6 +19,21 @@ equivalent in every respect.
       Compose, OpenSSL.
 - [ ] `az login` and `az account show` return your identity and the
       correct subscription.
+- [ ] **On a brand-new subscription, register the resource providers
+      first.** Azure leaves them unregistered until something asks, and
+      `terraform apply` fails partway through rather than up front:
+
+      ```bash
+      for p in Microsoft.Storage Microsoft.KeyVault Microsoft.ManagedIdentity; do
+        az provider register -n $p
+      done
+      ```
+
+      Registration is asynchronous - poll `az provider show -n
+      Microsoft.Storage --query registrationState -o tsv` until every one
+      reads `Registered` before applying. Add `Microsoft.DBforPostgreSQL`
+      too if you are setting `enable_db = true`. Verified necessary on a
+      genuinely fresh subscription, 2026-09-10.
 - [ ] **A BAA with Microsoft covering this subscription.** Even for dev
       this is worth having in place before you build the habit of
       skipping it.
@@ -90,6 +105,28 @@ convenience knob the way it might look; Azure managed identities cannot
 be assumed from a laptop the way AWS IAM roles can, so this is the only
 way local development can actually exercise this stack end to end.
 
+**Set `purge_protection_enabled = true` unless you deliberately want no
+customer-managed key.** Azure requires a Key Vault to have purge
+protection before that vault's key may encrypt a storage account, so
+`storage.tf`'s `azurerm_storage_account_customer_managed_key.store`
+cannot be created while it is `false` - which is the variable's own
+default. `storage.tf` carries a `lifecycle` precondition that fails at
+PLAN time saying exactly this; before that precondition existed the
+failure arrived roughly twenty minutes into `terraform apply`, with the
+storage account, vault, key, identities and both `time_sleep`s already
+built (found that way on a real first apply, 2026-09-10).
+
+Weigh it properly, because it is irreversible: once on, this vault can
+never have it turned off, and after a `terraform destroy` the vault name
+stays reserved for `keyvault.tf`'s `soft_delete_retention_days` (7) and
+cannot be purged early by anyone, including an Owner. What you give up
+by leaving it `false` is narrower than it sounds - the storage account
+falls back to Microsoft-managed encryption at rest, while the
+application-level envelope encryption in `core/crypto/envelope.py`'s
+`AzureKMS`, which wraps every per-object DEK with this same vault key,
+works identically either way. The CMK is a second layer beneath that
+one, not the only one.
+
 **If you want the Postgres index or OMOP analytics layer** (both
 optional, off by default - see Step 4a below for the full walkthrough),
 set these here too, since `database.tf`'s own precondition requires
@@ -160,10 +197,24 @@ adds several more minutes on top of that - also expected.
 
 ## Step 4 - Capture the outputs
 
+> **`>` will destroy an existing `.env`.** If you already have one - from
+> an AWS or GCP deployment, or from `install/installer_chatbot.py` - that
+> redirect replaces every key in it with the eight lines below (ten more
+> with `enable_db = true`), taking your FHIR client id, private key path,
+> web session secret and personas with it. `env_fragment` is a fragment,
+> not a complete `.env`. Back up first and write somewhere separate:
+
 ```bash
-terraform output -raw env_fragment > ../../.env
+cp ../../.env "../../.env.backup-$(date +%Y%m%d-%H%M%S)"   # if one exists
+terraform output -raw env_fragment > ../../.env.azure
 cd ../..
 ```
+
+Then merge deliberately. Note that `PHI_AI_CLOUD_PROVIDER` is a single
+value: one `.env` drives one cloud, so merging this in switches the whole
+application over to Azure rather than adding Azure alongside what you
+had. On an empty deployment with no `.env` yet, writing straight to
+`../../.env` is fine.
 
 Writes the container names, region, Key Vault key name
 equivalent, storage account blob endpoint, and Key Vault URI into `.env`
@@ -330,7 +381,7 @@ az storage account show \
 # Confirm NO immutability policy is set (expected - this stack creates none):
 az storage container immutability-policy show \
   --account-name "$(cd deploy/azure && terraform output -raw storage_account_name)" \
-  --container-name fhir --auth-mode login
+  --container-name fhir --resource-group "$(cd deploy/azure && terraform output -raw resource_group_name)"
 # Expect this to report no policy. A policy found here means the
 # configuration has drifted from this stack - and if its state is
 # "Locked" it cannot be removed, meaning the container must be replaced.
@@ -343,9 +394,14 @@ az storage account blob-service-properties show \
 # window - see "Known gaps" item 13.
 ```
 
-(`--auth-mode login` is not optional here: `shared_access_key_enabled`
-is `false` on this account, so key-based CLI access does not work at
-all.)
+(`--auth-mode login` is not optional on the DATA-PLANE commands above and
+in Step 9 - `shared_access_key_enabled` is `false` on this account, so
+key-based CLI access does not work at all. The
+`immutability-policy show` command is the exception: it is a
+management-plane (ARM) operation, takes `--resource-group` instead, and
+**rejects** `--auth-mode` with `unrecognized arguments`. An earlier
+revision of this runbook passed it there and the command simply failed -
+corrected 2026-09-10.)
 
 Building a proper `core/healthcheck.py` Azure equivalent - mirroring the
 AWS path's bucket/KMS/role-separation checks - is tracked as a fast-
