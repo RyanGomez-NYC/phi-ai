@@ -155,6 +155,14 @@ class SigningKeys:
         return {"keys": [self.rsa.jwk, self.ec_p384.jwk]}
 
 
+
+# The seeded patients every emulator dataset carries. A vendor whose own
+# documentation requires a qualifier on a type-level search is rehearsed the
+# way a real run reads it: one search per patient, aggregated - never the
+# unqualified sweep, which that vendor would refuse.
+QUALIFYING_PATIENTS = ("eSyn0001Patient", "eSyn0002Patient", "eSyn0003Patient")
+
+
 def generate_signing_keys() -> SigningKeys:
     """Generated in memory with the cryptography library - the one PyJWT
     signs with - and never written to disk. The public half is kept so
@@ -777,6 +785,7 @@ def authenticate(handles: dict[str, Emulator], key: str, keys: SigningKeys) -> A
 # ---------------------------------------------------------------------------
 
 def ingest(handles: dict[str, Emulator], key: str, auth: Auth) -> Ingest:
+    from core.fhir.client import patient_qualifier
     import requests
 
     from core.fhir.bulk_client import (
@@ -840,13 +849,38 @@ def ingest(handles: dict[str, Emulator], key: str, auth: Auth) -> Ingest:
         # Observe the page count: every GET the client makes for this
         # type is one page. The wrapper calls straight through to
         # requests.get - nothing is faked, only counted.
-        with mock.patch.object(requests, "get", wraps=requests.get) as counted:
-            rows = list(client.iter_resources(rtype))
-        fetched = counted.call_count
-        expected = max(1, math.ceil(len(rows) / vendor.page_size))
+        # A vendor whose own docs say a type-level search must name a
+        # patient is rehearsed in that shape, not in the unqualified one it
+        # would refuse live (EMRProfile.unqualified_search). Patient is
+        # qualified by _id - a Patient resource is not its own subject, so
+        # `patient=` would narrow it to nothing - and the clinical types by
+        # the patient they belong to, which is the split Oracle Health
+        # documents and Epic's error 4111 enforces.
+        qualified = client.profile.unqualified_search is False
+        # The qualifier is the TYPE's, not a constant: Patient is narrowed by
+        # _id and AdverseEvent by subject, which patient_qualifier() decides.
+        searches = (
+            [{"extra_params": patient_qualifier(rtype, p)} for p in QUALIFYING_PATIENTS]
+            if qualified
+            else [{}]
+        )
+
+        # Count each search's own pages as it runs. The previous version
+        # reconstructed per-search counts by bucketing the aggregate on the
+        # subject reference, which is wrong for any type whose patient link
+        # is neither subject nor patient (R4 Coverage.beneficiary) and for a
+        # logical reference with no .reference at all.
+        rows, expected, fetched = [], 0, 0
+        for search in searches:
+            with mock.patch.object(requests, "get", wraps=requests.get) as counted:
+                rows_s = list(client.iter_resources(rtype, **search))
+            rows.extend(rows_s)
+            fetched += counted.call_count
+            expected += max(1, math.ceil(len(rows_s) / vendor.page_size))
         assert fetched == expected, (
-            f"{key}: {rtype}: {len(rows)} resources at {vendor.page_size} per page should take "
-            f"{expected} page(s); the client made {fetched} request(s){provenance}"
+            f"{key}: {rtype}: {len(rows)} resources at {vendor.page_size} per page over "
+            f"{len(searches)} search(es) should take {expected} page(s); the client made "
+            f"{fetched} request(s){provenance}"
         )
         assert rows, f"{key}: {rtype}: the emulator declares it searchable but served nothing{provenance}"
         assert all(r.get("resourceType") == rtype for r in rows), (
@@ -861,10 +895,25 @@ def ingest(handles: dict[str, Emulator], key: str, auth: Auth) -> Ingest:
         pages[rtype] = fetched
         resources[rtype] = rows
 
-    assert max(pages.values()) >= 2, (
-        f"{key}: no resource type needed more than one page ({pages}); the next-link "
-        "pagination was never exercised"
-    )
+    # The next-link check applies where a single search can overflow a page.
+    # For a vendor that requires a patient qualifier, each search returns one
+    # patient's slice of one type, which the seeded dataset fits in a page -
+    # so for those vendors this rehearsal proves the qualified shape works
+    # and that every patient is swept. Pagination is exercised by the other
+    # vendors, whose search requirements NOBODY HAS CHECKED yet
+    # (EMRProfile.unqualified_search is None for them, which means unknown,
+    # not "answers an unqualified search").
+    if profile.unqualified_search is not False:
+        assert max(pages.values()) >= 2, (
+            f"{key}: no resource type needed more than one page ({pages}); the next-link "
+            "pagination was never exercised"
+        )
+    else:
+        thin = {t: n for t, n in pages.items() if n < len(QUALIFYING_PATIENTS)}
+        assert not thin, (
+            f"{key}: a qualifier-requiring vendor is swept once per patient, so every type "
+            f"needs at least {len(QUALIFYING_PATIENTS)} request(s); these made fewer: {thin}"
+        )
 
     # -- Bulk Data $export, or the refusal ---------------------------
     if vendor.supports_bulk_export:
@@ -1020,6 +1069,7 @@ def deliver(handles: dict[str, Emulator], ingested: Ingest, target: str, auth: A
             _confirm_present(
                 target_base, auth.access_token, rtype,
                 expected_source=f"{source_system}#{item.storage_key}", pair=pair,
+                patient=item.target_patient,
             )
             outcomes[rtype] = CREATED
         else:
@@ -1045,16 +1095,25 @@ def deliver(handles: dict[str, Emulator], ingested: Ingest, target: str, auth: A
     )
 
 
-def _confirm_present(target_base: str, token: str, rtype: str, expected_source: str, pair: str) -> None:
+def _confirm_present(target_base: str, token: str, rtype: str, expected_source: str, pair: str,
+                    patient: str = "") -> None:
     """The target holds exactly one record carrying THIS delivery's
     meta.source. Searched on _source the way core/verify/delivery.py
     does, then matched exactly: every source delivers the same synthetic
     ids into a target, so a substring match on the storage key alone
-    would count other pairs' records as this one."""
-    import requests
+    would count other pairs' records as this one.
 
+    `patient` qualifies the search, because _source names a record and not
+    a person: a destination that requires a qualifier refuses the search
+    without it, which is what core/verify/delivery.py now sends too."""
+    import requests
+    from core.fhir.client import patient_qualifier
+
+    params = {"_source": expected_source}
+    if patient:
+        params.update(patient_qualifier(rtype, patient))
     response = requests.get(
-        f"{target_base}/{rtype}?_source={quote(expected_source, safe='')}",
+        f"{target_base}/{rtype}?" + "&".join(f"{k}={quote(str(v), safe='')}" for k, v in params.items()),
         headers={"Authorization": f"Bearer {token}", "Accept": "application/fhir+json"},
         timeout=HTTP_TIMEOUT,
     )

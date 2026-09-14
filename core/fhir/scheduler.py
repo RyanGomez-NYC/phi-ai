@@ -236,6 +236,28 @@ def run_once(settings: Settings) -> int:
         started = datetime.now(timezone.utc)
 
         resource_types = list(profile.supported_resources)
+
+        # A vendor that documents "a type-level search must name a patient"
+        # cannot be swept this way at all, and finding that out one 400 at a
+        # time is the worst way to learn it. Its documented population path
+        # is Bulk Data Export, which has its own scheduler.
+        if profile.unqualified_search is False:
+            log.error(
+                "%s documents that a type-level search must name a patient, so the paged sweep "
+                "this scheduler performs cannot run against it. Use the bulk path instead: "
+                "python -m core.fhir.bulk_scheduler (Bulk Data Export is %s's documented "
+                "population-scale read). No FHIR search was sent.",
+                profile.name,
+                profile.name,
+            )
+            audit.record(
+                actor="phi-ai-scheduler",
+                action="record.error",
+                resource_key="fhir/unqualified-search-refused",
+                purpose_of_use="scheduled_ingestion",
+            )
+            return 1
+
         log.info("Ingesting %d resource types (since=%s)", len(resource_types), since)
 
         total = 0

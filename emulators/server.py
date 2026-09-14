@@ -788,6 +788,41 @@ class EmulatorHandler(BaseHTTPRequestHandler):
                 if source in str((r.get("meta") or {}).get("source", ""))
             ]
 
+        # THE REASON THIS EXISTS. The defect these emulators failed to catch
+        # was that the client searched a type with no patient at all: Epic
+        # answers that with error 4111, and the emulators answered it with
+        # data, so every rehearsal passed and a real tenant would have
+        # refused the first request. An emulator that is more permissive
+        # than the vendor it stands in for is not a rehearsal.
+        #
+        # Epic's own two rows, quoted (https://fhir.epic.com/Specifications,
+        # read 2026-09-14):
+        #   4110  "No parameters are provided in the search request"
+        #   4111  "Required search parameter missing from request" - with
+        #         "Condition?category=diagnosis" as the worked example, so a
+        #         non-identifying parameter does NOT satisfy it.
+        from core.fhir.emr_profiles import PROFILES
+
+        # `vendor` here is the EmulatorVendor object; the profiles are keyed
+        # by its .key. Looking it up by the object silently found nothing.
+        profile = PROFILES.get(vendor.key)
+        if profile is not None and profile.unqualified_search is False:
+            identifying = {"patient", "subject", "_id", "identifier", "beneficiary"}
+            if not (identifying & set(query)):
+                return self._json(400, _outcome(
+                    "required",
+                    f"Required search parameter missing from request: a {resource_type} "
+                    "search must name a patient (or another identifying parameter).",
+                ))
+
+        # _id is how a Patient search is qualified - a Patient resource is
+        # not its own subject, so `patient=` cannot narrow one. Oracle
+        # Health documents exactly this split: "_id" or a demographic
+        # combination on Patient, a patient reference on the clinical types.
+        wanted_id = (query.get("_id") or [None])[0]
+        if wanted_id:
+            resources = [r for r in resources if str(r.get("id")) == wanted_id]
+
         patient = (query.get("patient") or query.get("subject") or [None])[0]
         if patient:
             wanted = patient.split("/")[-1]

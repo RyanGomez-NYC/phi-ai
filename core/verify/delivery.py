@@ -30,6 +30,8 @@ import logging
 from typing import Optional
 from urllib.parse import quote
 
+from core.fhir.client import patient_qualifier
+
 from core.fhir.delivery.writer import PRIOR_RECORD_TAG_SYSTEM
 from core.verify.base import FlowReport, Severity
 
@@ -69,9 +71,25 @@ def verify_delivery(
         # Query on meta.source, which is exactly the stored object key.
         # Matching on anything looser would confirm the presence of a
         # similar record rather than THIS one.
+        #
+        # ...but _source alone is a type-level search that names no patient,
+        # and a vendor that requires a qualifier refuses it: Epic answers
+        # error 4111, whose worked example is exactly this shape, a search
+        # narrowed by something that is not a patient. So the patient this
+        # record was delivered for is sent alongside, under the parameter
+        # the TYPE uses (Patient by _id, AdverseEvent by subject). The
+        # _source match still decides; the qualifier only makes the search
+        # one the destination will answer.
+        # An item with no target patient still gets confirmed, unqualified:
+        # degrading to the old shape beats refusing to check at all, and a
+        # destination that requires a qualifier will say so in its response,
+        # which lands in `unknown` rather than being read as an absence.
+        target_patient = getattr(item, "target_patient", "") or ""
+        qualifier = patient_qualifier(item.resource_type, target_patient) if target_patient else {}
         query = (
             f"{destination_base_url}/{item.resource_type}"
             f"?_source={quote(f'{item.storage_key}', safe='')}"
+            + "".join(f"&{k}={quote(str(v), safe='')}" for k, v in qualifier.items())
         )
         try:
             bundle = search(query, access_token)

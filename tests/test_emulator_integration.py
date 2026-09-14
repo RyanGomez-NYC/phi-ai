@@ -14,6 +14,7 @@ All data is synthetic. The emulators bind to 127.0.0.1 on ephemeral
 ports, so these are hermetic and run anywhere.
 """
 
+import json
 import socket
 import sys
 import threading
@@ -25,6 +26,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from core.fhir.client import UnqualifiedSearchError, patient_qualifier  # noqa: E402
 from core.fhir.emr_profiles import PROFILES  # noqa: E402
 from emulators.server import build_server  # noqa: E402
 from emulators.vendors import VENDORS  # noqa: E402
@@ -234,11 +236,113 @@ def test_the_real_client_pages_resources_from_every_vendor(emulators, vendor):
     """Exercises the `next` link handling that a fake cannot: the
     emulators page at 2 per response regardless of _count."""
     client = _client(emulators, vendor)
+
+    if PROFILES[vendor].unqualified_search is False:
+        # This vendor's own documentation says a type-level search must name
+        # a patient, so the unqualified sweep is not a shape worth proving -
+        # the client refuses it before the request (see the test below), and
+        # the qualified search is what a real run performs. Pagination is
+        # exercised by every other vendor in this parametrization.
+        observations = list(client.iter_resources("Observation", patient="eSyn0001Patient"))
+        assert observations, "a patient-qualified search returned nothing"
+        assert all(o["resourceType"] == "Observation" for o in observations)
+        assert all(
+            "eSyn0001Patient" in json.dumps(o.get("subject", {}) or o.get("patient", {}))
+            for o in observations
+        ), "the qualifier did not narrow the search to that patient"
+        return
+
     observations = list(client.iter_resources("Observation"))
 
     assert len(observations) > 2, "pagination did not follow the next link"
     assert all(o["resourceType"] == "Observation" for o in observations)
     assert len({o["id"] for o in observations}) == len(observations), "duplicate pages"
+
+
+@pytest.mark.parametrize(
+    "vendor", [k for k in sorted(VENDORS) if PROFILES[k].unqualified_search is False]
+)
+def test_a_non_identifying_parameter_does_not_satisfy_the_guard(emulators, vendor):
+    """Epic's own worked example of the request that FAILS is
+    "Condition?category=diagnosis" - a search narrowed by something that is
+    not a patient. Truthiness of extra_params must not be mistaken for
+    qualification, or the guard's escape hatch is the documented failure."""
+    client = _client(emulators, vendor)
+
+    with pytest.raises(UnqualifiedSearchError):
+        list(client.iter_resources("Observation", extra_params={"category": "vital-signs"}))
+
+    # An identifying parameter passed the same way is accepted.
+    assert list(client.iter_resources("Observation", extra_params={"patient": "eSyn0001Patient"}))
+
+
+@pytest.mark.parametrize(
+    "vendor", [k for k in sorted(VENDORS) if PROFILES[k].unqualified_search is False]
+)
+def test_the_refusal_is_raised_when_the_search_is_called_not_when_it_is_iterated(emulators, vendor):
+    """iter_resources() is a generator, so a deferred raise would escape a
+    caller that wraps the CALL in try/except - which is how callers are
+    written."""
+    client = _client(emulators, vendor)
+    with pytest.raises(UnqualifiedSearchError):
+        client.iter_resources("Observation")
+
+
+@pytest.mark.parametrize("rtype,expected", [
+    ("Patient", "_id"),          # a Patient is not its own subject
+    ("AdverseEvent", "subject"),  # R4 defines subject, never patient
+    ("Observation", "patient"),
+    ("Condition", "patient"),
+])
+def test_the_qualifier_is_the_resource_types_own(rtype, expected):
+    """A wrong parameter is worse than none: R4 lenient handling lets a
+    server ignore an unknown parameter and answer with the whole tenant."""
+    assert patient_qualifier(rtype, "eSyn0001Patient") == {expected: "eSyn0001Patient"}
+
+
+@pytest.mark.parametrize(
+    "vendor", [k for k in sorted(VENDORS) if PROFILES[k].unqualified_search is False]
+)
+def test_the_emulator_itself_refuses_the_unqualified_search(emulators, vendor):
+    """The root cause was an emulator more permissive than the vendor it
+    stands in for, so every rehearsal passed. Checked below the client, by
+    asking the emulator directly."""
+    import requests
+
+    client = _client(emulators, vendor)
+    url = f"{client.base_url}/Observation"
+    headers = {"Authorization": f"Bearer {client._access_token}",
+               "Accept": "application/fhir+json"}
+
+    refused = requests.get(url, params={"_count": 50}, headers=headers, timeout=30)
+    assert refused.status_code == 400, "the emulator answered an unqualified search"
+
+    allowed = requests.get(url, params={"_count": 50, "patient": "eSyn0001Patient"},
+                           headers=headers, timeout=30)
+    assert allowed.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "vendor", [k for k in sorted(VENDORS) if PROFILES[k].unqualified_search is False]
+)
+def test_a_vendor_that_requires_a_patient_refuses_the_unqualified_search(emulators, vendor):
+    """The defect this guards: iter_resources() sent only _count, so against
+    a vendor that documents "a type-level search must name a patient" a real
+    run failed on its first request - while every rehearsal passed, because
+    the emulators answer an unqualified search happily. The refusal must
+    therefore come from the profile, before any HTTP request, and it must
+    name the vendor's documented alternative."""
+    client = _client(emulators, vendor)
+
+    with pytest.raises(UnqualifiedSearchError) as raised:
+        list(client.iter_resources("Observation"))
+    message = str(raised.value)
+    assert PROFILES[vendor].name in message
+    assert ("Bulk Data Export" in message) == PROFILES[vendor].supports_bulk_export
+
+    # ...and the qualified form still works against the same server, so the
+    # guard refuses the unqualified shape rather than the vendor.
+    assert list(client.iter_resources("Observation", patient="eSyn0001Patient"))
 
 
 def test_athenahealth_rejects_a_jwt_assertion_as_it_would_live(emulators):

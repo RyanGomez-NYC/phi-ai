@@ -93,7 +93,7 @@ def test_pair(session, source, target):
     with an assertion signed in the profile's algorithm by a key of the
     right family and accepted by the emulator; /metadata is a
     CapabilityStatement; Patient plus at least two more types were paged
-    with more than one page observed; $export produced NDJSON where the
+    with more than one page observed where the vendor answers an unqualified search, and once per patient where it does not; $export produced NDJSON where the
     emulator has it and an OperationOutcome where it does not; and per
     delivered type, created-and-confirmed where the target advertises
     create, the writer's own refusal where it does not - or, on the

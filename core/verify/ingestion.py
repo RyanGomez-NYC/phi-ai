@@ -45,6 +45,8 @@ from __future__ import annotations
 import logging
 from typing import Iterable, Optional
 
+from core.fhir.client import patient_qualifier
+
 from core.verify.base import FlowReport, Severity
 
 log = logging.getLogger("phi-ai.verify.ingestion")
@@ -162,6 +164,16 @@ def source_count(client, resource_type: str) -> Optional[int]:
     large or restricted result sets - so the caller can report "could not
     determine" rather than silently treating it as zero.
     """
+    profile = getattr(client, "profile", None)
+    if profile is not None and getattr(profile, "unqualified_search", None) is False:
+        # _summary=count is still a type-level search with no patient, and a
+        # vendor that refuses one refuses this. Saying so beats the silent
+        # "the source would not report a count" this used to produce.
+        raise PopulationSearchUnavailable(
+            f"{profile.name} documents that a type-level search must name a patient, so a "
+            f"_summary=count over all {resource_type} cannot be asked of it."
+        )
+
     import requests
 
     url = f"{client.base_url}/{resource_type}"
@@ -180,8 +192,46 @@ def source_count(client, resource_type: str) -> Optional[int]:
         return None
 
 
-def source_ids(client, resource_type: str) -> set[str]:
-    """Every id the EMR holds for one type, by paging its search API."""
+class PopulationSearchUnavailable(RuntimeError):
+    """This vendor documents that a type-level search must name a patient,
+    so "every id the EMR holds" cannot be answered by paging its search
+    API at all. The caller is told which vendor and why, rather than
+    receiving an empty set that would read as "the EMR holds nothing"."""
+
+
+def source_ids(client, resource_type: str, patients: Optional[Iterable[str]] = None) -> set[str]:
+    """Every id the EMR holds for one type, by paging its search API.
+
+    `patients` qualifies the sweep, one search per patient, which the
+    vendors that refuse an unqualified type-level search require. Without
+    it, a vendor whose profile records that refusal raises
+    PopulationSearchUnavailable instead of returning a misleading empty
+    set - see EMRProfile.unqualified_search.
+    """
+    if patients is not None:
+        found: set[str] = set()
+        for patient in patients:
+            # Which parameter ties this TYPE to a patient is the type's
+            # property: Patient is qualified by _id and AdverseEvent by
+            # subject, so passing patient= for either returns nothing and
+            # would read as "the EMR holds none of these".
+            found.update(
+                str(resource["id"])
+                for resource in client.iter_resources(
+                    resource_type, extra_params=patient_qualifier(resource_type, patient)
+                )
+                if resource.get("id")
+            )
+        return found
+
+    profile = getattr(client, "profile", None)
+    if profile is not None and getattr(profile, "unqualified_search", None) is False:
+        raise PopulationSearchUnavailable(
+            f"{profile.name} documents that a type-level search must name a patient, so the "
+            f"complete set of {resource_type} ids cannot be read from its search API. Pass "
+            "patients=... to sweep per patient, or compare against a Bulk Data Export instead."
+        )
+
     return {
         str(resource["id"])
         for resource in client.iter_resources(resource_type)

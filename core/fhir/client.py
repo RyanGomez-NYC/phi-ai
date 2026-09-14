@@ -154,6 +154,66 @@ def _stored_sha256_hex(nonce: bytes, ciphertext: bytes) -> str:
     return hashlib.sha256(nonce + ciphertext).hexdigest()
 
 
+# Which search parameter ties a resource to a patient is a property of the
+# RESOURCE TYPE, not a constant. FHIR R4 gives most clinical types a
+# `patient` search parameter, but not all of them, and a wrong parameter is
+# worse than none: R4's lenient handling lets a server IGNORE an unknown
+# parameter and answer with the whole tenant, so `AdverseEvent?patient=X`
+# can return every adverse event there is - a population-scale read from
+# code written to prevent one.
+#
+# Two exceptions, both confirmed on Epic's live R4 CapabilityStatement
+# (https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/metadata,
+# fetched 2026-09-14, software "Epic" version "August 2026") and against
+# the R4 specification's own parameter tables:
+#   Patient      - has no `patient` parameter; it IS the patient. Epic
+#                  advertises `_id`, and an unscoped GET {base}/Patient
+#                  answers 400 "This resource requires demographics or _id
+#                  parameter for searching" (docs/EMR_CONNECTORS.md:184).
+#   AdverseEvent - R4 defines subject, not patient
+#                  (https://hl7.org/fhir/R4/adverseevent.html: "actuality,
+#                  category, date, event, location, recorder,
+#                  resultingcondition, seriousness, severity, study,
+#                  subject, substance"), and Epic's CapabilityStatement
+#                  advertises `subject` and `_id` for it, never `patient`.
+#
+# An instance's own CapabilityStatement is the better authority than any
+# table: pass `advertised` (the search parameter names that instance
+# publishes for this type, e.g. from core/fhir/conformance_probe.py) and
+# the first parameter it actually serves is used.
+PATIENT_QUALIFIER_BY_TYPE = {"Patient": "_id", "AdverseEvent": "subject"}
+QUALIFIER_PREFERENCE = ("patient", "subject", "_id", "identifier", "beneficiary")
+
+# The parameters that IDENTIFY who a search is about. Anything else -
+# `category`, `status`, `_source`, a date - narrows a population read
+# without qualifying it, which is precisely the request Epic answers with
+# error 4111: "A request missing a required parameter (such as the
+# patient): Condition?category=diagnosis"
+# (https://fhir.epic.com/Specifications, read 2026-09-14).
+QUALIFYING_PARAMS = frozenset({"patient", "subject", "_id", "identifier", "beneficiary"})
+
+
+def patient_qualifier(resource_type: str, patient_id: str,
+                      advertised: "Optional[set]" = None) -> dict:
+    """The query that narrows `resource_type` to one patient on this server.
+
+    `advertised` is what the instance's CapabilityStatement publishes for
+    the type; when given it decides, so a tenant that differs from the
+    table wins. Without it the R4 rule above applies."""
+    if advertised:
+        for name in QUALIFIER_PREFERENCE:
+            if name in advertised:
+                return {name: patient_id}
+    return {PATIENT_QUALIFIER_BY_TYPE.get(resource_type, "patient"): patient_id}
+
+
+class UnqualifiedSearchError(ValueError):
+    """A type-level search named no patient against a vendor whose own
+    documentation says a qualifier is required. Raised before the request
+    goes out, so the failure names the vendor's rule instead of arriving
+    as an opaque 400 from a live tenant."""
+
+
 class ClientAssertionKeyError(ValueError):
     """
     The private key handed to build_client_assertion() cannot sign the
@@ -613,9 +673,30 @@ class FHIRIngestionClient:
             scope=scope,
         )
 
-    def iter_resources(self, resource_type: str, since: Optional[datetime] = None) -> Iterator[dict]:
+    def iter_resources(
+        self,
+        resource_type: str,
+        since: Optional[datetime] = None,
+        patient: Optional[str] = None,
+        extra_params: Optional[dict] = None,
+    ) -> Iterator[dict]:
         """Page through a FHIR search for the given resource type,
-        optionally filtered by _lastUpdated for incremental ingestion."""
+        optionally filtered by _lastUpdated for incremental ingestion.
+
+        `patient` qualifies the search to one patient. This method used to
+        send only _count, so against a vendor that requires a qualifier a
+        real run failed on its very first request while every rehearsal
+        passed, because the emulators answered an unqualified search
+        happily. Epic is the vendor verified so far; every other profile
+        says "nobody has checked" and the client warns rather than claiming
+        otherwise. EMRProfile.unqualified_search carries the per-vendor
+        answer and the citation for it.
+
+        `extra_params` is for a vendor whose qualifier is not a patient -
+        Oracle's Patient search takes _id or a demographic combination -
+        so a caller can satisfy the rule in whatever shape the vendor
+        documents it.
+        """
         import requests
 
         if resource_type not in self.profile.supported_resources:
@@ -627,9 +708,55 @@ class FHIRIngestionClient:
         params = {"_count": self.profile.page_size}
         if since:
             params["_lastUpdated"] = f"gt{since.isoformat()}"
+        if patient:
+            params.update(patient_qualifier(resource_type, patient))
+        if extra_params:
+            params.update(extra_params)
+
+        # A search that names nothing but _count is a population-scale
+        # read. Whether this vendor answers one at all is a fact about the
+        # vendor, recorded on its profile from the vendor's own docs.
+        # Truthiness is not qualification. `extra_params={"category": "..."}`
+        # is Epic's own worked example of the request that FAILS, so the
+        # test is whether an IDENTIFYING parameter is present.
+        identified = bool(patient) or bool(QUALIFYING_PARAMS & set(params))
+        if not identified:
+            allowed = self.profile.unqualified_search
+            if allowed is False:
+                raise UnqualifiedSearchError(
+                    f"{self.profile.name} documents that a type-level search must name a patient "
+                    f"(or another identifying parameter), so this {resource_type} search would be "
+                    "refused by the vendor. Pass patient=..., or use "
+                    + (
+                        "Bulk Data Export for a population-scale read "
+                        "(core/fhir/bulk_client.py, core/fhir/bulk_scheduler.py)."
+                        if self.profile.supports_bulk_export
+                        else "a per-patient read; this vendor publishes no bulk export."
+                    )
+                )
+            if allowed is None:
+                # Not verified either way. The request still goes out, which
+                # is how this connector has always behaved, but an unverified
+                # assumption belongs in the log rather than passing for a
+                # checked one.
+                log.warning(
+                    "%s: sending an UNQUALIFIED %s search (no patient). Nobody has checked whether "
+                    "this vendor documents a population-scale search; if it does not, a real tenant "
+                    "refuses this request. Record EMRProfile.unqualified_search for this vendor.",
+                    self.profile.name,
+                    resource_type,
+                )
 
         url = f"{self.base_url}/{resource_type}"
         headers = {"Authorization": f"Bearer {self._access_token}", "Accept": "application/fhir+json"}
+        # Everything above validated the request; the paging itself is the
+        # generator. Splitting them means UnqualifiedSearchError is raised
+        # when iter_resources() is CALLED, not at the first next(), so a
+        # caller that wraps the call in try/except actually catches it.
+        return self._page(url, params, headers)
+
+    def _page(self, url: str, params: Optional[dict], headers: dict) -> Iterator[dict]:
+        import requests
 
         while url:
             log.debug("FHIR request: GET %s params=%s", url, params)

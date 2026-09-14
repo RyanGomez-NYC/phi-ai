@@ -28,6 +28,7 @@ guessing - recorded uncertainty beats confident wrongness here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -125,6 +126,41 @@ class EMRProfile:
     # today's date stamped across the table to turn the row green.
     doc_checked: str = ""
     doc_source: str = ""
+
+    # ---- can this vendor be searched WITHOUT naming a patient? --------
+    #
+    # A type-level search with no patient/subject qualifier - GET
+    # {base}/Observation?_count=50 - is a population-scale read, and a
+    # vendor that refuses one refuses it on the first request of a real run.
+    # Epic is the vendor verified so far: it answers error 4111 "Required
+    # search parameter missing from request", with "Condition?category=
+    # diagnosis" as the worked example, so a non-identifying parameter does
+    # not satisfy the rule either (https://fhir.epic.com/Specifications,
+    # read 2026-09-14). Epic's documented population path is Bulk Data
+    # Export instead, which its chapter has always said.
+    #
+    # NOTHING IS CLAIMED HERE FOR ANY OTHER VENDOR. A verification sweep is
+    # under way and reports for several vendors point the same way, but a
+    # report is not the vendor's page: until someone reads that page, the
+    # value below stays None and the client warns instead of asserting.
+    #
+    # iter_resources() sent only _count, so against a vendor that refuses
+    # the unqualified search it failed on the first request of a real run -
+    # and never did in rehearsal, because the emulators served one happily.
+    #
+    # THREE-STATE ON PURPOSE, and None is the honest default:
+    #   True  - the vendor documents an unqualified type-level search.
+    #   False - the vendor documents that a qualifier is required. The
+    #           client refuses to send the request rather than earning a
+    #           400 from a real tenant.
+    #   None  - nobody has checked this vendor's search documentation yet.
+    #           The request still goes out (this is how the connector has
+    #           always behaved) but the client logs a warning naming the
+    #           vendor, so an unverified assumption is visible in the log
+    #           instead of silently passing for a verified one.
+    # Set the pair doc_checked/doc_source when you set this to True or
+    # False, and quote the vendor's sentence beside it.
+    unqualified_search: Optional[bool] = None
 
 
 # Confirm supported_resources against the target instance's own
@@ -231,6 +267,20 @@ EPIC = EMRProfile(
         "wrong one against a given base URL is the most common integration "
         "failure. See docs/EMR_CONNECTORS.md."
     ),
+    # Epic refuses a type-level search that names no patient. Its error
+    # table answers 4111 "Required search parameter missing from request",
+    # and the example is "A request missing a required parameter (such as
+    # the patient)" (https://fhir.epic.com/Specifications, read 2026-09-14).
+    # The live R4 CapabilityStatement agrees: Condition and Observation
+    # both advertise `patient` and `subject` search parameters
+    # (https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/metadata,
+    # fetched 2026-09-14). Epic's documented population-scale path is Bulk
+    # Data Export, which this chapter has always said - the profile simply
+    # never encoded it, so iter_resources() sent the unqualified search
+    # anyway and would have failed on a real tenant's first request.
+    unqualified_search=False,
+    doc_checked="2026-09-14",
+    doc_source="https://fhir.epic.com/Specifications",
 )
 
 
